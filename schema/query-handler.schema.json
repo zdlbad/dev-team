@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:query-handler",
+  "title": "query-handler.<Name>QueryHandler.json — 查询（只调仓储的读方法）",
+  "type": "object", "additionalProperties": false,
+  "required": ["name", "module", "actor", "input", "result", "steps", "traces", "questions"],
+  "properties": {
+    "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "module": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "actor": { "type": "string", "minLength": 1 },
+    "input": { "$ref": "urn:dev-team:common#/$defs/params" },
+    "result": { "$ref": "urn:dev-team:common#/$defs/params" },
+    "steps": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          { "$ref": "urn:dev-team:common#/$defs/step" },
+          { "type": "object", "properties": { "call": { "type": "object", "properties": { "kind": { "const": "repository" } } } } }
+        ]
+      }
+    },
+    "traces": { "$ref": "urn:dev-team:common#/$defs/traces" },
+    "questions": { "$ref": "urn:dev-team:common#/$defs/questions" },
+    "decisions": { "$ref": "urn:dev-team:common#/$defs/decisions" }
+  }
+}

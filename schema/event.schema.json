@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:event",
+  "title": "event.<Name>Event.json — 领域事件",
+  "type": "object", "additionalProperties": false,
+  "required": ["name", "aggregate", "payload", "traces"],
+  "properties": {
+    "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "aggregate": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "payload": { "$ref": "urn:dev-team:common#/$defs/params" },
+    "traces": { "$ref": "urn:dev-team:common#/$defs/traces" },
+    "decisions": { "$ref": "urn:dev-team:common#/$defs/decisions" }
+  }
+}

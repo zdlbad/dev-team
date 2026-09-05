@@ -1,0 +1,29 @@
+{
+  "name": "Order",
+  "module": "Ordering",
+  "aggregateNarrative": "订单是客户一次购买请求的全部内容：它拥有若干订单行，从草稿开始，确认后不可再改行，最终完成或取消。",
+  "aggregateInvariants": [
+    { "text": "订单总额等于各订单行金额之和", "traces": ["R-003"] }
+  ],
+  "fields": [
+    { "name": "customerId", "type": "string" },
+    { "name": "status", "type": "string" },
+    { "name": "lines", "type": "OrderLine[]" },
+    { "name": "total", "type": "Money" }
+  ],
+  "invariants": [
+    { "text": "确认后的订单不能再增删订单行", "traces": ["R-001"] }
+  ],
+  "behaviors": [
+    {
+      "name": "confirm",
+      "input": [{ "name": "at", "type": "date" }],
+      "rules": ["只有草稿状态可以确认", "至少有一行才能确认"],
+      "raises": ["OrderConfirmed", { "event": "OrderRejected", "when": "没有订单行" }],
+      "throws": ["OrderFailed"],
+      "traces": ["G-001", "R-001"]
+    }
+  ],
+  "traces": ["G-001"],
+  "questions": []
+}

@@ -1,0 +1,19 @@
+{
+  "name": "dev-team",
+  "private": true,
+  "version": "0.1.0",
+  "description": "模型驱动开发团队：schema、构建块、工具",
+  "type": "commonjs",
+  "scripts": {
+    "check-schema": "node tools/check-schema.js",
+    "new-project": "node tools/new-project.js"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "typescript": "^5.9.3"
+  }
+}

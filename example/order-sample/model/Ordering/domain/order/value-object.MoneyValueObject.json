@@ -1,0 +1,13 @@
+{
+  "name": "Money",
+  "aggregate": "Order",
+  "fields": [
+    { "name": "amount", "type": "number" },
+    { "name": "currency", "type": "string" }
+  ],
+  "invariants": [{ "text": "金额不为负", "traces": ["R-004"] }],
+  "behaviors": [
+    { "name": "add", "input": [{ "name": "other", "type": "Money" }], "output": "Money", "rules": ["币种必须相同"], "raises": [], "throws": ["CurrencyMismatch"], "traces": ["R-004"] }
+  ],
+  "traces": ["R-004"]
+}

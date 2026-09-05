@@ -1,0 +1,10 @@
+{
+  "name": "PaymentGateway",
+  "module": "Ordering",
+  "kind": "external-system",
+  "target": "Stripe",
+  "operations": [
+    { "name": "charge", "input": [{ "name": "amount", "type": "Money" }, { "name": "customerId", "type": "string" }], "output": "string" }
+  ],
+  "traces": ["G-003"]
+}

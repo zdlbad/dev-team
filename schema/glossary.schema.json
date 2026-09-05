@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:glossary",
+  "title": "glossary.json — 词汇表",
+  "type": "object", "additionalProperties": false,
+  "required": ["terms"],
+  "properties": {
+    "terms": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["name", "definition", "aliases"],
+        "properties": {
+          "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+          "definition": { "type": "string", "minLength": 1 },
+          "aliases": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

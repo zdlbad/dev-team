@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:command-handler",
+  "title": "command-handler.<Name>CommandHandler.json — 命令",
+  "type": "object", "additionalProperties": false,
+  "required": ["name", "module", "actor", "input", "writes", "steps", "raises", "throws", "traces", "questions"],
+  "properties": {
+    "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "module": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "actor": { "type": "string", "minLength": 1 },
+    "input": { "$ref": "urn:dev-team:common#/$defs/params" },
+    "writes": { "$ref": "urn:dev-team:common#/$defs/writes" },
+    "writesNote": { "type": "string", "minLength": 1, "description": "writes 长度大于 1 时必填" },
+    "steps": { "$ref": "urn:dev-team:common#/$defs/steps" },
+    "raises": { "$ref": "urn:dev-team:common#/$defs/raises" },
+    "throws": { "$ref": "urn:dev-team:common#/$defs/throws" },
+    "traces": { "$ref": "urn:dev-team:common#/$defs/traces" },
+    "questions": { "$ref": "urn:dev-team:common#/$defs/questions" },
+    "decisions": { "$ref": "urn:dev-team:common#/$defs/decisions" }
+  },
+  "if": { "properties": { "writes": { "type": "array", "minItems": 2 } } },
+  "then": { "properties": { "writesNote": { "type": "string", "minLength": 1 } }, "required": ["writesNote"] }
+}

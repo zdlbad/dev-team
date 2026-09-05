@@ -1,0 +1,8 @@
+{
+  "name": "OrderRepository",
+  "aggregate": "Order",
+  "methods": [
+    { "name": "findById", "kind": "read", "input": [{ "name": "id", "type": "string" }], "output": "Order" },
+    { "name": "save", "kind": "write", "input": [{ "name": "order", "type": "Order" }] }
+  ]
+}

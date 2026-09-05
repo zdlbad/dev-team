@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:aggregate-root",
+  "title": "aggregate-root.<Name>AggregateRoot.json — 聚合根",
+  "type": "object", "additionalProperties": false,
+  "required": ["name", "module", "aggregateNarrative", "aggregateInvariants", "fields", "invariants", "behaviors", "traces", "questions"],
+  "properties": {
+    "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "module": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "aggregateNarrative": { "type": "string", "minLength": 1, "description": "整个聚合是什么 → 拥有什么 → 生命周期" },
+    "aggregateInvariants": { "$ref": "urn:dev-team:common#/$defs/invariants", "description": "跨成员始终成立的条件" },
+    "fields": { "$ref": "urn:dev-team:common#/$defs/fields" },
+    "invariants": { "$ref": "urn:dev-team:common#/$defs/invariants", "description": "根对象自身始终成立的条件" },
+    "behaviors": { "$ref": "urn:dev-team:common#/$defs/behaviors" },
+    "traces": { "$ref": "urn:dev-team:common#/$defs/traces" },
+    "questions": { "$ref": "urn:dev-team:common#/$defs/questions" },
+    "decisions": { "$ref": "urn:dev-team:common#/$defs/decisions" }
+  }
+}

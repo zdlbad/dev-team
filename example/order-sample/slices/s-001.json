@@ -1,0 +1,14 @@
+{
+  "id": "s-001",
+  "title": "初次建模：订单的创建与确认",
+  "kind": "initial",
+  "codebase": "../sample-code",
+  "scope": { "modules": ["Ordering"], "aggregates": ["Ordering.Order"], "useCases": ["CreateOrder", "GetOrder"] },
+  "traces": ["G-001", "G-002", "R-001"],
+  "stages": {
+    "model": { "status": "in-progress", "confirmedAt": null },
+    "code": { "status": "pending", "at": null },
+    "validate": { "status": "pending", "decodedVersion": null, "reportAt": null }
+  },
+  "log": [{ "ts": "2026-09-05", "stage": "slice", "text": "范围定稿" }]
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:entity",
+  "title": "entity.<Name>Entity.json — 实体",
+  "type": "object", "additionalProperties": false,
+  "required": ["name", "aggregate", "fields", "invariants", "behaviors", "traces"],
+  "properties": {
+    "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "aggregate": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "fields": { "$ref": "urn:dev-team:common#/$defs/fields" },
+    "invariants": { "$ref": "urn:dev-team:common#/$defs/invariants" },
+    "behaviors": { "$ref": "urn:dev-team:common#/$defs/behaviors" },
+    "traces": { "$ref": "urn:dev-team:common#/$defs/traces" },
+    "questions": { "$ref": "urn:dev-team:common#/$defs/questions" },
+    "decisions": { "$ref": "urn:dev-team:common#/$defs/decisions" }
+  }
+}

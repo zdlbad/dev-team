@@ -1,0 +1,6 @@
+{
+  "name": "OrderFailed",
+  "aggregate": "Order",
+  "condition": "订单不在草稿状态时尝试确认",
+  "traces": ["R-001"]
+}

@@ -1,0 +1,9 @@
+{
+  "module": "Ordering",
+  "aggregates": [
+    { "name": "Order", "members": ["OrderLine", "Money"], "idRefs": [{ "field": "customerId", "to": "Customers.Customer" }], "traces": ["G-001"] },
+    { "name": "Promotion", "members": [], "idRefs": [], "traces": ["R-005"] }
+  ],
+  "denylist": [{ "noun": "购物车", "reason": "UI 概念，不是领域实体" }],
+  "questions": []
+}

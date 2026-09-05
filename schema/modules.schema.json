@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:modules",
+  "title": "model/modules.json — 战略：上下文清单",
+  "type": "object", "additionalProperties": false,
+  "required": ["system", "modules", "questions"],
+  "properties": {
+    "system": { "type": "string", "minLength": 1 },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["name", "responsibility", "traces"],
+        "properties": {
+          "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+          "responsibility": { "type": "string", "minLength": 1 },
+          "traces": { "$ref": "urn:dev-team:common#/$defs/traces" }
+        }
+      }
+    },
+    "questions": { "$ref": "urn:dev-team:common#/$defs/questions" },
+    "decisions": { "$ref": "urn:dev-team:common#/$defs/decisions" }
+  }
+}

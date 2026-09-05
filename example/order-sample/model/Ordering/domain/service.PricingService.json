@@ -1,0 +1,23 @@
+{
+  "name": "Pricing",
+  "module": "Ordering",
+  "coordinates": ["Order", "Promotion"],
+  "operations": [
+    {
+      "name": "evaluate",
+      "input": [{ "name": "order", "type": "Order" }, { "name": "promotion", "type": "Promotion" }],
+      "output": "PricingDecision",
+      "reads": ["Order", "Promotion"],
+      "writes": [],
+      "steps": [
+        { "text": "计算订单原价", "call": { "kind": "behavior", "target": "Order", "method": "total" }, "output": "total" },
+        { "text": "判断促销是否适用", "call": { "kind": "behavior", "target": "Promotion", "method": "appliesTo" }, "output": "applies" }
+      ],
+      "rules": ["促销适用时折扣不超过原价的一半"],
+      "raises": [],
+      "throws": [],
+      "traces": ["R-005"]
+    }
+  ],
+  "questions": []
+}

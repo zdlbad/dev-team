@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:error",
+  "title": "error.<Name>Error.json — 领域错误",
+  "type": "object", "additionalProperties": false,
+  "required": ["name", "aggregate", "condition", "traces"],
+  "properties": {
+    "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "aggregate": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "condition": { "type": "string", "description": "何时抛出；解码结果为空字符串" },
+    "traces": { "$ref": "urn:dev-team:common#/$defs/traces" },
+    "decisions": { "$ref": "urn:dev-team:common#/$defs/decisions" }
+  }
+}

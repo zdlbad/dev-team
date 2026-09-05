@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:service",
+  "title": "service.<Name>Service.json — 领域服务（纯函数式，只协调本模块聚合）",
+  "type": "object", "additionalProperties": false,
+  "required": ["name", "module", "coordinates", "operations", "questions"],
+  "properties": {
+    "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "module": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "coordinates": { "type": "array", "items": { "$ref": "urn:dev-team:common#/$defs/modelName" }, "uniqueItems": true },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["name", "input", "reads", "writes", "steps", "rules", "raises", "throws", "traces"],
+        "properties": {
+          "name": { "$ref": "urn:dev-team:common#/$defs/methodName" },
+          "input": { "$ref": "urn:dev-team:common#/$defs/params" },
+          "output": { "$ref": "urn:dev-team:common#/$defs/typeRef" },
+          "reads": { "type": "array", "items": { "$ref": "urn:dev-team:common#/$defs/modelName" }, "uniqueItems": true },
+          "writes": { "type": "array", "items": { "$ref": "urn:dev-team:common#/$defs/modelName" }, "uniqueItems": true },
+          "steps": { "$ref": "urn:dev-team:common#/$defs/steps" },
+          "rules": { "$ref": "urn:dev-team:common#/$defs/rules" },
+          "raises": { "$ref": "urn:dev-team:common#/$defs/raises" },
+          "throws": { "$ref": "urn:dev-team:common#/$defs/throws" },
+          "traces": { "$ref": "urn:dev-team:common#/$defs/traces" }
+        }
+      }
+    },
+    "questions": { "$ref": "urn:dev-team:common#/$defs/questions" },
+    "decisions": { "$ref": "urn:dev-team:common#/$defs/decisions" }
+  }
+}

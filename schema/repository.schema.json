@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:repository",
+  "title": "repository.<Name>RepositoryInterface.json — 仓储接口",
+  "type": "object", "additionalProperties": false,
+  "required": ["name", "aggregate", "methods"],
+  "properties": {
+    "name": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*Repository$" },
+    "aggregate": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "methods": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["name", "kind", "input"],
+        "properties": {
+          "name": { "$ref": "urn:dev-team:common#/$defs/methodName" },
+          "kind": { "enum": ["read", "write"] },
+          "input": { "$ref": "urn:dev-team:common#/$defs/params" },
+          "output": { "$ref": "urn:dev-team:common#/$defs/typeRef" }
+        }
+      }
+    },
+    "decisions": { "$ref": "urn:dev-team:common#/$defs/decisions" }
+  }
+}

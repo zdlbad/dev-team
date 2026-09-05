@@ -1,0 +1,16 @@
+{
+  "name": "CreateOrder",
+  "module": "Ordering",
+  "actor": "Customer",
+  "input": [{ "name": "customerId", "type": "string" }],
+  "writes": ["Order"],
+  "steps": [
+    { "text": "读取客户", "call": { "kind": "port", "target": "CustomerLookup", "method": "findById" }, "output": "customer" },
+    { "text": "创建订单", "call": { "kind": "behavior", "target": "Order", "method": "create" }, "output": "order" },
+    { "text": "保存订单", "call": { "kind": "repository", "target": "OrderRepository", "method": "save" } }
+  ],
+  "raises": ["OrderCreated"],
+  "throws": [],
+  "traces": ["G-001"],
+  "questions": []
+}

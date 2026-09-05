@@ -1,0 +1,14 @@
+{
+  "name": "OrderLine",
+  "aggregate": "Order",
+  "fields": [
+    { "name": "productId", "type": "string" },
+    { "name": "quantity", "type": "number" },
+    { "name": "unitPrice", "type": "Money" }
+  ],
+  "invariants": [{ "text": "数量必须为正整数", "traces": ["R-002"] }],
+  "behaviors": [
+    { "name": "subtotal", "input": [], "output": "Money", "rules": ["小计 = 数量 × 单价"], "raises": [], "throws": [], "traces": ["R-003"] }
+  ],
+  "traces": ["G-001"]
+}

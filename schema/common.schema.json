@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:common",
+  "title": "公共定义",
+  "$defs": {
+    "modelName": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$", "description": "模型名：大驼峰，无种类后缀" },
+    "qualifiedName": { "type": "string", "pattern": "^([A-Z][A-Za-z0-9]*\\.)?[A-Z][A-Za-z0-9]*$", "description": "可带模块前缀的模型名：Module.Name" },
+    "methodName": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*$" },
+    "fieldName": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*$" },
+    "typeRef": { "type": "string", "pattern": "^(string|number|boolean|date|[A-Z][A-Za-z0-9]*(\\.[A-Z][A-Za-z0-9]*)?)(\\[\\])?$", "description": "标量 string|number|boolean|date，或模型名，可加 []" },
+    "traceId": { "type": "string", "pattern": "^[GR]-[0-9]{3,}$" },
+    "traces": { "type": "array", "items": { "$ref": "#/$defs/traceId" }, "uniqueItems": true },
+    "field": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "$ref": "#/$defs/fieldName" },
+        "type": { "$ref": "#/$defs/typeRef" },
+        "nullable": { "type": "boolean" },
+        "note": { "type": "string" }
+      }
+    },
+    "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
+    "param": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": { "name": { "$ref": "#/$defs/fieldName" }, "type": { "$ref": "#/$defs/typeRef" } }
+    },
+    "params": { "type": "array", "items": { "$ref": "#/$defs/param" } },
+    "invariant": {
+      "type": "object", "additionalProperties": false,
+      "required": ["text", "traces"],
+      "properties": { "text": { "type": "string", "minLength": 1 }, "traces": { "$ref": "#/$defs/traces" } }
+    },
+    "invariants": { "type": "array", "items": { "$ref": "#/$defs/invariant" } },
+    "raiseRef": {
+      "oneOf": [
+        { "$ref": "#/$defs/qualifiedName" },
+        { "type": "object", "additionalProperties": false, "required": ["event", "when"],
+          "properties": { "event": { "$ref": "#/$defs/qualifiedName" }, "when": { "type": "string", "minLength": 1 } } }
+      ]
+    },
+    "raises": { "type": "array", "items": { "$ref": "#/$defs/raiseRef" } },
+    "throws": { "type": "array", "items": { "$ref": "#/$defs/modelName" } },
+    "rules": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "behavior": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "input", "rules", "raises", "throws", "traces"],
+      "properties": {
+        "name": { "$ref": "#/$defs/methodName" },
+        "input": { "$ref": "#/$defs/params" },
+        "output": { "$ref": "#/$defs/typeRef" },
+        "rules": { "$ref": "#/$defs/rules" },
+        "raises": { "$ref": "#/$defs/raises" },
+        "throws": { "$ref": "#/$defs/throws" },
+        "traces": { "$ref": "#/$defs/traces" }
+      }
+    },
+    "behaviors": { "type": "array", "items": { "$ref": "#/$defs/behavior" } },
+    "call": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "target", "method"],
+      "properties": {
+        "kind": { "enum": ["behavior", "service", "repository", "port", "command"] },
+        "target": { "$ref": "#/$defs/qualifiedName" },
+        "method": { "$ref": "#/$defs/methodName" }
+      }
+    },
+    "step": {
+      "type": "object", "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "call": { "$ref": "#/$defs/call" },
+        "when": { "type": "string", "minLength": 1, "description": "分流条件：只能引用前面某步领域调用的 output；「否则」表示 else" },
+        "input": { "type": "string" },
+        "output": { "type": "string" },
+        "raises": { "$ref": "#/$defs/raises" },
+        "throws": { "$ref": "#/$defs/throws" }
+      }
+    },
+    "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } },
+    "question": {
+      "type": "object", "additionalProperties": false,
+      "required": ["question", "answer", "applied"],
+      "properties": { "question": { "type": "string" }, "answer": { "type": "string" }, "applied": { "type": "boolean" } }
+    },
+    "questions": { "type": "array", "items": { "$ref": "#/$defs/question" } },
+    "decision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["target", "check", "verdict", "note", "at"],
+      "properties": {
+        "target": { "type": "string" },
+        "check": { "type": "string" },
+        "verdict": { "enum": ["accepted", "dismissed"] },
+        "note": { "type": "string" },
+        "at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+      }
+    },
+    "decisions": { "type": "array", "items": { "$ref": "#/$defs/decision" } },
+    "writes": { "type": "array", "items": { "$ref": "#/$defs/qualifiedName" }, "uniqueItems": true }
+  }
+}

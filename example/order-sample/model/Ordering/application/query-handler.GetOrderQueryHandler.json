@@ -1,0 +1,12 @@
+{
+  "name": "GetOrder",
+  "module": "Ordering",
+  "actor": "Customer",
+  "input": [{ "name": "id", "type": "string" }],
+  "result": [{ "name": "status", "type": "string" }, { "name": "total", "type": "Money" }],
+  "steps": [
+    { "text": "读取订单", "call": { "kind": "repository", "target": "OrderRepository", "method": "findById" }, "output": "order" }
+  ],
+  "traces": ["G-002"],
+  "questions": []
+}

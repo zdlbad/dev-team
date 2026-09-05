@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:module",
+  "title": "model/<module>/module.json — 聚合清单与 id 引用",
+  "type": "object", "additionalProperties": false,
+  "required": ["module", "aggregates", "denylist", "questions"],
+  "properties": {
+    "module": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "aggregates": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["name", "members", "idRefs", "traces"],
+        "properties": {
+          "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+          "members": { "type": "array", "items": { "$ref": "urn:dev-team:common#/$defs/modelName" }, "uniqueItems": true },
+          "idRefs": {
+            "type": "array",
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["field", "to"],
+              "properties": {
+                "field": { "$ref": "urn:dev-team:common#/$defs/fieldName" },
+                "to": { "$ref": "urn:dev-team:common#/$defs/qualifiedName" }
+              }
+            }
+          },
+          "traces": { "$ref": "urn:dev-team:common#/$defs/traces" }
+        }
+      }
+    },
+    "denylist": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["noun", "reason"],
+        "properties": { "noun": { "type": "string" }, "reason": { "type": "string" } }
+      }
+    },
+    "questions": { "$ref": "urn:dev-team:common#/$defs/questions" },
+    "decisions": { "$ref": "urn:dev-team:common#/$defs/decisions" }
+  }
+}

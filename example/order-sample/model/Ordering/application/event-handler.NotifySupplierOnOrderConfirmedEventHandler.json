@@ -1,0 +1,13 @@
+{
+  "name": "NotifySupplierOnOrderConfirmed",
+  "module": "Ordering",
+  "trigger": "OrderConfirmed",
+  "writes": [],
+  "steps": [
+    { "text": "通知供应商备货", "call": { "kind": "port", "target": "SupplierNotification", "method": "notify" } }
+  ],
+  "raises": [],
+  "throws": [],
+  "traces": ["R-006"],
+  "questions": []
+}

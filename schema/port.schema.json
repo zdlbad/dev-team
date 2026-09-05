@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:port",
+  "title": "port.<Name>Interface.json — 对外依赖端口",
+  "type": "object", "additionalProperties": false,
+  "required": ["name", "module", "kind", "target", "operations", "traces"],
+  "properties": {
+    "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "module": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "kind": { "enum": ["external-system", "module"] },
+    "target": { "type": "string", "minLength": 1, "description": "外部系统名，或模块名" },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["name", "input"],
+        "properties": {
+          "name": { "$ref": "urn:dev-team:common#/$defs/methodName" },
+          "input": { "$ref": "urn:dev-team:common#/$defs/params" },
+          "output": { "$ref": "urn:dev-team:common#/$defs/typeRef" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "traces": { "$ref": "urn:dev-team:common#/$defs/traces" },
+    "decisions": { "$ref": "urn:dev-team:common#/$defs/decisions" }
+  }
+}
