@@ -99,7 +99,7 @@ if (cmd === 'new') {
     slice.scope = { modules: [...mods].sort(), aggregates: [...aggs].sort(), useCases: [...ucs].sort() }
     slice.traces = [...tr].sort()
     slice.stages.model = { status: 'done', confirmedAt: latest }
-    slice.log.push({ ts: today, stage: 'slice', text: `实现切片：实现 ${slice.stories.join('、')} 的模型（聚合 ${aggs.size}，用例 ${ucs.size}）；模型已在建模切片确认` })
+    slice.log.push({ ts: today, stage: 'slice', text: `实现切片：给 ${slice.stories.join('、')} 的原型换上生产外壳（聚合 ${aggs.size}，用例 ${ucs.size}）；模型与领域代码已在故事切片里确认` })
   }
   writeJson(slicePath(id), slice)
   console.log(`已建立切片 ${id}（${kind}）：${path.relative(process.cwd(), slicePath(id))}`)
@@ -212,9 +212,13 @@ function computeNext(slice) {
     if (s1.state === 'rework') return step('模型师', `按回流清单修改模型（${s1.rework} 项），改完重跑校验 ①`, validateCmd(false), '人的裁决里有要改的项')
     return step('人', '确认模型（门禁）', `node tools/slice.js advance ${rel(root)} ${slice.id} model done`, '方向 ① 干净且人已审完；触及模块划分或聚合清单的变动需单独确认')
   }
-  // 建模切片（故事）到此为止：代码是实现切片的事
-  if ((slice.kind === 'story' || story) && st.code.status === 'pending') return step('人', `建模切片完成：故事「${story?.title ?? slice.title}」的模型已确认。两条路：(1) 几条故事攒够了再一起实现——slice new <项目> <id> <标题> --implements ${slice.id}[,…]；(2) 这条故事的模型改动直接带着代码落地——slice advance <项目> ${slice.id} code in-progress`, null, '故事切片默认到模型确认为止；要不要在这条切片里接着编码由人定')
-  // 阶段二：编码
+  // 故事切片：模型确认后由原型角色把这条故事变成能按的原型（领域代码 + 内存适配器），再走校验 ②
+  const protoCmd = `node tools/proto.js check ${rel(root)} --code ${rel(codebase)}`
+  if ((slice.kind === 'story' || story) && st.code.status !== 'done') {
+    if (st.code.status === 'pending') return step('原型', `按模型写这条故事的领域代码与应用层（按 03，可解码），内存仓储与直连端口适配器，组合根登记到原型宿主，src/proto/main.ts；给每一步 walk 填 input；最后跑 ${protoCmd}`, `node tools/slice.js advance ${rel(root)} ${slice.id} code in-progress`, '模型已确认，故事要能在原型上按着走')
+    return step('原型', `原型写完：${protoCmd} 过了就标记完成`, `node tools/slice.js advance ${rel(root)} ${slice.id} code done`, '原型进行中')
+  }
+  // 阶段二：编码（实现切片：生产的适配器与外壳）
   if (st.code.status !== 'done') {
     if (st.code.status === 'pending') return step('编码', '按编码规范从模型实现（先列文件清单再写）', `node tools/slice.js advance ${rel(root)} ${slice.id} code in-progress`, '模型已确认')
     return step('编码', '完成编码后标记完成（每层可先自跑解码器比对）', `node tools/slice.js advance ${rel(root)} ${slice.id} code done`, '编码进行中')
@@ -230,6 +234,7 @@ function computeNext(slice) {
   if (!s2.applied) return step('路由', '把裁决写回', `node tools/slice.js apply ${rel(root)} ${rel(path.join(root, 'reports', 'validate-2.json'))} --slice ${slice.id}`, '裁决已填但未写回')
   if (s2.state === 'rework') return step('人', `按回流清单决定改模型还是改代码（${s2.rework} 项）`, `reports/validate-2.md`, '语义不等价的项由人定改哪一侧')
   if (st.validate.status !== 'done') return step('路由', '标记校验完成', `node tools/slice.js advance ${rel(root)} ${slice.id} validate done`, '方向 ② 干净且已审完')
+  if (slice.kind === 'story' || story) return step('人', `在原型上走一遍故事「${story?.title ?? slice.title}」：node tools/proto.js serve ${rel(root)} --code ${rel(codebase)}，按故事走、随手改输入试规则；对了就合并；不对的在故事页或模型图上留意见`, null, '原型是人对模型的最后一道检查')
   return step('人', '切片完成，合并', null, '三个阶段都已完成')
 }
 if (cmd === 'next') {

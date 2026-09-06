@@ -8,6 +8,7 @@
 domain/        AggregateRoot · Entity · ValueObject · DomainEvent · DomainError · ConcurrencyError
 application/   NotFoundError · assertFound · DomainEventHandler
 ports/         EventPublisherInterface
+proto/         ProtoHost · InMemoryEventPublisher（原型宿主，一次性的壳，生产不用）
 ```
 
 依据：[seed/03-coding-standard.md](../seed/03-coding-standard.md) 第一节。

@@ -77,7 +77,7 @@ if (codebase) {
   const bbSrc = path.join(devTeam, 'building-block')
   const bbDst = path.join(path.resolve(codebase), 'src', 'shared', 'building-block')
   fs.mkdirSync(bbDst, { recursive: true })
-  for (const sub of ['domain', 'application', 'ports']) {
+  for (const sub of ['domain', 'application', 'ports', 'proto']) {
     copyDir(path.join(bbSrc, sub), path.join(bbDst, sub))
   }
   console.log(`基础构建块已拷入：${bbDst}`)

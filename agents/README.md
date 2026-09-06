@@ -1,14 +1,16 @@
 # agents/ — 角色指令
 
-五份文件对应 [seed/05-roles.md](../seed/05-roles.md) 的五个角色。它们不是自动注册的子 agent，而是**路由启动角色时交给它的指令**：路由（`SKILL.md`）读取对应文件，连同任务上下文一起用 Agent 工具启动一个子 agent。
+七份文件对应 [seed/05-roles.md](../seed/05-roles.md) 的七个角色。它们不是自动注册的子 agent，而是**路由启动角色时交给它的指令**：路由（`SKILL.md`）读取对应文件，连同任务上下文一起用 Agent 工具启动一个子 agent。
 
 | 文件 | 角色 | 阶段 | 唯一写入目标 |
 |---|---|---|---|
 | `business-analyst.md` | 业务分析 | 一 | `business/`、`glossary.json` |
 | `guide.md` | 讲解 | 一（贯穿） | `slices/<id>.story.json`（故事、题目、缺口）、`导读/` |
 | `modeler.md` | 模型师 | 一 | `model/`；故事文件的 `walk` 与 `choices` |
-| `coder.md` | 编码 | 二 | 代码库 |
+| `prototyper.md` | 原型 | 一→二 | 代码库里故事的领域层、应用层、内存适配器、组合根、`src/proto/main.ts`；故事的 `walk.input` |
+| `coder.md` | 编码 | 二 | 代码库（生产外壳） |
 | `validator.md` | 模型校验 | 三 | `reports/` |
+| `reader.md` | 解读 | 零（既有代码入门） | `business/`、`glossary.json`、`model/` 草稿、`model/_解读说明.md` |
 
 讲解是为**人**设的角色：别的角色的产物大小由内容决定，它的产物大小由人一次能消化多少决定。子 agent 不能和人聊天，所以它只出教材（故事、题、卡的措辞），对话仍由路由执行；人的回答由路由记回裁定文件。
 

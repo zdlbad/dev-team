@@ -176,6 +176,11 @@
               "gap": {
                 "type": "string",
                 "description": "故事走不通的地方：模型缺什么"
+              },
+              "input": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "原型角色填：这一步在原型上跑时给命令的输入（字段名 = 命令 input 的参数名，值来自故事的金额与日期）"
               }
             }
           },

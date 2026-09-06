@@ -1,0 +1,288 @@
+#!/usr/bin/env node
+/**
+ * 原型：把代码库编译成可跑的原型，起一个页面让人直接操作业务规则。
+ *
+ *   node tools/proto.js serve <项目目录> --code <代码库> [--port 4872] [--proto-port 4873]
+ *       编译（tsc → <代码库>/.proto-build）、启动 src/proto/main.ts 的原型宿主、起页面：
+ *       左：故事（按故事走、逐步走）与命令 / 查询清单；中：表单与结果；右：聚合状态与事件流水
+ *   node tools/proto.js check <项目目录> --code <代码库>
+ *       只编译 + 启动 + 对照模型：模型里的命令 / 查询 / 聚合有没有都登记进原型；退出码非 0 表示缺
+ *
+ * 依赖：代码库按 seed/03 写，原型入口 src/proto/main.ts 用 @shared/building-block/proto 的 ProtoHost。
+ */
+const fs = require('node:fs')
+const path = require('node:path')
+const http = require('node:http')
+const { spawn, spawnSync } = require('node:child_process')
+
+const args = process.argv.slice(2)
+const cmd = args[0]
+const root = args[1] && path.resolve(args[1])
+const opt = (k) => { const i = args.indexOf(k); return i > 0 ? args[i + 1] : undefined }
+const codebase = opt('--code') && path.resolve(opt('--code'))
+const port = Number(opt('--port') ?? 4872)
+const protoPort = Number(opt('--proto-port') ?? 4873)
+if (!['serve', 'check'].includes(cmd) || !root || !fs.existsSync(path.join(root, 'project.json')) || !codebase) {
+  console.error('用法：node tools/proto.js <serve|check> <项目目录> --code <代码库> [--port 4872] [--proto-port 4873]')
+  process.exit(2)
+}
+const { loadModel, loadBusiness, walk } = require('./lib/project')
+const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8'))
+const buildDir = path.join(codebase, '.proto-build')
+const tsconfig = path.join(codebase, 'tsconfig.json')
+// 编译根 = 代码库与 tsconfig include 指到的所有目录的公共祖先（构建块可能在代码库之外）
+function rootDirOf() {
+  const ts = require('typescript')
+  const cfg = ts.readConfigFile(tsconfig, ts.sys.readFile)
+  const parsed = cfg.config ? ts.parseJsonConfigFileContent(cfg.config, ts.sys, codebase) : { fileNames: [] }
+  const dirs = [codebase, ...parsed.fileNames.map((f) => path.dirname(path.resolve(f)))]
+  const segs = dirs.map((d) => d.split(path.sep))
+  let common = segs[0]
+  for (const s of segs) { let i = 0; while (i < common.length && i < s.length && common[i].toLowerCase() === s[i].toLowerCase()) i++; common = common.slice(0, i) }
+  return common.join(path.sep) || path.parse(codebase).root
+}
+const rootDir = rootDirOf()
+const codebaseInBuild = path.join(buildDir, path.relative(rootDir, codebase))
+
+// ---------- 编译与启动 ----------
+function build() {
+  const tsc = require.resolve('typescript/bin/tsc')
+  const r = spawnSync(process.execPath, [tsc, '-p', tsconfig, '--noEmit', 'false', '--outDir', buildDir, '--rootDir', rootDir, '--module', 'commonjs', '--moduleResolution', 'node', '--esModuleInterop', '--declaration', 'false', '--sourceMap', 'false', '--skipLibCheck'], { encoding: 'utf8', cwd: codebase })
+  fs.mkdirSync(buildDir, { recursive: true })
+  fs.writeFileSync(path.join(buildDir, 'package.json'), '{ "type": "commonjs" }\n')
+  return { ok: r.status === 0, output: (r.stdout + r.stderr).trim() }
+}
+let child = null
+function startHost() {
+  return new Promise((resolve) => {
+    if (child) { child.kill(); child = null }
+    const c = spawn(process.execPath, [path.join(__dirname, 'lib', 'proto-run.js'), codebaseInBuild, tsconfig], { env: { ...process.env, PROTO_PORT: String(protoPort) }, stdio: ['ignore', 'pipe', 'pipe'] })
+    let log = ''
+    c.stdout.on('data', (d) => { log += d; process.stdout.write('[原型] ' + d) })
+    c.stderr.on('data', (d) => { log += d; process.stderr.write('[原型] ' + d) })
+    c.on('exit', (code) => { if (child === c) child = null; if (code) console.error(`[原型] 退出，代码 ${code}`) })
+    child = c
+    let tries = 0
+    const poll = () => { hostGet('/manifest').then(() => resolve({ ok: true, log })).catch(() => { if (++tries > 50 || !child) resolve({ ok: false, log }); else setTimeout(poll, 100) }) }
+    setTimeout(poll, 150)
+  })
+}
+function hostReq(method, p, body) {
+  return new Promise((resolve, reject) => {
+    const data = body === undefined ? null : JSON.stringify(body)
+    const req = http.request({ host: '127.0.0.1', port: protoPort, method, path: p, headers: data ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) } : {} }, (res) => {
+      let s = ''; res.on('data', (d) => (s += d)); res.on('end', () => { try { resolve(JSON.parse(s)) } catch (e) { reject(e) } })
+    })
+    req.on('error', reject); if (data) req.write(data); req.end()
+  })
+}
+const hostGet = (p) => hostReq('GET', p)
+
+// ---------- 模型数据给页面 ----------
+function modelData() {
+  const model = loadModel(root)
+  const business = {}; for (const s of loadBusiness(root)) business[s.id] = { text: s.text, kind: s.kind }
+  const errors = {}
+  for (const el of model.elements) if (el.kind === 'error') errors[el.data.name] = { condition: el.data.condition ?? '', module: el.module, traces: el.data.traces ?? [] }
+  const ops = []
+  for (const el of model.elements) {
+    if (el.kind === 'command-handler') ops.push({ kind: 'command', module: el.module, name: el.data.name, q: `${el.module}.${el.data.name}`, actor: el.data.actor, input: el.data.input, steps: (el.data.steps ?? []).map((s) => s.text), throws: el.data.throws ?? [], raises: el.data.raises ?? [], traces: el.data.traces ?? [] })
+    if (el.kind === 'query-handler') ops.push({ kind: 'query', module: el.module, name: el.data.name, q: `${el.module}.${el.data.name}`, actor: el.data.actor, input: el.data.input, steps: (el.data.steps ?? []).map((s) => s.text), throws: [], raises: [], traces: el.data.traces ?? [] })
+  }
+  const aggregates = []
+  for (const mf of model.moduleFiles) for (const a of mf.data.aggregates ?? []) aggregates.push({ q: `${mf.module}.${a.name}`, module: mf.module, name: a.name })
+  const stories = walk(path.join(root, 'slices')).filter((p) => p.endsWith('.story.json')).map((p) => { const st = readJson(p); return { slice: st.slice, title: st.title, persona: st.persona, steps: st.steps.map((s) => ({ n: s.n, day: s.day, actor: s.actor, text: s.text, facts: s.facts ?? {}, walk: s.walk ?? null })) } }).sort((a, b) => a.slice.localeCompare(b.slice))
+  return { system: model.modules?.data.system ?? '', ops, aggregates, errors, business, stories }
+}
+
+// ---------- check ----------
+async function check() {
+  const b = build()
+  if (!b.ok) { console.error('编译失败：\n' + b.output); process.exit(1) }
+  const h = await startHost()
+  if (!h.ok) { console.error('原型宿主起不来：\n' + h.log); process.exit(1) }
+  const m = await hostGet('/manifest')
+  const d = modelData()
+  const missing = []
+  for (const op of d.ops) if (!(op.kind === 'command' ? m.commands : m.queries).includes(op.q)) missing.push(`${op.kind} ${op.q}`)
+  for (const a of d.aggregates) if (!m.repositories.includes(a.q)) missing.push(`仓储 ${a.q}`)
+  const extra = [...m.commands, ...m.queries].filter((n) => !d.ops.some((o) => o.q === n))
+  console.log(`原型登记：命令 ${m.commands.length}，查询 ${m.queries.length}，仓储 ${m.repositories.length}`)
+  if (missing.length) console.log('模型有、原型没登记：\n  ' + missing.join('\n  '))
+  if (extra.length) console.log('原型登记了模型没有的：\n  ' + extra.join('\n  '))
+  // 故事的走法能不能在原型上跑：有 walk.input 的步骤名字要能对上
+  for (const st of d.stories) {
+    const runnable = st.steps.filter((s) => s.walk && s.walk.kind !== 'none' && s.walk.input)
+    const bad = runnable.filter((s) => !resolveName(m, s.walk).q)
+    console.log(`故事 ${st.slice}「${st.title}」：${st.steps.length} 步，可在原型上走 ${runnable.length - bad.length} 步${bad.length ? `，对不上原型的 ${bad.length} 步（${bad.map((s) => `第 ${s.n} 步 ${s.walk.name}`).join('、')}）` : ''}`)
+  }
+  if (child) child.kill()
+  process.exit(missing.length ? 1 : 0)
+}
+/** 故事 walk.name 可能不带模块前缀；对到原型登记名 */
+function resolveName(m, w) {
+  const kind = w.kind === 'query' ? 'query' : 'command'
+  const list = kind === 'query' ? m.queries : m.commands
+  if (list.includes(w.name)) return { kind, q: w.name }
+  const hit = list.filter((n) => n.endsWith('.' + w.name))
+  return { kind, q: hit.length === 1 ? hit[0] : null }
+}
+
+// ---------- serve ----------
+const CSS = `
+  :root { --line:#e1e4e8; --muted:#6b7280; --lo:#f6f8fa; --ok:#dcfce7; --bad:#fde2e2; --blue:#1f6feb; }
+  * { box-sizing:border-box; } body { margin:0; font:14px/1.5 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; color:#111; background:#fafbfc; }
+  header { display:flex; align-items:center; gap:14px; padding:8px 16px; border-bottom:1px solid var(--line); background:#fff; position:sticky; top:0; z-index:5; }
+  header h1 { font-size:16px; margin:0; } header a { color:var(--blue); } header .sp { flex:1; } header .st { color:var(--muted); font-size:12px; }
+  button { font:inherit; font-size:13px; padding:5px 12px; border:1px solid #d0d7de; background:#fff; border-radius:6px; cursor:pointer; } button.primary { background:var(--blue); color:#fff; border-color:var(--blue); } button:disabled { opacity:.5; cursor:default; }
+  main { display:grid; grid-template-columns: 320px minmax(0,1fr) 380px; gap:12px; padding:12px 16px; align-items:start; }
+  .col { display:flex; flex-direction:column; gap:12px; }
+  .box { background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .box h2 { font-size:14px; margin:0 0 8px; } .box h3 { font-size:13px; margin:10px 0 4px; color:var(--muted); }
+  .muted { color:var(--muted); font-size:12px; }
+  .ops button { display:block; width:100%; text-align:left; margin:3px 0; padding:5px 8px; } .ops button.sel { border-color:var(--blue); background:#eef4ff; } .ops .m { font-weight:600; margin-top:6px; font-size:12px; color:var(--muted); }
+  .ops button.none { color:#9ca3af; border-style:dashed; }
+  form label { display:block; margin:6px 0; font-size:13px; } form input, form textarea, form select { width:100%; font:inherit; font-size:13px; padding:5px 8px; border:1px solid #d0d7de; border-radius:6px; }
+  .steps { margin:8px 0 0; padding-left:18px; font-size:12px; color:var(--muted); }
+  .res { margin-top:10px; border-radius:8px; padding:8px 10px; font-size:13px; } .res.ok { background:var(--ok); } .res.bad { background:var(--bad); }
+  .res pre { margin:6px 0 0; font-size:12px; white-space:pre-wrap; }
+  table { border-collapse:collapse; width:100%; font-size:12px; } th, td { border-bottom:1px solid var(--line); padding:3px 6px; text-align:left; vertical-align:top; } th { color:var(--muted); font-weight:600; }
+  td pre { margin:0; font-size:11px; white-space:pre-wrap; }
+  .ev { font-size:12px; padding:4px 0; border-bottom:1px solid var(--line); } .ev b { color:var(--blue); } .ev .d { color:var(--muted); }
+  .story select { width:100%; font:inherit; font-size:13px; padding:5px; margin-bottom:6px; }
+  .step { border:1px solid var(--line); border-radius:8px; padding:6px 8px; margin:5px 0; font-size:12px; }
+  .step .hd { display:flex; gap:8px; align-items:center; } .step .n { font-weight:700; } .step .day { color:var(--muted); } .step .sp { flex:1; }
+  .step.ok { border-color:#9ccc9c; background:#f4fbf4; } .step.bad { border-color:#e5a0a0; background:#fff5f5; } .step.skip { opacity:.7; }
+  .step .txt { margin-top:3px; } .step .facts { margin-top:4px; color:var(--muted); } .step .facts b { color:#111; }
+  .step .out { margin-top:4px; }
+  code { font-family: ui-monospace, Consolas, monospace; font-size:12px; background:var(--lo); padding:1px 4px; border-radius:4px; }
+  .tabs { display:flex; gap:6px; margin-bottom:6px; } .tabs button.on { background:#eef4ff; border-color:var(--blue); }
+`
+const PAGE = `<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>原型</title><style>${CSS}</style></head><body>
+<header><h1 id="title">原型</h1><a href="http://127.0.0.1:4871/" target="story">框架图 ↗</a><a href="http://127.0.0.1:4871/model" target="model">模型图 ↗</a><span class="sp"></span><span class="st" id="st"></span><button id="rebuild">重新编译</button><button id="reset">重置状态</button></header>
+<main>
+  <div class="col">
+    <div class="box story"><h2>按故事走</h2><select id="story-sel"></select><div><button id="run-all" class="primary">从头走到底</button> <span class="muted">每步用模型师填的输入跑一次，和故事写的事实并排</span></div><div id="steps"></div></div>
+    <div class="box"><h2>命令与查询</h2><div class="ops" id="ops"></div></div>
+  </div>
+  <div class="col">
+    <div class="box" id="form-box"><h2 id="op-title">选一个命令</h2><div class="muted" id="op-meta"></div><form id="form"></form><div id="res"></div></div>
+  </div>
+  <div class="col">
+    <div class="box"><div class="tabs"><button data-t="state" class="on">聚合状态</button><button data-t="events">事件流水</button></div><div id="state"></div><div id="events" hidden></div></div>
+  </div>
+</main>
+<script>
+const $ = (s) => document.querySelector(s)
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+let D = null, M = null, sel = null, storyId = null, stepState = {}
+const api = (p, body) => fetch('/api' + p, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json())
+async function load() { D = await (await fetch('/data')).json(); M = await api('/manifest'); document.title = '原型 · ' + D.system; $('#title').textContent = '原型 · ' + D.system; renderOps(); renderStories(); refresh() }
+function registered(op) { return (op.kind === 'command' ? M.commands : M.queries).includes(op.q) }
+function renderOps() {
+  const mods = [...new Set(D.ops.map(o => o.module))]
+  $('#ops').innerHTML = mods.map(m => '<div class="m">' + esc(m) + '</div>' + D.ops.filter(o => o.module === m).map(o => '<button data-op="' + esc(o.q) + '" class="' + (sel === o.q ? 'sel' : '') + (registered(o) ? '' : ' none') + '" title="' + (registered(o) ? '' : '原型还没登记') + '">' + (o.kind === 'query' ? '查 ' : '') + esc(o.name) + '<span class="muted"> · ' + esc(o.actor) + '</span></button>').join('')).join('')
+  document.querySelectorAll('[data-op]').forEach(b => b.addEventListener('click', () => { sel = b.dataset.op; renderOps(); renderForm() }))
+}
+function fieldFor(p, v) {
+  const t = String(p.type || 'string').toLowerCase(), val = v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v))
+  if (t === 'boolean') return '<select name="' + esc(p.name) + '" data-t="boolean"><option value="">（空）</option><option' + (val === 'true' ? ' selected' : '') + '>true</option><option' + (val === 'false' ? ' selected' : '') + '>false</option></select>'
+  if (t === 'number' || t === 'integer') return '<input name="' + esc(p.name) + '" data-t="number" type="number" step="any" value="' + esc(val) + '">'
+  if (t === 'date') return '<input name="' + esc(p.name) + '" data-t="string" type="date" value="' + esc(val) + '">'
+  if (t === 'string') return '<input name="' + esc(p.name) + '" data-t="string" value="' + esc(val) + '">'
+  return '<textarea name="' + esc(p.name) + '" data-t="json" rows="3" placeholder="JSON">' + esc(val) + '</textarea>'
+}
+function renderForm(prefill) {
+  const op = D.ops.find(o => o.q === sel); if (!op) return
+  $('#op-title').textContent = (op.kind === 'query' ? '查询 ' : '命令 ') + op.q
+  $('#op-meta').innerHTML = '执行者 ' + esc(op.actor) + (op.traces.length ? ' · ' + op.traces.map(t => '<code title="' + esc(D.business[t]?.text || '') + '">' + t + '</code>').join(' ') : '') + (op.throws.length ? '<br>可能拒绝：' + op.throws.map(e => '<code title="' + esc(D.errors[e]?.condition || '') + '">' + esc(e) + '</code>').join(' ') : '') + (op.steps.length ? '<ol class="steps">' + op.steps.map(s => '<li>' + esc(s) + '</li>').join('') + '</ol>' : '')
+  $('#form').innerHTML = op.input.map(p => '<label>' + esc(p.name) + ' <span class="muted">' + esc(p.type) + '</span>' + fieldFor(p, prefill?.[p.name]) + '</label>').join('') + '<button class="primary" type="submit"' + (registered(op) ? '' : ' disabled') + '>' + (registered(op) ? '执行' : '原型还没登记这个') + '</button>'
+  $('#res').innerHTML = ''
+}
+function readForm() {
+  const out = {}
+  for (const el of $('#form').elements) { if (!el.name) continue; const v = el.value; if (v === '') continue; out[el.name] = el.dataset.t === 'number' ? Number(v) : el.dataset.t === 'boolean' ? v === 'true' : el.dataset.t === 'json' ? JSON.parse(v) : v }
+  return out
+}
+function showResult(el, r) {
+  if (r.ok) el.innerHTML = '<div class="res ok">成功' + (r.result !== undefined && r.result !== null ? '<pre>' + esc(JSON.stringify(r.result, null, 1)) + '</pre>' : '') + (r.events.length ? '<div>发出：' + r.events.map(e => '<b>' + esc(e.name) + '</b>').join('、') + '</div>' : '') + '</div>'
+  else { const known = D.errors[r.error.name]; el.innerHTML = '<div class="res bad">拒绝：<b>' + esc(r.error.name) + '</b>' + (known ? '<div>' + esc(known.condition) + (known.traces.length ? ' <span class="muted">' + known.traces.join(' ') + '</span>' : '') + '</div>' : '') + '<pre>' + esc(r.error.message) + '</pre></div>' }
+}
+$('#form').addEventListener('submit', async (ev) => { ev.preventDefault(); const op = D.ops.find(o => o.q === sel); let input; try { input = readForm() } catch (e) { $('#res').innerHTML = '<div class="res bad">输入不是合法 JSON</div>'; return } const r = await api('/run', { kind: op.kind, name: op.q, input }); showResult($('#res'), r); refresh() })
+async function refresh() {
+  const st = await api('/state'), ev = await api('/events')
+  $('#state').innerHTML = Object.keys(st).length ? Object.entries(st).map(([name, rows]) => '<h3>' + esc(name) + ' <span class="muted">' + rows.length + ' 条</span></h3>' + (rows.length ? table(rows) : '<div class="muted">（空）</div>')).join('') : '<div class="muted">原型没登记仓储</div>'
+  $('#events').innerHTML = ev.length ? ev.slice().reverse().map(e => '<div class="ev"><b>' + esc(e.name) + '</b> <span class="d">' + esc(e.at.slice(11, 19)) + (e.during ? ' · ' + esc(e.during) : '') + '</span><pre style="margin:2px 0 0;font-size:11px;white-space:pre-wrap">' + esc(JSON.stringify(e.payload)) + '</pre></div>').join('') : '<div class="muted">还没有事件</div>'
+  $('#st').textContent = '状态已刷新 ' + new Date().toLocaleTimeString()
+}
+function table(rows) {
+  const keys = [...new Set(rows.flatMap(r => Object.keys(r || {})))]
+  return '<div style="overflow:auto"><table><tr>' + keys.map(k => '<th>' + esc(k) + '</th>').join('') + '</tr>' + rows.map(r => '<tr>' + keys.map(k => '<td>' + cell(r[k]) + '</td>').join('') + '</tr>').join('') + '</table></div>'
+}
+function cell(v) { if (v === undefined || v === null) return '<span class="muted">—</span>'; if (typeof v === 'object') { const s = JSON.stringify(v); return s.length > 60 ? '<details><summary>' + esc(s.slice(0, 40)) + '…</summary><pre>' + esc(JSON.stringify(v, null, 1)) + '</pre></details>' : '<code>' + esc(s) + '</code>' } return esc(v) }
+function resolveName(w) { const kind = w.kind === 'query' ? 'query' : 'command'; const list = kind === 'query' ? M.queries : M.commands; if (list.includes(w.name)) return { kind, q: w.name }; const hit = list.filter(n => n.endsWith('.' + w.name)); return { kind, q: hit.length === 1 ? hit[0] : null } }
+function renderStories() {
+  $('#story-sel').innerHTML = '<option value="">（选一条故事）</option>' + D.stories.map(s => '<option value="' + esc(s.slice) + '"' + (s.slice === storyId ? ' selected' : '') + '>' + esc(s.slice) + ' ' + esc(s.title) + '</option>').join('')
+  const st = D.stories.find(s => s.slice === storyId)
+  $('#steps').innerHTML = st ? st.steps.map(s => {
+    const w = s.walk, r = w && w.kind !== 'none' && w.input ? resolveName(w) : null
+    const can = !!(r && r.q), state = stepState[s.n]
+    const cls = 'step' + (state ? ' ' + state.cls : '') + (can ? '' : ' skip')
+    return '<div class="' + cls + '" id="stp-' + s.n + '"><div class="hd"><span class="n">' + s.n + '</span><span class="day">' + esc(s.day) + '</span><span>' + esc(s.actor) + '</span><span class="sp"></span>' + (can ? '<button data-run="' + s.n + '">走这步</button>' : '<span class="muted" title="' + esc(w ? (w.kind === 'none' ? '模型里没有动作' : !w.input ? '模型师还没填 walk.input' : '原型没登记 ' + w.name) : '还没有走法') + '">' + (w && w.kind === 'none' ? '无动作' : '不可走') + '</span>') + '</div><div class="txt">' + esc(s.text) + '</div>' + (Object.keys(s.facts).length ? '<div class="facts">故事说：' + Object.entries(s.facts).map(([k, v]) => esc(k) + ' <b>' + esc(v) + '</b>').join('　') + '</div>' : '') + '<div class="out" id="out-' + s.n + '">' + (state ? state.html : '') + '</div></div>'
+  }).join('') : ''
+  document.querySelectorAll('[data-run]').forEach(b => b.addEventListener('click', () => runStep(Number(b.dataset.run))))
+}
+async function runStep(n) {
+  const st = D.stories.find(s => s.slice === storyId), s = st.steps.find(x => x.n === n), r = resolveName(s.walk)
+  const res = await api('/run', { kind: r.kind, name: r.q, input: s.walk.input })
+  const tmp = document.createElement('div'); showResult(tmp, res)
+  stepState[n] = { cls: res.ok ? 'ok' : 'bad', html: tmp.innerHTML }
+  sel = r.q; renderOps(); renderForm(s.walk.input); showResult($('#res'), res)
+  renderStories(); await refresh()
+  return res.ok
+}
+$('#run-all').addEventListener('click', async () => { if (!storyId) return; await api('/reset', {}); stepState = {}; const st = D.stories.find(s => s.slice === storyId); for (const s of st.steps) { if (!(s.walk && s.walk.kind !== 'none' && s.walk.input && resolveName(s.walk).q)) continue; const ok = await runStep(s.n); if (!ok) break } })
+$('#story-sel').addEventListener('change', () => { storyId = $('#story-sel').value || null; stepState = {}; renderStories() })
+$('#reset').addEventListener('click', async () => { await api('/reset', {}); stepState = {}; renderStories(); refresh() })
+$('#rebuild').addEventListener('click', async () => { $('#st').textContent = '编译中…'; const r = await api('/rebuild', {}); $('#st').textContent = r.ok ? '编译完成，原型已重启' : '编译失败'; if (!r.ok) alert(r.output); M = await api('/manifest'); D = await (await fetch('/data')).json(); stepState = {}; renderOps(); renderStories(); refresh() })
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); $('#state').hidden = b.dataset.t !== 'state'; $('#events').hidden = b.dataset.t !== 'events' }))
+load()
+</script></body></html>`
+
+async function serve() {
+  const b = build()
+  if (!b.ok) console.error('编译失败（页面仍会起，修完代码点「重新编译」）：\n' + b.output)
+  const h = await startHost()
+  if (!h.ok) console.error('原型宿主起不来（页面仍会起）：\n' + h.log)
+  const server = http.createServer(async (req, res) => {
+    const url = (req.url ?? '/').split('?')[0]
+    const json = (code, body) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)) }
+    try {
+      if (req.method === 'GET' && url === '/') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(PAGE) }
+      if (req.method === 'GET' && url === '/data') return json(200, modelData())
+      if (req.method === 'POST' && url === '/api/rebuild') {
+        const r = build(); const s = r.ok ? await startHost() : { ok: false, log: '' }
+        return json(200, { ok: r.ok && s.ok, output: r.output + (s.ok ? '' : '\n' + s.log) })
+      }
+      if (url.startsWith('/api/')) {
+        if (!child) return json(200, url.endsWith('/manifest') ? { commands: [], queries: [], repositories: [] } : url.endsWith('/state') ? {} : url.endsWith('/events') ? [] : { ok: false, error: { name: 'NoHost', message: '原型宿主没在跑：先修代码再点重新编译' }, events: [] })
+        if (req.method === 'GET') return json(200, await hostGet(url.slice(4)))
+        let body = ''; req.on('data', (d) => (body += d))
+        req.on('end', async () => { try { json(200, await hostReq('POST', url.slice(4), body ? JSON.parse(body) : {})) } catch (e) { json(500, { ok: false, error: { name: 'ProxyError', message: String(e.message) }, events: [] }) } })
+        return
+      }
+      res.writeHead(404); res.end()
+    } catch (e) { json(500, { error: String(e.message) }) }
+  })
+  server.listen(port, '127.0.0.1', () => {
+    const url = `http://127.0.0.1:${port}/`
+    console.log(`原型页面 ${url}（Ctrl+C 结束）`)
+    if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', url], { stdio: 'ignore', detached: true }).unref()
+  })
+  process.on('exit', () => { if (child) child.kill() })
+  process.on('SIGINT', () => process.exit(0))
+}
+
+if (cmd === 'check') check()
+else serve()
