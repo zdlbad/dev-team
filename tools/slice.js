@@ -192,6 +192,10 @@ function computeNext(slice) {
     if (scopeEmpty) return step('人 + 模型师', '定范围：填切片记录的 scope 与 traces', null, '切片首先是对模型改动范围的定稿')
     const r1 = reportOf(1)
     const s1 = reportState(r1)
+    // 人在模型图上留的意见：先有人看、有人回，再往下走
+    const mnP = path.join(root, 'reports', '_模型意见.json')
+    const mnOpen = fs.existsSync(mnP) ? Object.entries(readJson(mnP)).flatMap(([f, ns]) => ns.filter((n) => !n.handled).map((n) => ({ f, ...n }))) : []
+    if (mnOpen.length) return step('路由', `读人对模型的 ${mnOpen.length} 条意见（reports/_模型意见.json）：逐条回应；要改的派模型师，改完把 handled 置真`, null, '人在模型图上留了意见，先回应再推进')
     if (st.model.status === 'pending') return step('模型师', story ? (story.basedOn ? `只建这一版新增那段所需的最少模型（上一版 ${story.basedOn} 的模型已在）；给每一步填 walk——老步骤也要重走，保证老路没被新东西弄断；做过的选择列进 choices` : '按故事建走通它所需的最少模型；写完给每一步填 walk，把做过的选择列进 choices') : '在范围内建模 / 改模', `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '范围已定，模型阶段尚未开始')
     // in-progress：看方向 ① 报告走到哪
     if (s1.state === 'none' || (r1.slice && r1.slice !== slice.id)) return step('模型校验', '跑校验 ①（机械检查 + 生成判断清单）', validateCmd(false), '模型阶段进行中，还没有本切片的方向 ① 报告')

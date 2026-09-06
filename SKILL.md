@@ -16,7 +16,7 @@ description: 模型驱动的开发团队。业务 → 模型 → 代码三阶段
 | `new <目录> <系统名> [--codebase <代码库>]` | 新建项目（git init；可顺带拷入构建块） | `node $DEV_TEAM/tools/new-project.js …` |
 | `slice new <项目> <id> <标题> [--story [--based-on <上一版id>]] [--implements <故事id,…>] [--modules …] [--aggregates …] [--use-cases …] [--traces …]` | 建切片记录；`--story` = **建模切片**（一条故事，到模型确认为止，同时建故事骨架）；`--based-on` 从上一版滚出；`--implements` = **实现切片**（把几条已确认模型的故事变成代码，范围从故事的 walk 推出，直接进编码） | `node $DEV_TEAM/tools/slice.js new …` |
 | `story approve <项目> <id>` | 人与团队对故事的业务理解一致（每步语句已确认）；编号顺带并入切片 traces | `node $DEV_TEAM/tools/story.js approve …` |
-| `story serve <项目> [id]` | 起本地页面：`/` 框架图（模块 × 故事，点故事看点亮了哪些域）；`/story?slice=<id>` 走故事（业务语句逐条打勾、同意／质疑、预测再揭晓、裁定卡挂在步骤下）；`/glossary` 名词目录（可留意见、提新词）；`/model` 模型图（每次打开重画 render 的结果） | `node $DEV_TEAM/tools/story.js serve …` |
+| `story serve <项目> [id]` | 起本地页面：`/` 框架图（模块 × 故事，点故事看点亮了哪些域）；`/story?slice=<id>` 走故事（业务语句逐条打勾、同意／质疑、预测再揭晓、裁定卡挂在步骤下）；`/glossary` 名词目录（可留意见、提新词）；`/model` 模型图（每次打开重画 render 的结果；卡片下可留意见，存 `reports/_模型意见.json`，`slice next` 会先要求路由回应） | `node $DEV_TEAM/tools/story.js serve …` |
 | `story apply <项目> <id>` | 裁定卡写进 `raw/项目所有者的裁定.md` 与切片 log，算出回流 | `node $DEV_TEAM/tools/story.js apply …` |
 | `slice next <项目> <id>` | 算出下一步：谁上场、跑什么 | `node $DEV_TEAM/tools/slice.js next …` |
 | `slice advance <项目> <id> <model\|code\|validate> <状态> [说明]` | 推进阶段状态并写 log | `node $DEV_TEAM/tools/slice.js advance …` |
