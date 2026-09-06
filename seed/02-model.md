@@ -168,7 +168,7 @@ src/<module>/
 - **问题**：`questions: [{ question, answer: "", applied: false }]`，每个文件一个数组。
 - **无确认状态字段**：一个切片的模型改动由人整体确认，确认记在切片记录里，改动本身由 git 记录。
 - **无可视化状态**：模型文件永远不含注解、布局等可视化状态；它们放在项目的 `.viewer/` 旁路目录，按模型文件路径索引。
-- **裁决**：`decisions: [{ target, check, verdict: "accepted" | "dismissed", note, at }]`，每个模型文件一个数组；记录人对校验项的裁决（驳回的警告、接受的多聚合写入、边界信号的裁定）。校验器读它，未变化的项不再提出。
+- **裁决**：`decisions: [{ target, check, verdict: "accepted" | "dismissed", note, at, on? }]`，每个模型文件一个数组；记录人对校验项的裁决（驳回的警告、接受的多聚合写入、边界信号的裁定、判断通过且人已同意）。`on` 是裁决时对象文字的短哈希：校验器读它，文字未变的项不再提出；文字变了裁决即过期，项目重新浮出并标注上次的裁决。业务语句类判断（目标是 G / R 编号）写进它落点的每一个模型文件。
 - 所有 `name` 都是模型名（无种类后缀）。`?` 表示可选字段。
 
 ### glossary.json
@@ -196,7 +196,7 @@ src/<module>/
   "aggregates": [
     { "name": "Order", "members": ["OrderLine", "Money"],
       "idRefs": [ { "field": "customerId", "to": "Customers.Customer" } ],
-      "traces": [] } ],
+      "traces": [] } ],                    // traces 与该聚合根文件的 traces 相同
   "denylist": [ { "noun": "购物车", "reason": "UI 概念，不是领域实体" } ],
   "questions": [] }
 ```
@@ -211,7 +211,7 @@ src/<module>/
   "aggregateNarrative": "整个聚合是什么 → 拥有什么 → 生命周期",
   "aggregateInvariants": [ { "text": "跨成员始终成立的条件", "traces": [] } ],
   "fields": [ { "name": "status", "type": "OrderStatus", "nullable?": false, "note?": "" } ],
-  "invariants": [ { "text": "根对象自身始终成立的条件", "traces": [] } ],
+  "invariants": [ { "text": "根对象自身始终成立的条件", "traces": [], "throws?": ["InvalidOrder"] } ],   // throws = 创建时违反该不变量抛出的错误
   "behaviors": [ /* 见下 */ ],
   "traces": [], "questions": [] }
 
@@ -235,7 +235,9 @@ src/<module>/
   "traces": [] }
 ```
 
-`invariants` 是对象状态**始终成立**的条件；`rules` 是某个行为**做决定时**依据的逻辑。值对象的推导规则就是它的行为上的 `rules`。
+`invariants` 是对象状态**始终成立**的条件；`rules` 是某个行为**做决定时**依据的逻辑。值对象的推导规则就是它的行为上的 `rules`。不变量的 `throws` 记录**创建时**（静态工厂）违反它所抛出的错误——工厂不是行为，这是错误在创建路径上唯一的归属。
+
+**`raises` / `throws` 是传递闭包。** 一个行为调用了另一个行为或工厂，被调者可能发出的事件与错误也算作它的：`Order.total()` 调了 `Money.add()`，后者抛 `CurrencyMismatch`，则 `total` 的 `throws` 含 `CurrencyMismatch`；用例再向上继承。解码器机械地计算这个闭包，模型按此书写。
 
 ### 事件与错误
 
@@ -276,15 +278,15 @@ src/<module>/
 
 ```jsonc
 { "text": "读起来通顺的一句话",
-  "call?": { "kind": "behavior",        // behavior | service | repository | port | command
+  "call?": { "kind": "behavior",        // behavior | factory | service | repository | port | command
              "target": "Order",         // 聚合名 / 服务名 / 仓储名 / 端口名 / 命令名
-             "method": "confirm" },
+             "method": "confirm" },     // factory 时为大写蛇形工厂名，如 CREATE
   "when?": "decision 为 discounted",   // 分流：条件只能是某次领域调用返回值的判别属性；"否则" 表示 else
   "input?": "…", "output?": "…",
   "raises?": [], "throws?": [] }
 ```
 
-没有 `call` 的步骤只能是纯粹的数据搬运（组装输入、返回结果）。`kind` 为 `behavior` 时：在处理器的步骤里 `target` **只能是聚合根**；在领域服务操作的步骤里可以是聚合根、实体或值对象。技术守卫（找不到、无权限）与事件发布是机械动作，不进模型。
+`factory` 是静态工厂调用（`Order.CREATE`）：工厂不是行为，但处理器里创建聚合或值对象这一步要能表示。没有 `call` 的步骤只能是纯粹的数据搬运（组装输入、返回结果）。`kind` 为 `behavior` 时：在处理器的步骤里 `target` **只能是聚合根**；在领域服务操作的步骤里可以是聚合根、实体或值对象。技术守卫（找不到、无权限）与事件发布是机械动作，不进模型。
 
 ### command-handler.&lt;Name&gt;CommandHandler.json
 
@@ -362,3 +364,5 @@ src/<module>/
 10. 处理器步骤中 `call.kind: behavior` 的 `target` 只能是聚合根；实体与值对象的行为只在聚合内部被调用。
 11. 步骤的 `when` 只能引用某次领域调用的返回值；处理器不做业务判断。
 12. 领域服务纯函数式：操作的 `reads` 即其参数所含的聚合。
+13. 行为、服务操作、用例的 `raises` / `throws` 是经由调用关系（含工厂）的传递闭包。
+14. `module.json` 中聚合的 `traces` 等于其聚合根文件的 `traces`。

@@ -13,9 +13,9 @@
         { "text": "计算订单原价", "call": { "kind": "behavior", "target": "Order", "method": "total" }, "output": "total" },
         { "text": "判断促销是否适用", "call": { "kind": "behavior", "target": "Promotion", "method": "appliesTo" }, "output": "applies" }
       ],
-      "rules": ["促销适用时折扣不超过原价的一半"],
+      "rules": ["促销适用时按促销的折扣比例定价，否则按原价"],
       "raises": [],
-      "throws": [],
+      "throws": ["CurrencyMismatch", "InvalidMoney"],
       "traces": ["R-005"]
     }
   ],

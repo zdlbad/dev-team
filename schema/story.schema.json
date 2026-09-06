@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:story",
+  "title": "slices/<id>.story.json — 故事切片：一条能走通的故事，带人、日期与金额",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "slice",
+    "title",
+    "persona",
+    "steps",
+    "traces",
+    "choices",
+    "gaps",
+    "approved"
+  ],
+  "properties": {
+    "slice": {
+      "type": "string",
+      "pattern": "^s-[0-9]{3,}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "persona": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "n",
+          "day",
+          "actor",
+          "text",
+          "traces"
+        ],
+        "properties": {
+          "n": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "day": {
+            "type": "string",
+            "minLength": 1,
+            "description": "日期或相对日，如 2026-10-03 / 季末后第 61 日"
+          },
+          "actor": {
+            "type": "string",
+            "minLength": 1,
+            "description": "谁做的：业务角色、政府、时间"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "description": "这一步发生了什么，人话，带金额"
+          },
+          "facts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "number",
+                "string",
+                "boolean"
+              ]
+            },
+            "description": "这一步之后的事实，标签 → 值，给人看"
+          },
+          "traces": {
+            "$ref": "urn:dev-team:common#/$defs/traces"
+          },
+          "quiz": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ask",
+              "answer",
+              "kind"
+            ],
+            "properties": {
+              "ask": {
+                "type": "string",
+                "minLength": 1
+              },
+              "answer": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "enum": [
+                  "number",
+                  "choice",
+                  "text"
+                ]
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "explain": {
+                "type": "string"
+              }
+            }
+          },
+          "walk": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "name",
+              "changes"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "command",
+                  "query",
+                  "event",
+                  "time",
+                  "none"
+                ],
+                "description": "none = 这一步在模型里没有动作（只是业务背景）"
+              },
+              "name": {
+                "type": "string"
+              },
+              "aggregate": {
+                "$ref": "urn:dev-team:common#/$defs/qualifiedName"
+              },
+              "changes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "emits": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:dev-team:common#/$defs/qualifiedName"
+                }
+              },
+              "asks": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "通过端口问了谁什么"
+              },
+              "throws": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:dev-team:common#/$defs/modelName"
+                }
+              },
+              "gap": {
+                "type": "string",
+                "description": "故事走不通的地方：模型缺什么"
+              }
+            }
+          },
+          "human": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "answer",
+              "correct",
+              "at"
+            ],
+            "properties": {
+              "answer": {
+                "type": "string"
+              },
+              "correct": {
+                "type": "boolean"
+              },
+              "at": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          },
+          "review": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "verdict",
+              "at"
+            ],
+            "properties": {
+              "verdict": {
+                "enum": [
+                  "agree",
+                  "challenge"
+                ]
+              },
+              "note": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "confirmed": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:dev-team:common#/$defs/traceId"
+                },
+                "uniqueItems": true,
+                "description": "这一步里人逐条打勾确认的语句"
+              },
+              "handled": {
+                "type": "boolean",
+                "description": "路由已读过并回应了这条想法或质疑"
+              }
+            },
+            "description": "人对这一步的业务内容：同意，或质疑（note 是理由）"
+          }
+        }
+      }
+    },
+    "traces": {
+      "$ref": "urn:dev-team:common#/$defs/traces",
+      "description": "故事用到的全部编号；认可后成为切片的 traces"
+    },
+    "choices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "question",
+          "options",
+          "recommended",
+          "current"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^c[0-9]+$"
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1
+          },
+          "context": {
+            "type": "string",
+            "description": "为什么会有这个选择、涉及哪些语句"
+          },
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "text"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "consequence": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "recommended": {
+            "type": "string",
+            "minLength": 1
+          },
+          "current": {
+            "type": "string",
+            "minLength": 1,
+            "description": "模型现在按哪个选项做的"
+          },
+          "ruling": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "choice",
+              "at"
+            ],
+            "properties": {
+              "choice": {
+                "type": "string",
+                "minLength": 1
+              },
+              "note": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              }
+            }
+          },
+          "applied": {
+            "type": "boolean"
+          },
+          "step": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "这张卡挨着哪一步"
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "讲解或模型师发现的缺口：业务描述没写、手册没写、需人裁定的"
+    },
+    "approved": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}",
+      "description": "人认可故事作为切片范围的日期"
+    },
+    "log": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "note": {
+      "type": "string",
+      "description": "人对整条故事的想法"
+    },
+    "noteHandled": {
+      "type": "boolean"
+    },
+    "basedOn": {
+      "type": "string",
+      "pattern": "^s-[0-9]{3,}$",
+      "description": "谱系：这一版是从哪条故事滚出来的（上一版的切片 id）"
+    },
+    "adds": {
+      "type": "string",
+      "description": "这一版比上一版多了什么，一句话；有 basedOn 时必填"
+    },
+    "gapPicks": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "uniqueItems": true,
+      "description": "人勾选的缺口下标：这些缺口要滚成下一版故事"
+    }
+  },
+  "if": {
+    "properties": {
+      "basedOn": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "basedOn"
+    ]
+  },
+  "then": {
+    "required": [
+      "adds"
+    ],
+    "properties": {
+      "adds": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

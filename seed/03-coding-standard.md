@@ -2,7 +2,7 @@
 
 *dev-team 种子文档。上位文档：[00-principles.md](00-principles.md)、[02-model.md](02-model.md)。目录与命名见 02 的第二至五节，本文不重复。*
 
-本规范的每一条都必须能被反向解析。凡是解码器读不出来的约定，就不是规范，只是风格。语言：TypeScript。
+本规范的每一条都必须能被反向解析。凡是解码器读不出来的约定，就不是规范，只是风格。语言：TypeScript。基础构建块以路径别名 `@shared/building-block/*` 引入（tsconfig `paths` 映射到 `src/shared/building-block/*`）。
 
 ---
 
@@ -152,6 +152,8 @@ export class CreateOrderCommandHandler {
 - 查询处理器：`execute(query)` 返回 `Result` 类；只注入仓储接口；只调 `find*`
 - 事件处理器：`implements DomainEventHandler<E>`，入口 `handle(event)`；`E` 必须与类名中的 `On<E>` 一致
 - 构造注入，参数全部是接口
+- 领域服务是纯函数式的，**不注入**：处理器以字段初始化持有它（`private readonly pricing = new PricingService()`）
+- 创建聚合或值对象是一步，调用静态工厂：`const order = OrderAggregateRoot.CREATE({ … })`（模型里 `call.kind: factory`）
 
 ### 处理器体的语法：直线 + 按领域结果分流 + 作为调用的守卫
 
@@ -198,11 +200,19 @@ export class CreateOrderCommandHandler {
 
 | 标签 | 放在 | 对应模型字段 |
 |---|---|---|
-| `@trace G-001 R-002` | 领域类、行为、领域服务操作、处理器的 `execute` / `handle` | `traces` |
+| `@trace G-001 R-002` | 领域类、行为、领域服务操作、处理器的 `execute` / `handle`、端口接口、`module.ts` | `traces` |
 | `@narrative 文本` | 聚合根类 | `aggregateNarrative` |
-| `@invariant 文本` | 聚合根类（聚合级）、实体 / 值对象类（对象级） | `aggregateInvariants` / `invariants` |
+| `@aggregate-invariant [R-001] 文本` | 聚合根类 | `aggregateInvariants` |
+| `@invariant [R-001 R-002] 文本 {ErrA ErrB}` | 聚合根类（根自身）、实体 / 值对象类 | `invariants`；方括号内是 traces，花括号内是创建时违反抛出的错误（`throws`），两者可省 |
 | `@rule 文本` | 行为方法、领域服务操作 | `rules` |
+| `@condition 文本` | 错误类 | `condition` |
+| `@actor 名字` | 处理器类 | `actor` |
+| `@ref Module.Aggregate` | `props` 类型中持有其它聚合 id 的字段 | `module.json` 的 `idRefs` |
+| `@external-system 名字` / `@module 名字` | 端口接口 | 端口的 `kind` 与 `target` |
+| `@module 名字` + `@responsibility 文本` | `module.ts` 的组合根函数 | `modules.json` |
+| `@note 文本` | `props` 字段、端口方法 | `note` |
 | `// 文本` | 处理器体内每步上方 | 步骤 `text` |
+| `// 文本` | `if` 语句上方（处理器体内，或行为体内包住 `raise` 的 `if`） | 分支内步骤的 `when`；条件 raise 的 `when`。无注释时用条件源码；`else` 分支为「否则」 |
 
 缺少 `@trace` 的类、行为、处理器是违规。
 
@@ -216,15 +226,17 @@ export class CreateOrderCommandHandler {
 | 类名去种类后缀 | `name` |
 | `props` 的类型 | `fields` |
 | 公开实例方法（getter 除外） | `behaviors`；签名 → `input` / `output` |
-| 静态方法 | 工厂，不解码 |
+| 静态方法 | 工厂：不作为行为解码；处理器中对它的调用解码为 `call.kind: factory`；它抛出的错误参与传递闭包 |
 | 方法体内 `this.raise(new XEvent)` / `throw new XError` | `raises` / `throws`（在 `if` 内 → 带 `when`） |
 | 事件构造参数 | `payload` |
 | 仓储方法名前缀 | `methods[].kind` |
 | 领域服务操作的参数类型 | `reads`；操作内对参数聚合调用写行为 → `writes` |
-| 处理器 `execute` / `handle` 的语句序列 | `steps`；被调对象的类型 → `call.kind` / `target` / `method` |
+| 处理器 `execute` / `handle` 的语句序列 | `steps`；被调对象的类型 → `call.kind` / `target` / `method`。一条语句成为一步的条件：上方有 `//` 注释，或它的主调用能解析到核心圈里的对象。`await`、`assertFound(...)` 等构建块包装被剥掉后再看主调用；`return new Result(...)` 这类纯数据组装不解码 |
+| 变量声明 `const x = …` | 步骤 `output` = 变量名 |
 | 分支条件（领域调用结果的判别属性） | 分支内步骤的 `when` |
 | `shared/building-block/application` 断言、`shared/building-block/ports` 调用、`publish` | 不解码 |
-| 调用了写方法的仓储所属聚合 + 所调服务操作的 `writes` | `writes` |
+| 调用了写方法的仓储所属聚合 + 调用了会修改状态的聚合根行为 + 所调服务操作的 `writes` | `writes`。「修改状态」= 行为体内对 `this.props…` 赋值、对 `this.props…` 调用修改型方法（push、splice 等）、或 `this.raise`，并沿同类方法的调用传播 |
+| 已解析的调用关系（行为 → 行为 / 工厂 / 服务操作；处理器 → 行为 / 工厂 / 服务操作 / 命令） | `raises` / `throws` 的传递闭包 |
 | `Command` / `Query` / `Result` 类的字段 | `input` / `result` |
 | `handle` 的参数类型 | `trigger` |
 | 端口接口的方法签名 | `operations` |
@@ -251,6 +263,9 @@ export class CreateOrderCommandHandler {
 14. 适配器中出现分支业务逻辑
 15. 缺少 `@trace` 的领域类、行为、处理器
 16. 领域服务有构造注入
+17. 处理器体内的 `if` 条件未引用某次领域调用（行为 / 工厂 / 服务）的返回值
+18. 处理器体内直接 `throw`
+19. 静态工厂内 `raise` 事件
 
 ---
 

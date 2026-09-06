@@ -1,0 +1,6 @@
+{
+  "name": "InvalidOrderLine",
+  "aggregate": "Order",
+  "condition": "订单行的数量不是正整数",
+  "traces": ["R-002"]
+}

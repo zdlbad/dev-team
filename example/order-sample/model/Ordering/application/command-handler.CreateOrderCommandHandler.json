@@ -5,11 +5,11 @@
   "input": [{ "name": "customerId", "type": "string" }],
   "writes": ["Order"],
   "steps": [
-    { "text": "读取客户", "call": { "kind": "port", "target": "CustomerLookup", "method": "findById" }, "output": "customer" },
-    { "text": "创建订单", "call": { "kind": "behavior", "target": "Order", "method": "create" }, "output": "order" },
+    { "text": "确认客户存在", "call": { "kind": "port", "target": "CustomerLookup", "method": "findById" }, "output": "customer" },
+    { "text": "创建订单", "call": { "kind": "factory", "target": "Order", "method": "CREATE" }, "output": "order" },
     { "text": "保存订单", "call": { "kind": "repository", "target": "OrderRepository", "method": "save" } }
   ],
-  "raises": ["OrderCreated"],
+  "raises": [],
   "throws": [],
   "traces": ["G-001"],
   "questions": []

@@ -1,0 +1,13 @@
+{
+  "name": "Customer",
+  "module": "Customers",
+  "aggregateNarrative": "客户是下单的人或组织，有一个可修改的名字。",
+  "aggregateInvariants": [],
+  "fields": [{ "name": "name", "type": "string" }],
+  "invariants": [{ "text": "名字不能为空", "traces": ["R-010"], "throws": ["InvalidCustomerName"] }],
+  "behaviors": [
+    { "name": "rename", "input": [{ "name": "name", "type": "string" }], "rules": ["新名字不能为空"], "raises": [], "throws": ["InvalidCustomerName"], "traces": ["G-010", "R-010"] }
+  ],
+  "traces": ["G-010"],
+  "questions": []
+}

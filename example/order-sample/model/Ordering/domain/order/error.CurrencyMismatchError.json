@@ -1,0 +1,6 @@
+{
+  "name": "CurrencyMismatch",
+  "aggregate": "Order",
+  "condition": "两个不同币种的金额相加",
+  "traces": ["R-004"]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "CustomerRepository",
+  "aggregate": "Customer",
+  "methods": [
+    { "name": "findById", "kind": "read", "input": [{ "name": "id", "type": "string" }], "output": "Customer" },
+    { "name": "save", "kind": "write", "input": [{ "name": "customer", "type": "Customer" }] }
+  ]
+}

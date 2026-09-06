@@ -1,0 +1,8 @@
+{
+  "name": "PromotionRepository",
+  "aggregate": "Promotion",
+  "methods": [
+    { "name": "findByCode", "kind": "read", "input": [{ "name": "code", "type": "string" }], "output": "Promotion" },
+    { "name": "save", "kind": "write", "input": [{ "name": "promotion", "type": "Promotion" }] }
+  ]
+}

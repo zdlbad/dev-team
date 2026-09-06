@@ -4,6 +4,8 @@
     { "name": "OrderLine", "definition": "订单中的一行：某商品的数量与单价", "aliases": ["订单行"] },
     { "name": "Money", "definition": "带币种的金额", "aliases": ["金额"] },
     { "name": "Customer", "definition": "下单的人或组织", "aliases": ["客户"] },
-    { "name": "Promotion", "definition": "在特定条件下降低订单价格的规则", "aliases": ["促销"] }
+    { "name": "Promotion", "definition": "在特定条件下降低订单价格的规则", "aliases": ["促销"] },
+    { "name": "Supplier", "definition": "为订单备货的一方", "aliases": ["供应商"] },
+    { "name": "PaymentGateway", "definition": "代收款的外部系统", "aliases": ["支付网关"] }
   ]
 }

@@ -94,7 +94,7 @@
 
 ```jsonc
 { "target": "aggregate-root.OrderAggregateRoot.json#behaviors.confirm.rules[0]",
-  "check": "落点文本表达了业务语句",
+  "check": "模型规则是否与业务一致？",
   "sides": { "business": "[R-001] 预算总额不得超过核定额度", "model": "确认时校验总额 ≤ 核定额度" },
   "verdict": "pass",                 // pass | fail
   "importance": "high",              // high | medium | low
@@ -130,7 +130,8 @@
 **结论记到目标本身，不记在报告里：**
 - 驳回的警告、接受的多聚合 `writes`、边界信号的裁定 → 目标模型文件的 `decisions[]`（形状见 02 通用约定）
 - 业务层面的结论 → 业务描述中的一条语句
-- 校验器读 `decisions[]`，未变化的项不再重复提出
+- 校验器读 `decisions[]`，按 `on`（对象文字的哈希）判断是否变化：未变化的项不再重复提出，变化了的项带着上次裁决（`staleDecision`）重新提出
+- 只有「不需要改」的裁决才写回：判断通过且人同意 → `dismissed`；承认例外 / 接受现状 → `accepted`（必须写理由）；驳回的警告 → `dismissed`。「需要改」的裁决不写回，列为回流清单记入切片记录
 - 变化的追溯靠 git：每个项目一个文件夹、一个仓库
 
 ```

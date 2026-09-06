@@ -2,7 +2,7 @@
   "id": "s-001",
   "title": "初次建模：订单的创建与确认",
   "kind": "initial",
-  "codebase": "../sample-code",
+  "codebase": "../order-code",
   "scope": { "modules": ["Ordering"], "aggregates": ["Ordering.Order"], "useCases": ["CreateOrder", "GetOrder"] },
   "traces": ["G-001", "G-002", "R-001"],
   "stages": {

@@ -1,0 +1,6 @@
+{
+  "name": "InvalidMoney",
+  "aggregate": "Order",
+  "condition": "金额为负",
+  "traces": ["R-004"]
+}

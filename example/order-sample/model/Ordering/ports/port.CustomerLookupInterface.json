@@ -1,0 +1,10 @@
+{
+  "name": "CustomerLookup",
+  "module": "Ordering",
+  "kind": "module",
+  "target": "Customers",
+  "operations": [
+    { "name": "findById", "input": [{ "name": "id", "type": "string" }], "output": "CustomerRef" }
+  ],
+  "traces": ["G-001"]
+}

@@ -1,0 +1,8 @@
+{
+  "module": "Customers",
+  "aggregates": [
+    { "name": "Customer", "members": [], "idRefs": [], "traces": ["G-010"] }
+  ],
+  "denylist": [],
+  "questions": []
+}

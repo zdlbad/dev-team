@@ -1,0 +1,6 @@
+{
+  "name": "InvalidPromotion",
+  "aggregate": "Promotion",
+  "condition": "折扣比例不在 0 到 50 之间",
+  "traces": ["R-005"]
+}

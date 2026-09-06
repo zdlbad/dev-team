@@ -3,27 +3,52 @@
   "module": "Ordering",
   "aggregateNarrative": "订单是客户一次购买请求的全部内容：它拥有若干订单行，从草稿开始，确认后不可再改行，最终完成或取消。",
   "aggregateInvariants": [
-    { "text": "订单总额等于各订单行金额之和", "traces": ["R-003"] }
+    { "text": "订单总额等于各订单行小计之和", "traces": ["R-003"] }
   ],
   "fields": [
     { "name": "customerId", "type": "string" },
     { "name": "status", "type": "string" },
     { "name": "lines", "type": "OrderLine[]" },
-    { "name": "total", "type": "Money" }
+    { "name": "discountPercent", "type": "number" }
   ],
   "invariants": [
     { "text": "确认后的订单不能再增删订单行", "traces": ["R-001"] }
   ],
   "behaviors": [
     {
+      "name": "addLine",
+      "input": [{ "name": "productId", "type": "string" }, { "name": "quantity", "type": "number" }, { "name": "unitPrice", "type": "Money" }],
+      "rules": ["只有草稿状态可以增加订单行"],
+      "raises": [],
+      "throws": ["OrderFailed", "InvalidOrderLine"],
+      "traces": ["G-001", "R-001"]
+    },
+    {
+      "name": "applyDiscount",
+      "input": [{ "name": "percent", "type": "number" }],
+      "rules": ["只有草稿状态可以应用折扣", "折扣不超过原价的一半"],
+      "raises": [],
+      "throws": ["OrderFailed"],
+      "traces": ["G-004", "R-005"]
+    },
+    {
       "name": "confirm",
       "input": [{ "name": "at", "type": "date" }],
-      "rules": ["只有草稿状态可以确认", "至少有一行才能确认"],
+      "rules": ["只有草稿状态可以确认", "没有订单行的订单被拒绝而不是确认"],
       "raises": ["OrderConfirmed", { "event": "OrderRejected", "when": "没有订单行" }],
-      "throws": ["OrderFailed"],
-      "traces": ["G-001", "R-001"]
+      "throws": ["OrderFailed", "CurrencyMismatch", "InvalidMoney"],
+      "traces": ["G-004", "R-001"]
+    },
+    {
+      "name": "total",
+      "input": [],
+      "output": "Money",
+      "rules": ["总额 = 各订单行小计之和，再按折扣比例扣减"],
+      "raises": [],
+      "throws": ["CurrencyMismatch", "InvalidMoney"],
+      "traces": ["R-003"]
     }
   ],
-  "traces": ["G-001"],
+  "traces": ["G-001", "G-004"],
   "questions": []
 }

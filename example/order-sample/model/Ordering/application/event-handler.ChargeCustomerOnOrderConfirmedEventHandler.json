@@ -1,0 +1,13 @@
+{
+  "name": "ChargeCustomerOnOrderConfirmed",
+  "module": "Ordering",
+  "trigger": "OrderConfirmed",
+  "writes": [],
+  "steps": [
+    { "text": "通过支付网关收款", "call": { "kind": "port", "target": "PaymentGateway", "method": "charge" }, "output": "receipt" }
+  ],
+  "raises": [],
+  "throws": [],
+  "traces": ["R-007"],
+  "questions": []
+}

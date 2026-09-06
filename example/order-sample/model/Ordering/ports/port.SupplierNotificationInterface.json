@@ -1,0 +1,10 @@
+{
+  "name": "SupplierNotification",
+  "module": "Ordering",
+  "kind": "external-system",
+  "target": "SupplierPortal",
+  "operations": [
+    { "name": "notify", "input": [{ "name": "orderId", "type": "string" }] }
+  ],
+  "traces": ["R-006"]
+}

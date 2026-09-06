@@ -1,0 +1,19 @@
+{
+  "name": "ConfirmOrder",
+  "module": "Ordering",
+  "actor": "Customer",
+  "input": [{ "name": "orderId", "type": "string" }, { "name": "promotionCode", "type": "string" }],
+  "writes": ["Order"],
+  "steps": [
+    { "text": "读取订单", "call": { "kind": "repository", "target": "OrderRepository", "method": "findById" }, "output": "order" },
+    { "text": "读取促销", "call": { "kind": "repository", "target": "PromotionRepository", "method": "findByCode" }, "output": "promotion" },
+    { "text": "评估定价", "call": { "kind": "service", "target": "Pricing", "method": "evaluate" }, "output": "decision" },
+    { "text": "应用折扣", "when": "decision 为 discounted", "call": { "kind": "behavior", "target": "Order", "method": "applyDiscount" } },
+    { "text": "确认订单", "call": { "kind": "behavior", "target": "Order", "method": "confirm" } },
+    { "text": "保存订单", "call": { "kind": "repository", "target": "OrderRepository", "method": "save" } }
+  ],
+  "raises": ["OrderConfirmed", { "event": "OrderRejected", "when": "没有订单行" }],
+  "throws": ["OrderFailed", "CurrencyMismatch", "InvalidMoney"],
+  "traces": ["G-004"],
+  "questions": []
+}

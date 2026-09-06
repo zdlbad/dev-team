@@ -6,6 +6,7 @@
     "modelName": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$", "description": "模型名：大驼峰，无种类后缀" },
     "qualifiedName": { "type": "string", "pattern": "^([A-Z][A-Za-z0-9]*\\.)?[A-Z][A-Za-z0-9]*$", "description": "可带模块前缀的模型名：Module.Name" },
     "methodName": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*$" },
+    "factoryName": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "description": "静态工厂：全大写蛇形" },
     "fieldName": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*$" },
     "typeRef": { "type": "string", "pattern": "^(string|number|boolean|date|[A-Z][A-Za-z0-9]*(\\.[A-Z][A-Za-z0-9]*)?)(\\[\\])?$", "description": "标量 string|number|boolean|date，或模型名，可加 []" },
     "traceId": { "type": "string", "pattern": "^[GR]-[0-9]{3,}$" },
@@ -30,7 +31,7 @@
     "invariant": {
       "type": "object", "additionalProperties": false,
       "required": ["text", "traces"],
-      "properties": { "text": { "type": "string", "minLength": 1 }, "traces": { "$ref": "#/$defs/traces" } }
+      "properties": { "text": { "type": "string", "minLength": 1 }, "traces": { "$ref": "#/$defs/traces" }, "throws": { "$ref": "#/$defs/throws", "description": "创建时违反该不变量抛出的错误" } }
     },
     "invariants": { "type": "array", "items": { "$ref": "#/$defs/invariant" } },
     "raiseRef": {
@@ -61,9 +62,9 @@
       "type": "object", "additionalProperties": false,
       "required": ["kind", "target", "method"],
       "properties": {
-        "kind": { "enum": ["behavior", "service", "repository", "port", "command"] },
+        "kind": { "enum": ["behavior", "factory", "service", "repository", "port", "command"] },
         "target": { "$ref": "#/$defs/qualifiedName" },
-        "method": { "$ref": "#/$defs/methodName" }
+        "method": { "anyOf": [{ "$ref": "#/$defs/methodName" }, { "$ref": "#/$defs/factoryName" }] }
       }
     },
     "step": {
@@ -94,7 +95,8 @@
         "check": { "type": "string" },
         "verdict": { "enum": ["accepted", "dismissed"] },
         "note": { "type": "string" },
-        "at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+        "at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "on": { "type": "string", "description": "裁决时对象文字的短哈希；文字变了裁决即过期", "pattern": "^[0-9a-f]{8}$" }
       }
     },
     "decisions": { "type": "array", "items": { "$ref": "#/$defs/decision" } },

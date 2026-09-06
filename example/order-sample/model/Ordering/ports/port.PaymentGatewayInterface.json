@@ -6,5 +6,5 @@
   "operations": [
     { "name": "charge", "input": [{ "name": "amount", "type": "Money" }, { "name": "customerId", "type": "string" }], "output": "string" }
   ],
-  "traces": ["G-003"]
+  "traces": ["R-007"]
 }

@@ -1,0 +1,6 @@
+{
+  "name": "InvalidCustomerName",
+  "aggregate": "Customer",
+  "condition": "客户名字为空",
+  "traces": ["R-010"]
+}

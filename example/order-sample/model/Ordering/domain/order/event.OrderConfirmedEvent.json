@@ -1,6 +1,6 @@
 {
   "name": "OrderConfirmed",
   "aggregate": "Order",
-  "payload": [{ "name": "orderId", "type": "string" }, { "name": "total", "type": "Money" }],
-  "traces": ["G-001"]
+  "payload": [{ "name": "orderId", "type": "string" }, { "name": "customerId", "type": "string" }, { "name": "total", "type": "Money" }],
+  "traces": ["G-004"]
 }

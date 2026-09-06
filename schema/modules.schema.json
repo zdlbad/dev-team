@@ -2,23 +2,100 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:dev-team:modules",
   "title": "model/modules.json — 战略：上下文清单",
-  "type": "object", "additionalProperties": false,
-  "required": ["system", "modules", "questions"],
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "system",
+    "modules",
+    "questions"
+  ],
   "properties": {
-    "system": { "type": "string", "minLength": 1 },
+    "system": {
+      "type": "string",
+      "minLength": 1
+    },
     "modules": {
       "type": "array",
       "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["name", "responsibility", "traces"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "responsibility",
+          "traces"
+        ],
         "properties": {
-          "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
-          "responsibility": { "type": "string", "minLength": 1 },
-          "traces": { "$ref": "urn:dev-team:common#/$defs/traces" }
+          "name": {
+            "$ref": "urn:dev-team:common#/$defs/modelName"
+          },
+          "responsibility": {
+            "type": "string",
+            "minLength": 1
+          },
+          "traces": {
+            "$ref": "urn:dev-team:common#/$defs/traces"
+          }
         }
       }
     },
-    "questions": { "$ref": "urn:dev-team:common#/$defs/questions" },
-    "decisions": { "$ref": "urn:dev-team:common#/$defs/decisions" }
+    "questions": {
+      "$ref": "urn:dev-team:common#/$defs/questions"
+    },
+    "decisions": {
+      "$ref": "urn:dev-team:common#/$defs/decisions"
+    },
+    "relations": {
+      "type": "array",
+      "description": "模块之间的关系：谁把什么事实给谁（战略设计的一部分）。缺省时工具从端口与业务全景图推导",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from",
+          "to",
+          "what"
+        ],
+        "properties": {
+          "from": {
+            "$ref": "urn:dev-team:common#/$defs/modelName"
+          },
+          "to": {
+            "$ref": "urn:dev-team:common#/$defs/modelName"
+          },
+          "what": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "description": "模块之上的分组（视角），框架图按它分区",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "modules"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "urn:dev-team:common#/$defs/modelName"
+            },
+            "uniqueItems": true
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    }
   }
 }

@@ -5,9 +5,10 @@
     { "name": "amount", "type": "number" },
     { "name": "currency", "type": "string" }
   ],
-  "invariants": [{ "text": "金额不为负", "traces": ["R-004"] }],
+  "invariants": [{ "text": "金额不为负", "traces": ["R-004"], "throws": ["InvalidMoney"] }],
   "behaviors": [
-    { "name": "add", "input": [{ "name": "other", "type": "Money" }], "output": "Money", "rules": ["币种必须相同"], "raises": [], "throws": ["CurrencyMismatch"], "traces": ["R-004"] }
+    { "name": "add", "input": [{ "name": "other", "type": "Money" }], "output": "Money", "rules": ["币种必须相同"], "raises": [], "throws": ["CurrencyMismatch", "InvalidMoney"], "traces": ["R-004"] },
+    { "name": "times", "input": [{ "name": "factor", "type": "number" }], "output": "Money", "rules": [], "raises": [], "throws": ["InvalidMoney"], "traces": ["R-003"] }
   ],
   "traces": ["R-004"]
 }

@@ -2,44 +2,138 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:dev-team:slice",
   "title": "slices/<id>.json — 切片记录",
-  "type": "object", "additionalProperties": false,
-  "required": ["id", "title", "kind", "codebase", "scope", "traces", "stages", "log"],
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "kind",
+    "codebase",
+    "scope",
+    "traces",
+    "stages",
+    "log"
+  ],
   "properties": {
-    "id": { "type": "string", "pattern": "^s-[0-9]{3,}$" },
-    "title": { "type": "string", "minLength": 1 },
-    "kind": { "enum": ["initial", "increment"] },
-    "codebase": { "type": "string", "minLength": 1, "description": "代码库路径，相对于项目目录" },
+    "id": {
+      "type": "string",
+      "pattern": "^s-[0-9]{3,}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "enum": [
+        "initial",
+        "increment",
+        "story",
+        "implementation"
+      ],
+      "description": "initial / increment：老式按主题的切片；story：建模切片（一条故事，到模型确认为止，不编码）；implementation：实现切片（若干条已确认的故事的模型 → 代码）"
+    },
+    "codebase": {
+      "type": "string",
+      "minLength": 1,
+      "description": "代码库路径，相对于项目目录"
+    },
     "scope": {
-      "type": "object", "additionalProperties": false,
-      "required": ["modules", "aggregates", "useCases"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "modules",
+        "aggregates",
+        "useCases"
+      ],
       "properties": {
-        "modules": { "type": "array", "items": { "$ref": "urn:dev-team:common#/$defs/modelName" }, "uniqueItems": true },
-        "aggregates": { "type": "array", "items": { "$ref": "urn:dev-team:common#/$defs/qualifiedName" }, "uniqueItems": true },
-        "useCases": { "type": "array", "items": { "$ref": "urn:dev-team:common#/$defs/qualifiedName" }, "uniqueItems": true }
+        "modules": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:dev-team:common#/$defs/modelName"
+          },
+          "uniqueItems": true
+        },
+        "aggregates": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:dev-team:common#/$defs/qualifiedName"
+          },
+          "uniqueItems": true
+        },
+        "useCases": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:dev-team:common#/$defs/qualifiedName"
+          },
+          "uniqueItems": true
+        }
       }
     },
-    "traces": { "$ref": "urn:dev-team:common#/$defs/traces" },
+    "traces": {
+      "$ref": "urn:dev-team:common#/$defs/traces"
+    },
     "stages": {
-      "type": "object", "additionalProperties": false,
-      "required": ["model", "code", "validate"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "code",
+        "validate"
+      ],
       "properties": {
         "model": {
-          "type": "object", "additionalProperties": false,
-          "required": ["status", "confirmedAt"],
-          "properties": { "status": { "$ref": "#/$defs/status" }, "confirmedAt": { "$ref": "#/$defs/dateOrNull" } }
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "confirmedAt"
+          ],
+          "properties": {
+            "status": {
+              "$ref": "#/$defs/status"
+            },
+            "confirmedAt": {
+              "$ref": "#/$defs/dateOrNull"
+            }
+          }
         },
         "code": {
-          "type": "object", "additionalProperties": false,
-          "required": ["status", "at"],
-          "properties": { "status": { "$ref": "#/$defs/status" }, "at": { "$ref": "#/$defs/dateOrNull" } }
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "at"
+          ],
+          "properties": {
+            "status": {
+              "$ref": "#/$defs/status"
+            },
+            "at": {
+              "$ref": "#/$defs/dateOrNull"
+            }
+          }
         },
         "validate": {
-          "type": "object", "additionalProperties": false,
-          "required": ["status", "decodedVersion", "reportAt"],
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "decodedVersion",
+            "reportAt"
+          ],
           "properties": {
-            "status": { "$ref": "#/$defs/status" },
-            "decodedVersion": { "type": ["string", "null"] },
-            "reportAt": { "$ref": "#/$defs/dateOrNull" }
+            "status": {
+              "$ref": "#/$defs/status"
+            },
+            "decodedVersion": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reportAt": {
+              "$ref": "#/$defs/dateOrNull"
+            }
           }
         }
       }
@@ -47,18 +141,57 @@
     "log": {
       "type": "array",
       "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["ts", "stage", "text"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ts",
+          "stage",
+          "text"
+        ],
         "properties": {
-          "ts": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}" },
-          "stage": { "enum": ["slice", "model", "code", "validate"] },
-          "text": { "type": "string", "minLength": 1 }
+          "ts": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"
+          },
+          "stage": {
+            "enum": [
+              "slice",
+              "model",
+              "code",
+              "validate"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
+    },
+    "stories": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^s-[0-9]{3,}$"
+      },
+      "uniqueItems": true,
+      "description": "实现切片：它实现哪几条故事（建模切片）的模型"
     }
   },
   "$defs": {
-    "status": { "enum": ["pending", "in-progress", "done"] },
-    "dateOrNull": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}" }
+    "status": {
+      "enum": [
+        "pending",
+        "in-progress",
+        "done"
+      ]
+    },
+    "dateOrNull": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"
+    }
   }
 }

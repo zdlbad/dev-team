@@ -1,0 +1,26 @@
+{
+  "name": "Promotion",
+  "module": "Ordering",
+  "aggregateNarrative": "促销是一条降价规则：有代码、门槛金额与折扣比例，可启用或停用。",
+  "aggregateInvariants": [],
+  "fields": [
+    { "name": "code", "type": "string" },
+    { "name": "threshold", "type": "Money" },
+    { "name": "discountPercent", "type": "number" },
+    { "name": "active", "type": "boolean" }
+  ],
+  "invariants": [{ "text": "折扣比例在 0 到 50 之间", "traces": ["R-005"], "throws": ["InvalidPromotion"] }],
+  "behaviors": [
+    {
+      "name": "appliesTo",
+      "input": [{ "name": "total", "type": "Money" }],
+      "output": "boolean",
+      "rules": ["促销启用且总额达到门槛才适用"],
+      "raises": [],
+      "throws": [],
+      "traces": ["R-005"]
+    }
+  ],
+  "traces": ["R-005"],
+  "questions": []
+}

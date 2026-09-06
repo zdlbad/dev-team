@@ -1,8 +1,8 @@
 {
   "system": "Sample",
   "modules": [
-    { "name": "Ordering", "responsibility": "接收并确认客户的购买请求", "traces": ["G-001"] },
-    { "name": "Customers", "responsibility": "维护客户的身份与额度", "traces": ["G-010"] }
+    { "name": "Ordering", "responsibility": "接收、定价并确认客户的购买请求", "traces": ["G-001", "G-004"] },
+    { "name": "Customers", "responsibility": "维护客户的身份", "traces": ["G-010"] }
   ],
   "questions": []
 }

@@ -1,0 +1,9 @@
+{
+  "name": "OrderRejected",
+  "aggregate": "Order",
+  "payload": [{ "name": "orderId", "type": "string" }, { "name": "reason", "type": "string" }],
+  "traces": ["G-004"],
+  "decisions": [
+    { "target": "model/Ordering/domain/order/event.OrderRejectedEvent.json", "check": "event.no-handler", "verdict": "dismissed", "note": "终止事件：订单被拒绝后没有后续动作", "at": "2026-09-05" }
+  ]
+}
