@@ -200,6 +200,7 @@ if (cmd === 'serve') {
   .walk { background:var(--walk); border-radius:6px; padding:8px 10px; margin-top:8px; font-size:13px; }
   .walk.gap { background:var(--gap); }
   .walk .k { color:var(--muted); }
+  .walk ol { margin:2px 0 4px 0; padding-left:22px; } .walk li { margin:2px 0; }
   .walk code { font-family: ui-monospace, Consolas, monospace; font-size:12px; }
   .review { margin-top:10px; border-top:1px dashed var(--line); padding-top:8px; }
   .review .btns { display:flex; gap:8px; margin-bottom:6px; align-items:center; }
@@ -327,8 +328,10 @@ function render() {
       h += '<div class="walk' + (w.gap ? ' gap' : '') + '">'
       if (w.kind === 'none') h += '<span class="k">模型里没有动作</span>'
       else h += '<span class="k">' + ({command:'命令',query:'查询',event:'事件',time:'时间触发'})[w.kind] + '</span> <code>' + esc(w.name) + '</code>' + (w.aggregate ? ' → <code>' + esc(w.aggregate) + '</code>' : '')
-      if (w.asks?.length) h += '<div><span class="k">先问：</span>' + w.asks.map(esc).join('；') + '</div>'
-      if (w.changes?.length) h += '<div><span class="k">变了：</span>' + w.changes.map(esc).join('；') + '</div>'
+      const lines = (arr) => arr.flatMap(x => String(x).split(/；/).map(s => s.trim()).filter(Boolean))
+      const ol = (arr) => { const L = lines(arr); return L.length === 1 ? ' ' + esc(L[0]) : '<ol>' + L.map(x => '<li>' + esc(x) + '</li>').join('') + '</ol>' }
+      if (w.asks?.length) h += '<div><span class="k">先问：</span>' + ol(w.asks) + '</div>'
+      if (w.changes?.length) h += '<div><span class="k">写入的事实：</span>' + ol(w.changes) + '</div>'
       if (w.emits?.length) h += '<div><span class="k">发出：</span>' + w.emits.map(e => '<code>' + esc(e) + '</code>').join(' ') + '</div>'
       if (w.throws?.length) h += '<div><span class="k">可能拒绝：</span>' + w.throws.map(e => '<code>' + esc(e) + '</code>').join(' ') + '</div>'
       if (w.gap) h += '<div><b>走不通：</b>' + esc(w.gap) + '</div>'

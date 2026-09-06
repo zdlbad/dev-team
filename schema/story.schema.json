@@ -151,7 +151,8 @@
                 "type": "array",
                 "items": {
                   "type": "string"
-                }
+                },
+                "description": "这一步写入的事实，一条一句，按发生顺序"
               },
               "emits": {
                 "type": "array",
@@ -164,7 +165,7 @@
                 "items": {
                   "type": "string"
                 },
-                "description": "通过端口问了谁什么"
+                "description": "通过端口问了谁什么，一条一句"
               },
               "throws": {
                 "type": "array",
