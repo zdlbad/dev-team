@@ -9,6 +9,9 @@
  *                       --story：同时建故事骨架 slices/<id>.story.json（故事切片：范围由故事定，见 tools/story.js）
  *                       --based-on <id>：这条故事从上一版滚出来（骨架带上一版的人物与步骤，讲解在其上加）
  *   node tools/slice.js next <项目目录> <切片id>            算出下一步：谁上场、跑什么
+ *                       故事切片：… → 理解一致 → 业务分析补使用语句 → 人确认 → 模型 → … → 模型确认 → 编码计划（plan.js）→ 人确认计划
+ *                       → 原型按计划写 → plan check → 校验 ② → pre-pr 审查（A/B/D）→ 人看报告 → 人在原型上走故事
+ *                       实现切片：接口角色定契约（contract.js）→ 人确认 → 编码计划 → 人确认 → 编码 → plan check → 校验 ② → pre-pr（C/E/F）→ 合并
  *   node tools/slice.js advance <项目目录> <切片id> <model|code|validate> <pending|in-progress|done> [说明]
  *   node tools/slice.js apply <项目目录> <报告 json> [--slice <切片id>]   把人的裁决写回 decisions[] 与切片 log
  *   node tools/slice.js log <项目目录> <切片id> <model|code|validate|slice> <文字>
@@ -17,6 +20,7 @@
  */
 const fs = require('node:fs')
 const path = require('node:path')
+const { spawnSync } = require('node:child_process')
 const { loadProject } = require('./lib/project')
 const { storyState } = require('./story')
 
@@ -189,6 +193,9 @@ function computeNext(slice) {
     if (ss?.state === 'challenged') return step('路由', `核对人对故事的 ${ss.count} 处质疑：对照语句、裁定与手册逐条回应；人对了就落成裁定并派业务分析或讲解改，人误会了就解释；改完让人重看`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人质疑了故事的业务内容，先解决再认可')
     if (ss?.state === 'notes') return step('路由', `读人在故事上留下的 ${ss.count} 条想法（同意但有话说的也算）：逐条回应；成立的落成裁定或派给业务分析、讲解、模型师`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人的想法要有人看、有人回')
     if (ss?.state === 'unapproved') return step('人', `走故事「${story.title}」：逐条确认语句、同意或质疑每一步，直到业务理解一致`, `node tools/story.js approve ${rel(root)} ${slice.id}`, '认可后故事的编号并入切片 traces')
+    // 故事切片：理解一致之后、建模之前，业务分析按这条故事细补使用语句（同时 / 重复 / 一次几条 / 失败处置 / 可见性），人确认
+    if (ss?.state === 'usage-pending') return step('业务分析', `按故事「${story.title}」细补使用语句：故事走到的每个动作过一遍五问（会不会同时、会不会重复、一次几条与部分失败、失败怎么处置、谁能看见），新增的写进 business/ 为 U-xxx；不确定的写进问题清单问人。产出里列出新增编号，路由据此登记`, `node tools/story.js usage ${rel(root)} ${slice.id} propose <U-xxx,… | --none>`, '模型必须回应系统会被怎么用；这类语句不在原料里，要主动问')
+    if (ss?.state === 'usage-proposed') return step('人', `确认本故事新增的 ${ss.count} 条使用语句（business/ 里的 U-xxx）：这是业务或使用上的决定，比如「两个人同时改，后到的要被挡住」还是「都能改，各存各的」`, `node tools/story.js usage ${rel(root)} ${slice.id} confirm`, '确认后编号并入切片 traces，校验 ① 会要求模型给它们落点')
     if (scopeEmpty) return step('人 + 模型师', '定范围：填切片记录的 scope 与 traces', null, '切片首先是对模型改动范围的定稿')
     const r1 = reportOf(1)
     const s1 = reportState(r1)
@@ -212,16 +219,37 @@ function computeNext(slice) {
     if (s1.state === 'rework') return step('模型师', `按回流清单修改模型（${s1.rework} 项），改完重跑校验 ①`, validateCmd(false), '人的裁决里有要改的项')
     return step('人', '确认模型（门禁）', `node tools/slice.js advance ${rel(root)} ${slice.id} model done`, '方向 ① 干净且人已审完；触及模块划分或聚合清单的变动需单独确认')
   }
-  // 故事切片：模型确认后由原型角色把这条故事变成能按的原型（领域代码 + 内存适配器），再走校验 ②
+  // 阶段二之前：编码计划。从模型算出这次要动哪些文件、按什么顺序；角色补关键逻辑；人确认；写的时候按顺序登记；写完核对。
+  const isStory = slice.kind === 'story' || !!story
+  const coderRole = isStory ? '原型' : '编码'
+  const planP = path.join(root, 'plans', `${slice.id}.json`)
+  const plan = fs.existsSync(planP) ? readJson(planP) : null
+  const planCmd = (sub) => `node tools/plan.js ${sub} ${rel(root)} ${slice.id}${sub === 'build' || sub === 'check' ? ` --code ${rel(codebase)}` : ''}`
   const protoCmd = `node tools/proto.js check ${rel(root)} --code ${rel(codebase)}`
-  if ((slice.kind === 'story' || story) && st.code.status !== 'done') {
-    if (st.code.status === 'pending') return step('原型', `按模型写这条故事的领域代码与应用层（按 03，可解码），内存仓储与直连端口适配器，组合根登记到原型宿主，src/proto/main.ts；给每一步 walk 填 input；最后跑 ${protoCmd}`, `node tools/slice.js advance ${rel(root)} ${slice.id} code in-progress`, '模型已确认，故事要能在原型上按着走')
-    return step('原型', `原型写完：${protoCmd} 过了就标记完成`, `node tools/slice.js advance ${rel(root)} ${slice.id} code done`, '原型进行中')
-  }
-  // 阶段二：编码（实现切片：生产的适配器与外壳）
   if (st.code.status !== 'done') {
-    if (st.code.status === 'pending') return step('编码', '按编码规范从模型实现（先列文件清单再写）', `node tools/slice.js advance ${rel(root)} ${slice.id} code in-progress`, '模型已确认')
-    return step('编码', '完成编码后标记完成（每层可先自跑解码器比对）', `node tools/slice.js advance ${rel(root)} ${slice.id} code done`, '编码进行中')
+    // 实现切片：先有契约（接口角色），再有计划
+    if (slice.kind === 'implementation') {
+      const cc = spawnSync(process.execPath, [path.join(__dirname, 'contract.js'), 'check', root, slice.id, '--json'], { encoding: 'utf8' })
+      let c = null
+      try { c = JSON.parse(cc.stdout) } catch { c = null }
+      if (!c) return step('接口', `定这几条故事的生产契约：范围内每个命令 / 查询一份 HTTP 契约、每个聚合一份表结构、每个模块一份错误 → 状态码，写进 contracts/；字段名沿用模型 input 的名字，类型不确定就问人，没问过标「（没问过）」，人推迟标「（故意推迟）」`, `node tools/contract.js check ${rel(root)} ${slice.id}`, '外壳的接口要先钉死，编码角色才不用猜')
+      if (c.missing.length) return step('接口', `补缺的契约：${c.missing.join('、')}`, `node tools/contract.js check ${rel(root)} ${slice.id}`, '范围内每个命令 / 查询 / 聚合都要有契约')
+      if (c.unasked.length) return step('接口', `契约里还有 ${c.unasked.length} 处「（没问过）」：整理成表问人，答了填进去，人推迟的标「（故意推迟）」`, `node tools/contract.js check ${rel(root)} ${slice.id}`, '不猜类型')
+      if (c.unconfirmed.length) return step('人', `确认 ${c.unconfirmed.length} 份契约（contracts/）：HTTP 字段、表结构、错误 → 状态码——前端和别的系统要对着它写`, `node tools/contract.js confirm ${rel(root)} ${slice.id}`, '这是接口决定，人拍')
+    }
+    if (!plan) return step('路由', '从模型算出编码计划（要动哪些文件、按什么顺序）', planCmd('build'), '编码前先有计划，人能看链路对不对')
+    const unfilled = plan.steps.filter((s) => s.needsKeyLogic && !s.keyLogic).length
+    if (unfilled) return step(coderRole, `给编码计划 plans/${slice.id}.json 的 ${unfilled} 步补关键逻辑（keyLogic）：这一步守哪条规则、哪条不变量在这里生效、分流怎么走${plan.kind === 'shell' ? '、事务边界在哪、锁怎么落、哪个错误映射哪个状态码' : ''}；只填 keyLogic，不动别的字段`, `plans/${slice.id}.md`, '关键逻辑是人要看的东西，机器算不出来')
+    if (!plan.confirmedAt) return step('人', `看编码计划 plans/${slice.id}.md：链路顺序对不对（先建被引用的聚合、再仓储、再用例）、每步的关键逻辑是不是在该在的层（判断在聚合 / 服务，处理器只编排）；对了就确认`, planCmd('confirm'), '计划确认前不开写；编码顺序必须与计划一致')
+    if (st.code.status === 'pending') return step(coderRole, isStory ? `按计划顺序写这条故事的领域代码与应用层（按 03 与 06，可解码），内存仓储与直连端口适配器，组合根登记到原型宿主，src/proto/main.ts，领域与用例测试；每完成一步 plan done；每层自跑解码比对；给每一步 walk 填 input；最后跑 ${protoCmd}` : `按计划顺序写（按 03 与 06${slice.kind === 'implementation' ? '，契约见 contracts/；领域层与应用层一行不动，只补外壳' : ''}）；每完成一步 plan done；每层自跑解码比对`, `node tools/slice.js advance ${rel(root)} ${slice.id} code in-progress`, '计划已确认')
+    return step(coderRole, `写完：${planCmd('check')} 过${isStory ? `、${protoCmd} 过` : ''}，就标记完成`, `node tools/slice.js advance ${rel(root)} ${slice.id} code done`, '编码进行中')
+  }
+  // 编码完成：先核对计划（文件都在、顺序一致），再校验 ②
+  if (plan) {
+    const pc = spawnSync(process.execPath, [path.join(__dirname, 'plan.js'), 'check', root, slice.id, '--code', codebase, '--json'], { encoding: 'utf8' })
+    let pr = null
+    try { pr = JSON.parse(pc.stdout) } catch { pr = null }
+    if (pr && !pr.ok) return step(coderRole, `计划核对未过（${pr.issues.length} 处）：${pr.issues.slice(0, 3).join('；')}${pr.issues.length > 3 ? '……' : ''}`, planCmd('check'), '编码顺序与文件要和计划一致')
   }
   // 阶段三：校验 ②
   const r2 = reportOf(2)
@@ -234,8 +262,20 @@ function computeNext(slice) {
   if (!s2.applied) return step('路由', '把裁决写回', `node tools/slice.js apply ${rel(root)} ${rel(path.join(root, 'reports', 'validate-2.json'))} --slice ${slice.id}`, '裁决已填但未写回')
   if (s2.state === 'rework') return step('人', `按回流清单决定改模型还是改代码（${s2.rework} 项）`, `reports/validate-2.md`, '语义不等价的项由人定改哪一侧')
   if (st.validate.status !== 'done') return step('路由', '标记校验完成', `node tools/slice.js advance ${rel(root)} ${slice.id} validate done`, '方向 ② 干净且已审完')
-  if (slice.kind === 'story' || story) return step('人', `在原型上走一遍故事「${story?.title ?? slice.title}」：node tools/proto.js serve ${rel(root)} --code ${rel(codebase)}，按故事走、随手改输入试规则；对了就合并；不对的在故事页或模型图上留意见`, null, '原型是人对模型的最后一道检查')
-  return step('人', '切片完成，合并', null, '三个阶段都已完成')
+  // 校验 ② 之后：pre-pr 审查（判断）。故事切片查 A / B / D——领域代码刚写完最便宜；实现切片查 C / E / F——外壳
+  const prMode = isStory ? 'proto' : 'shell'
+  const prP = path.join(root, 'reports', `pre-pr-${prMode}.json`)
+  const pr = fs.existsSync(prP) ? readJson(prP) : null
+  const prCmd = (sub) => `node tools/prepr.js ${sub} ${rel(root)} ${slice.id} --mode ${prMode}${sub === 'new' ? ` --code ${rel(codebase)}` : ''}`
+  const angles = isStory ? 'A 用例流程 / B 被删的不变量 / D 测试行为 / S 风格' : 'C 契约完整 / E 防御正确性 / F 并发与状态 / S 风格'
+  if (!pr || pr.slice !== slice.id) return step('pre-pr 审查', `查 ${angles}：先 ${prCmd('new')} 出骨架（列了范围文件与可跳过的 U-xxx），逐角度找候选、每条复核一票，填进 judgments 与 cleanAngles，最后 ${prCmd('check')}`, prCmd('new'), isStory ? '领域代码刚写完，查业务行为最便宜' : '外壳写完，查契约、输入边界、错误处理与并发')
+  if (pr.conclusion === null) return step('pre-pr 审查', `报告还没过形状核对（每个角度要有结论、每条发现要有文件:行与失败场景）`, prCmd('check'), 'pre-pr 报告形状与校验报告一致，审阅工具才能读')
+  const ps = reportState(pr)
+  if (ps.state === 'unreviewed') return step('人', `审阅 pre-pr 报告的 ${ps.unreviewed} 条发现：同意「必须改」的即回流${isStory ? '原型' : '编码'}；「应该改」由你定`, `node tools/review.js ${rel(prP)}`, '发现的是代码问题，不写 decisions，只记切片 log')
+  if (!ps.applied) return step('路由', '把 pre-pr 的审阅结果写回切片 log', `node tools/slice.js apply ${rel(root)} ${rel(prP)} --slice ${slice.id}`, '审阅已填但未写回')
+  if (ps.state === 'rework') return step(coderRole, `按 pre-pr 回流改代码（${ps.rework} 项，见切片 log）；改完重跑 ${planCmd('check')} 与校验 ②，再 ${prCmd('new')} 让审查角色重查`, prCmd('new'), '人同意的「必须改」项要改掉再复查')
+  if (isStory) return step('人', `在原型上走一遍故事「${story?.title ?? slice.title}」：node tools/proto.js serve ${rel(root)} --code ${rel(codebase)}，按故事走、随手改输入试规则、试 U-xxx 说的连点 / 同时 / 成批；对了就合并；不对的在故事页或模型图上留意见`, null, '原型是人对模型的最后一道检查')
+  return step('人', '切片完成，合并', null, '模型、代码、校验、审查都已完成')
 }
 if (cmd === 'next') {
   const slice = loadSlice(args[2] ?? die('用法：slice next <项目目录> <切片id> [--json]'))
@@ -283,7 +323,8 @@ if (cmd === 'apply') {
   const report = readJson(reportPath)
   const sliceId = opt('--slice') ?? report.slice
   const slice = sliceId ? loadSlice(sliceId) : null
-  const stage = report.direction === 1 ? 'model' : 'validate'
+  const stage = report.direction === 1 ? 'model' : report.direction === 3 ? 'pre-pr' : 'validate'
+  const codeReview = report.direction === 3 // pre-pr：发现的是代码问题，不写任何 decisions[]
   const written = new Map() // file → [decision]
   const rework = []
   const skipped = []
@@ -300,8 +341,8 @@ if (cmd === 'apply') {
     const h = j.human?.verdict
     if (!h) continue
     const note = [j.reason, j.human.note].filter(Boolean).join('；')
-    if (needsWork(j)) rework.push(`[${j.check}] ${j.target}：${h === 'agree' ? '校验判为不通过，人同意' : h === 'disagree' ? '校验判为通过，人不同意' : '人判为不通过'}${j.human.note ? `——${j.human.note}` : ''}`)
-    else pushDecision(j, 'dismissed', note || '判断通过，人已同意')
+    if (needsWork(j)) rework.push(codeReview ? `[${j.check}] ${j.target}（${{ high: '必须改', medium: '应该改', low: '说明' }[j.importance] ?? j.importance}）：${j.failure ?? j.reason}${j.human.note ? `——${j.human.note}` : ''}` : `[${j.check}] ${j.target}：${h === 'agree' ? '校验判为不通过，人同意' : h === 'disagree' ? '校验判为通过，人不同意' : '人判为不通过'}${j.human.note ? `——${j.human.note}` : ''}`)
+    else if (!codeReview) pushDecision(j, 'dismissed', note || '判断通过，人已同意')
   }
   for (const c of report.confirms) {
     const h = c.human?.verdict
@@ -334,7 +375,7 @@ if (cmd === 'apply') {
   report.applied = { at: new Date().toISOString(), files: [...written.keys()], rework: rework.length }
   writeJson(reportPath, report)
   if (slice) {
-    appendLog(slice, stage, `裁决写回（方向 ${report.direction}）：${[...written.values()].flat().length} 条进 decisions[]，回流 ${rework.length} 项`)
+    appendLog(slice, stage, codeReview ? `pre-pr 审阅写回（${report.mode}）：发现 ${report.judgments.length} 条，人同意要改 ${rework.length} 项` : `裁决写回（方向 ${report.direction}）：${[...written.values()].flat().length} 条进 decisions[]，回流 ${rework.length} 项`)
     for (const r of rework) appendLog(slice, stage, `回流：${r}`)
     writeJson(slicePath(slice.id), slice)
   }
@@ -346,7 +387,7 @@ if (cmd === 'apply') {
 // ---------- log ----------
 if (cmd === 'log') {
   const [, , id, stage, ...rest] = args
-  if (!id || !['slice', 'model', 'code', 'validate'].includes(stage) || !rest.length) die('用法：slice log <项目目录> <切片id> <slice|model|code|validate> <文字>')
+  if (!id || !['slice', 'model', 'plan', 'contracts', 'code', 'validate', 'pre-pr'].includes(stage) || !rest.length) die('用法：slice log <项目目录> <切片id> <slice|model|plan|contracts|code|validate|pre-pr> <文字>')
   const slice = loadSlice(id)
   appendLog(slice, stage, rest.join(' '))
   writeJson(slicePath(id), slice)

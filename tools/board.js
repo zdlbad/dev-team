@@ -22,6 +22,7 @@ const { business, glossary, model, slices } = loadProject(root)
 // ---------- 数字 ----------
 const goals = business.filter((s) => s.kind === 'goal').length
 const rules = business.filter((s) => s.kind === 'rule').length
+const usages = business.filter((s) => s.kind === 'usage').length
 const kinds = {}
 for (const el of model.elements) kinds[el.kind] = (kinds[el.kind] ?? 0) + 1
 const modules = model.modules?.data.modules?.map((m) => m.name) ?? []
@@ -76,7 +77,7 @@ function reportLine(name, r) {
 }
 const L = []
 L.push(`# 看板 · ${project.name}`, '')
-L.push(`- 业务：目标 ${goals} 条，规则 ${rules} 条；词汇 ${glossary.terms.length} 个`)
+L.push(`- 业务：目标 ${goals} 条，规则 ${rules} 条，使用 ${usages} 条；词汇 ${glossary.terms.length} 个`)
 L.push(`- 模型：模块 ${modules.length}（${modules.join('、') || '无'}）；${Object.entries(kinds).map(([k, v]) => `${k} ${v}`).join('，') || '尚无元素'}；裁决 ${decisions} 条`)
 L.push(reportLine('校验 ①', r1))
 L.push(reportLine('校验 ②', r2))

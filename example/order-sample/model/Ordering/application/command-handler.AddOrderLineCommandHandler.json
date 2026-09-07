@@ -18,6 +18,6 @@
   ],
   "raises": [],
   "throws": ["OrderFailed", "InvalidOrderLine", "InvalidMoney"],
-  "traces": ["G-001"],
+  "traces": ["G-001", "U-003"],
   "questions": []
 }

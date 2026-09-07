@@ -7,6 +7,9 @@
  *   node tools/story.js serve   <项目目录> [切片id] [--port 4871]
  *                                                         本地页面：/ 框架图（模块 × 故事）；/story?slice=<id> 走故事 + 裁定卡；/glossary 名词目录
  *   node tools/story.js apply   <项目目录> <切片id>            把裁定卡写进 raw/项目所有者的裁定.md 与切片 log；算出回流
+ *   node tools/story.js usage   <项目目录> <切片id> propose <U-001,U-002 | --none>
+ *                                                         业务分析补完使用语句后，路由登记本故事新增的编号（--none = 本故事没有新增）
+ *   node tools/story.js usage   <项目目录> <切片id> confirm    人确认后：编号并入故事与切片的 traces，建模可以开始
  *   node tools/story.js state   <项目目录> <切片id> [--json]   故事走到哪（切片驱动也用它）
  *
  * 退出码：0 正常；2 用法或前置错误。
@@ -48,6 +51,8 @@ function storyState(story) {
   const notes = story.steps.filter((s) => s.review?.note && !s.review.handled).length + (story.note && !story.noteHandled ? 1 : 0)
   if (notes) return { state: 'notes', count: notes }
   if (!story.approved) return { state: 'unapproved' }
+  // 理解一致之后、建模之前：使用语句（同时 / 重复 / 一次几条 / 失败处置 / 可见性）按故事细补，人确认
+  if (!story.usage?.confirmedAt) return story.usage?.proposedAt ? { state: 'usage-proposed', count: (story.usage.proposed ?? []).length } : { state: 'usage-pending' }
   const noWalk = story.steps.filter((s) => !s.walk)
   if (noWalk.length) return { state: 'no-walk', count: noWalk.length }
   const hasQuiz = story.steps.some((s) => s.quiz)
@@ -92,6 +97,38 @@ if (cmd === 'approve') {
   writeJson(storyPath(id), story)
   writeJson(slicePath(id), slice)
   console.log(`业务理解一致：${story.steps.length} 步，${ids.size} 条编号已并入 ${id} 的 traces`)
+}
+
+// ---------- usage：使用语句按故事细补 ----------
+if (cmd === 'usage') {
+  const sub = args[3]
+  if (!story.approved) die('故事还没有理解一致（approve），使用语句等理解一致之后再补')
+  if (sub === 'propose') {
+    const none = args.includes('--none')
+    const ids = none ? [] : (args[4] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+    if (!none && !ids.length) die('用法：story usage <项目目录> <切片id> propose <U-001,U-002 | --none>')
+    if (ids.some((x) => !/^U-\d{3,}$/.test(x))) die(`使用语句的编号形如 U-001：${ids.join('、')}`)
+    const { loadBusiness } = require('./lib/project')
+    const known = new Set(loadBusiness(root).filter((s) => s.kind === 'usage').map((s) => s.id))
+    const missing = ids.filter((x) => !known.has(x))
+    if (missing.length) die(`这些编号在 business/ 里不存在（业务分析要先写进语句）：${missing.join('、')}`)
+    story.usage = { proposed: ids, proposedAt: today, confirmedAt: null }
+    story.log = [...(story.log ?? []), `${today} 业务分析按本故事补使用语句：${ids.length ? ids.join('、') : '无新增'}`]
+    writeJson(storyPath(id), story)
+    console.log(`已登记本故事的使用语句 ${ids.length} 条${ids.length ? '：' + ids.join('、') : '（无新增）'}；下一步：人确认（story usage ${id} confirm）`)
+  } else if (sub === 'confirm') {
+    if (!story.usage?.proposedAt) die('业务分析还没登记本故事的使用语句（story usage … propose）')
+    const slice = readJson(slicePath(id))
+    const ids = story.usage.proposed ?? []
+    story.usage.confirmedAt = today
+    story.traces = [...new Set([...story.traces, ...ids])].sort()
+    slice.traces = [...new Set([...slice.traces, ...ids])].sort()
+    slice.log.push({ ts: today, stage: 'slice', text: `人确认了本故事的使用语句：${ids.length ? ids.join('、') : '无新增'}${ids.length ? '；已并入切片 traces，模型必须回应它们' : ''}` })
+    story.log = [...(story.log ?? []), `${today} 人确认使用语句 ${ids.length} 条`]
+    writeJson(storyPath(id), story)
+    writeJson(slicePath(id), slice)
+    console.log(`使用语句已确认 ${ids.length} 条；${ids.length ? '已并入 ' + id + ' 的 traces；' : ''}下一步：模型师建模`)
+  } else die('用法：story usage <项目目录> <切片id> propose <U-001,… | --none> | confirm')
 }
 
 // ---------- apply ----------
@@ -557,7 +594,7 @@ function litSets() { const st = D.stories.find(s => s.slice === sel); const base
 function lineageOrder() { const by = {}; for (const s of D.stories) (by[s.basedOn && D.stories.some(x => x.slice === s.basedOn) ? s.basedOn : ''] = by[s.basedOn && D.stories.some(x => x.slice === s.basedOn) ? s.basedOn : ''] || []).push(s); const out = []; const go = (k, d) => { for (const s of by[k] || []) { out.push({ s, d }); go(s.slice, d + 1) } }; go('', 0); return out }
 function counts(m) {
   const { st, base, lit, litAgg, bLit, bAgg } = litSets()
-  const goals = m.traces.filter(t => D.statements[t]?.kind === 'goal'), rules = m.traces.filter(t => D.statements[t]?.kind === 'rule')
+  const goals = m.traces.filter(t => D.statements[t]?.kind === 'goal'), rules = m.traces.filter(t => D.statements[t]?.kind === 'rule' || D.statements[t]?.kind === 'usage')
   const c = { st, base, g: goals.length, r: rules.length, a: m.aggregates.length, kg: goals.filter(t => lit.has(t)).length, kr: rules.filter(t => lit.has(t)).length, ka: m.aggregates.filter(a => litAgg.has(m.name + '.' + a)).length }
   if (base) { c.ng = goals.filter(t => lit.has(t) && !bLit.has(t)).length; c.nr = rules.filter(t => lit.has(t) && !bLit.has(t)).length; c.na = m.aggregates.filter(a => litAgg.has(m.name + '.' + a) && !bAgg.has(m.name + '.' + a)).length; c.bLit = !!(goals.some(t => bLit.has(t)) || rules.some(t => bLit.has(t)) || m.aggregates.some(a => bAgg.has(m.name + '.' + a))) }
   return c
@@ -762,4 +799,4 @@ load()
   })
 }
 
-if (!['approve', 'serve', 'apply', 'state'].includes(cmd)) die(`未知子命令：${cmd}`)
+if (!['approve', 'serve', 'apply', 'state', 'usage'].includes(cmd)) die(`未知子命令：${cmd}`)

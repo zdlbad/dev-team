@@ -380,6 +380,22 @@
       "type": "string",
       "description": "这一版比上一版多了什么，一句话；有 basedOn 时必填"
     },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposed", "proposedAt", "confirmedAt"],
+      "properties": {
+        "proposed": {
+          "type": ["array", "null"],
+          "items": { "$ref": "urn:dev-team:common#/$defs/traceId" },
+          "uniqueItems": true,
+          "description": "业务分析按这条故事细补的使用语句编号（U-xxx）；空数组 = 本故事没有新增"
+        },
+        "proposedAt": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}" },
+        "confirmedAt": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}", "description": "人确认这些使用语句的日期；确认后编号并入故事与切片的 traces" }
+      },
+      "description": "理解一致之后、建模之前：业务分析按故事细补使用语句，人确认。缺省视为还没做"
+    },
     "gapPicks": {
       "type": "array",
       "items": {

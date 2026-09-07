@@ -1,0 +1,43 @@
+{
+  "kind": "table",
+  "aggregate": "Ordering.Promotion",
+  "orm": "Prisma",
+  "table": "promotions",
+  "columns": [
+    {
+      "field": "id",
+      "column": "id",
+      "type": "varchar(36)"
+    },
+    {
+      "field": "version",
+      "column": "version",
+      "type": "int",
+      "note": "乐观锁"
+    },
+    {
+      "field": "code",
+      "column": "code",
+      "type": "varchar(32)",
+      "note": "唯一"
+    },
+    {
+      "field": "threshold",
+      "column": "threshold_amount + threshold_currency",
+      "type": "decimal(12,2) + varchar(3)",
+      "note": "值对象 Money 摊成两列"
+    },
+    {
+      "field": "discountPercent",
+      "column": "discount_percent",
+      "type": "int"
+    },
+    {
+      "field": "active",
+      "column": "active",
+      "type": "boolean"
+    }
+  ],
+  "confirmedAt": "2026-09-07",
+  "note": ""
+}

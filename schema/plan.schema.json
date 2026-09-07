@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:plan",
+  "title": "plans/<切片id>.json — 编码计划：这次要动哪些代码文件、按什么顺序、每步守什么",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice", "kind", "role", "builtAt", "codebase", "scope", "steps", "confirmedAt", "log"],
+  "properties": {
+    "slice": { "type": "string", "pattern": "^s-[0-9]{3,}$" },
+    "kind": { "enum": ["proto", "shell", "full"], "description": "proto：故事切片的原型（领域 + 应用 + 内存适配器）；shell：实现切片的生产外壳；full：老式切片，两者都有" },
+    "role": { "enum": ["原型", "编码"], "description": "谁按这份计划写" },
+    "builtAt": { "type": "string" },
+    "codebase": { "type": "string", "description": "代码库，相对项目目录" },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modules", "aggregates", "useCases"],
+      "properties": {
+        "modules": { "type": "array", "items": { "$ref": "urn:dev-team:common#/$defs/modelName" } },
+        "aggregates": { "type": "array", "items": { "$ref": "urn:dev-team:common#/$defs/qualifiedName" }, "description": "按依赖顺序（被 idRef 指向的先）" },
+        "useCases": { "type": "array", "items": { "$ref": "urn:dev-team:common#/$defs/qualifiedName" } }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["n", "layer", "action", "file", "target", "what", "traces", "needsKeyLogic", "keyLogic", "doneAt"],
+        "properties": {
+          "n": { "type": "integer", "minimum": 1 },
+          "layer": { "enum": ["building-block", "domain", "repository", "service", "application", "port", "adapter", "shell", "composition", "proto", "test", "input"] },
+          "action": { "enum": ["create", "modify"] },
+          "file": { "type": ["string", "null"], "description": "相对代码库；文件名可含 *；null = 位置由技术选型定，或不是代码库里的文件（故事输入）" },
+          "target": { "type": "string", "minLength": 1, "description": "模型元素的限定名，或 Module.module / proto.main / <切片>.story" },
+          "what": { "type": "string", "minLength": 1, "description": "机器从模型算出来的：这一步建什么、含哪些行为 / 步骤" },
+          "traces": { "$ref": "urn:dev-team:common#/$defs/traces" },
+          "needsKeyLogic": { "type": "boolean", "description": "这一步有业务判断（行为、规则、分流、事务、锁、状态码），角色必须补关键逻辑" },
+          "keyLogic": { "type": ["string", "null"], "description": "角色填：这一步守哪条规则、哪条不变量在这里生效、分流怎么走；外壳步骤写事务边界、锁、错误 → 状态码" },
+          "doneAt": { "type": ["string", "null"], "description": "角色完成这一步的时间（plan done）；核对顺序用" },
+          "contract": { "type": ["string", "null"], "description": "外壳步骤：对应的契约文件（contracts/…）" }
+        }
+      }
+    },
+    "confirmedAt": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}", "description": "人确认计划的日期；确认前不开写" },
+    "log": { "type": "array", "items": { "type": "string" } }
+  }
+}

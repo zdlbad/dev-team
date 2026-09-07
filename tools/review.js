@@ -68,7 +68,7 @@ const IMP = { high:'高', medium:'中', low:'低' }
 const CONF = { high:'高', medium:'中', low:'低' }
 function groupKey(t) {
   const m = (t||'').match(/^model\\/([^/#]+)(?:\\/domain\\/([^/#]+))?/)
-  if (!m) return /^[GR]-/.test(t||'') ? '业务描述' : '其它'
+  if (!m) return /^[GRU]-/.test(t||'') ? '业务描述' : /^(src|tests)[\\/]/.test(t||'') ? (t||'').split(/[\\/]/).slice(0, 3).join('/') : '其它'
   return m[1] + (m[2] ? ' / ' + m[2] : '')
 }
 function rank(x) { return { high:3, medium:2, low:1 }[x] || 0 }

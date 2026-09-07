@@ -1,0 +1,28 @@
+{
+  "kind": "http",
+  "useCase": "Ordering.GetOrder",
+  "method": "GET",
+  "path": "/orders/{orderId}",
+  "request": [
+    {
+      "name": "orderId",
+      "type": "string",
+      "in": "params"
+    }
+  ],
+  "response": {
+    "status": 200,
+    "fields": [
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "lineCount",
+        "type": "number"
+      }
+    ]
+  },
+  "confirmedAt": "2026-09-07",
+  "note": ""
+}

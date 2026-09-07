@@ -9,7 +9,7 @@
     "factoryName": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "description": "静态工厂：全大写蛇形" },
     "fieldName": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*$" },
     "typeRef": { "type": "string", "pattern": "^(string|number|boolean|date|[A-Z][A-Za-z0-9]*(\\.[A-Z][A-Za-z0-9]*)?)(\\[\\])?$", "description": "标量 string|number|boolean|date，或模型名，可加 []" },
-    "traceId": { "type": "string", "pattern": "^[GR]-[0-9]{3,}$" },
+    "traceId": { "type": "string", "pattern": "^[GRU]-[0-9]{3,}$", "description": "业务编号：G 目标、R 规则、U 使用" },
     "traces": { "type": "array", "items": { "$ref": "#/$defs/traceId" }, "uniqueItems": true },
     "field": {
       "type": "object", "additionalProperties": false,

@@ -19,7 +19,7 @@ function readJson(p) {
   return JSON.parse(fs.readFileSync(p, 'utf8'))
 }
 
-/** 业务描述：[G-001] / [R-001] (种类) 文本 */
+/** 业务描述：[G-001] / [R-001] (种类) / [U-001] (使用) 文本 */
 function loadBusiness(root) {
   const dir = path.join(root, 'business')
   const statements = []
@@ -33,9 +33,11 @@ function loadBusiness(root) {
         return
       }
       if (inFence) return // 围栏代码块里的示例不是业务语句
-      const m = line.match(/^\s*-\s*\[([GR]-\d{3,})\]\s*(?:\((不变量|反应|推导)\))?\s*(.*)$/)
+      const m = line.match(/^\s*-\s*\[([GRU]-\d{3,})\]\s*(?:\((不变量|反应|推导|使用)\))?\s*(.*)$/)
       if (!m) return
-      statements.push({ id: m[1], kind: m[1].startsWith('G') ? 'goal' : 'rule', ruleKind: m[2] ?? null, text: m[3].trim(), file: rel, line: i + 1 })
+      // G = 目标（谁能做到什么）；R = 规则（一次操作对不对）；U = 使用（系统会被怎么用：同时、重复、一次几条、失败处置、可见性）
+      const kind = m[1].startsWith('G') ? 'goal' : m[1].startsWith('U') ? 'usage' : 'rule'
+      statements.push({ id: m[1], kind, ruleKind: m[2] ?? (kind === 'usage' ? '使用' : null), text: m[3].trim(), file: rel, line: i + 1 })
     })
   }
   return statements
