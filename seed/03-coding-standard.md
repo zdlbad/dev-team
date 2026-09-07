@@ -269,7 +269,40 @@ export class CreateOrderCommandHandler {
 
 ---
 
-## 八、未定
+## 八、测试
 
-- 测试的位置与命名（`*.spec.ts` 与实现并列？）及领域测试的纯度要求
+测试不进模型、不被解码（解码器跳过 `*.test.ts`，且 `tests/` 不在 `src/` 下）。它是代码对自己的承诺，pre-pr 审查的角度 B、D 读它。
+
+**位置与命名**：`tests/` 镜像 `src/`，文件名 = 源文件名 + `.test.ts`。
+
+```
+tests/<module>/domain/<aggregate>/aggregate-root.OrderAggregateRoot.test.ts
+tests/<module>/domain/<aggregate>/value-object.MoneyValueObject.test.ts
+tests/<module>/domain/service.PricingService.test.ts
+tests/<module>/application/command-handler.ConfirmOrderCommandHandler.test.ts
+tests/<module>/adapters/adapter.PrismaOrderRepository.test.ts
+```
+
+**框架**：`node:test` + `node:assert/strict`，不引第三方。`tsconfig` 的 `include` 含 `tests/**/*.ts`；运行用 `node $DEV_TEAM/tools/test.js <代码库> [<片段>…]`——一次只跑一小批，不整套跑。
+
+**粒度（每条模型语句至少一个用例）**：
+
+| 被测 | 用例 |
+|---|---|
+| 聚合根 / 实体 / 值对象 | 每条 `rule` 一个；每个 `throws` 一个（走到那个错误）；每个 `raises` 一个（事件发出、payload 对）；每条不变量的创建守卫一个 |
+| 领域服务 | 每条 `rule` 一个；每个分流结果一个 |
+| 命令 / 查询 / 事件处理 | 用内存适配器走 `steps` 主线一个；每个 `when` 分流一个；每个 `throws` 一个。断言**结果**（存了什么、发了什么、抛了什么），不断言「某个依赖被调了几次」 |
+| 外壳（实现切片） | 仓储：save / find 往返 + 版本冲突抛 `ConcurrencyError`；HTTP 入口：按契约的字段发请求，核对响应与错误 → 状态码；推迟的项没有实现 |
+
+**用例名带编号**：`it('[R-001] 确认后的订单不能再加订单行', …)`。pre-pr 审查的角度 D 靠它把测试对回模型；没有编号的用例视为在测实现。
+
+**纯度**：领域测试只 `import` 同模块领域层与 `shared/building-block/domain`——不 import 适配器、不起数据库、不 mock。用例测试用内存适配器（原型用的那几个），不 mock 仓储接口。测试替身（记录调用的端口实现）按 06 的 S2 写成小类。
+
+**谁写**：原型角色写领域层与应用层的测试（它写那些代码）；编码角色写外壳的测试。计划（`plan.js`）会把测试文件列成步骤。
+
+---
+
+## 九、未定
+
 - 目标架构是否只支持六边形（v4 曾支持传统 MVC 作为第二目标；本规范只写六边形）
+- HTTP 入口的文件位置与命名：契约管形状，不管文件放哪；等第一个实现切片按技术选型定下来再写进这里

@@ -20,7 +20,7 @@ export class AddOrderLineCommandHandler {
     private events: EventPublisherInterface,
   ) {}
 
-  /** @trace G-001 */
+  /** @trace G-001 U-003 */
   async execute(command: AddOrderLineCommand): Promise<void> {
     // 读取订单
     const order = assertFound(await this.orders.findById(command.orderId), 'Order', command.orderId)

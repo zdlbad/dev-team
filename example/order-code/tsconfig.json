@@ -5,12 +5,22 @@
     "moduleResolution": "nodenext",
     "strict": true,
     "noEmit": true,
-    "types": ["node"],
-    "typeRoots": ["../../node_modules/@types"],
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "../../node_modules/@types"
+    ],
     "baseUrl": ".",
     "paths": {
-      "@shared/building-block/*": ["../../building-block/*"]
+      "@shared/building-block/*": [
+        "../../building-block/*"
+      ]
     }
   },
-  "include": ["src/**/*.ts", "../../building-block/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "../../building-block/**/*.ts"
+  ]
 }

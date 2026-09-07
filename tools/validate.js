@@ -53,6 +53,12 @@ const GUIDES = {
     fail: '条件里比较了命令输入、聚合字段或数值——判断泄漏到了编排层。',
     how: '找到 when 引用的变量，确认它是某个 behavior / service / factory 步骤的 output。',
   },
+  '模型对使用场景的回应是否充分？': {
+    question: '这条使用语句（会不会同时、会不会重复、一次几条、失败怎么处置、谁能看见）在模型里有没有一个明确的回应？',
+    pass: '落点说清了系统怎么应对：同时改 → 版本号或状态守卫；重复触发 → 状态守卫或幂等；一次几条 → 命令的输入形状与部分失败的语义；失败处置 → 事件或错误；可见性 → 查询的范围。',
+    fail: '只是挂了编号，落点的文字没有回应这条语句说的用法；或回应方式与语句矛盾（语句说两人可能同时改，模型没有任何守卫）。',
+    how: '把语句拆成「谁、在什么情况下、做什么」，在落点里找对应的守卫、规则或输入；找不到就是不通过。',
+  },
   '这条不变量是否需要另一个聚合才能成立？': {
     question: '这条聚合级不变量要成立，是否需要同时看另一个聚合的状态？',
     pass: '只涉及本聚合内部的成员（根、实体、值对象）。',
@@ -142,6 +148,7 @@ const scopeIds = sliceRec?.traces?.length ? new Set(sliceRec.traces) : null
 const inScope = (id) => !scopeIds || scopeIds.has(id)
 const goals = business.filter((s) => s.kind === 'goal' && inScope(s.id))
 const rules = business.filter((s) => s.kind === 'rule' && inScope(s.id))
+const usages = business.filter((s) => s.kind === 'usage' && inScope(s.id))
 const els = model.elements.filter((e) => e.kind !== 'invalid')
 const of = (kind) => els.filter((e) => e.kind === kind)
 const roots = of('aggregate-root')
@@ -219,6 +226,21 @@ for (const r of rules) {
   // 一条业务语句一条判断：模型侧列出全部落点及其完整上下文
   const importance = landings.some((l) => ['invariant', 'behavior-guard', 'error', 'behavior'].includes(l.kind)) ? 'high' : 'medium'
   judge(r1, '模型规则是否与业务一致？', r.id, { business: `[${r.id}]${r.ruleKind ? ` (${r.ruleKind})` : ''} ${r.text}`, model: landings.map((l) => l.text).join('\n') }, importance, [...new Set(landings.map((l) => l.el.file))])
+}
+// 覆盖：使用语句 → 落点不限种类（守卫 / 规则 / 用例 / 查询），但必须有；一条一判
+function usageLandings(id) {
+  const out = ruleLandings(id)
+  for (const c of commands) if (c.data.traces.includes(id)) out.push({ kind: 'command', el: c, text: `命令 ${c.data.name}（输入：${(c.data.input ?? []).map((p) => p.name).join(', ') || '无'}）：${c.data.steps.map((s) => s.text).join(' → ')}` })
+  for (const q of queries) if (q.data.traces.includes(id)) out.push({ kind: 'query', el: q, text: `查询 ${q.data.name}（输入：${(q.data.input ?? []).map((p) => p.name).join(', ') || '无'}）` })
+  return out
+}
+for (const u of usages) {
+  const landings = usageLandings(u.id)
+  if (!landings.length) {
+    add(r1, 'error', 'coverage.usage', u.id, `使用语句没有任何落点（模型必须回应系统会被怎么用）：${u.text}`)
+    continue
+  }
+  judge(r1, '模型对使用场景的回应是否充分？', u.id, { business: `[${u.id}] (使用) ${u.text}`, model: landings.map((l) => l.text).join('\n') }, 'high', [...new Set(landings.map((l) => l.el.file))])
 }
 // 追溯反向：每个元素 traces 非空且存在
 function checkTraces(target, traces, level = 'error') {
