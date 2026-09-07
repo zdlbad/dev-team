@@ -3,12 +3,58 @@
   "title": "初次建模：订单的创建与确认",
   "kind": "initial",
   "codebase": "../order-code",
-  "scope": { "modules": ["Ordering"], "aggregates": ["Ordering.Order"], "useCases": ["CreateOrder", "GetOrder"] },
-  "traces": ["G-001", "G-002", "R-001"],
-  "stages": {
-    "model": { "status": "in-progress", "confirmedAt": null },
-    "code": { "status": "pending", "at": null },
-    "validate": { "status": "pending", "decodedVersion": null, "reportAt": null }
+  "scope": {
+    "modules": [
+      "Ordering"
+    ],
+    "aggregates": [
+      "Ordering.Order"
+    ],
+    "useCases": [
+      "CreateOrder",
+      "GetOrder"
+    ]
   },
-  "log": [{ "ts": "2026-09-05", "stage": "slice", "text": "范围定稿" }]
+  "traces": [
+    "G-001",
+    "G-002",
+    "R-001"
+  ],
+  "stages": {
+    "model": {
+      "status": "in-progress",
+      "confirmedAt": null
+    },
+    "code": {
+      "status": "pending",
+      "at": null
+    },
+    "validate": {
+      "status": "pending",
+      "decodedVersion": null,
+      "reportAt": null
+    }
+  },
+  "log": [
+    {
+      "ts": "2026-09-05",
+      "stage": "slice",
+      "text": "范围定稿"
+    },
+    {
+      "ts": "2026-09-07",
+      "stage": "plan",
+      "text": "编码计划生成：31 步（full），关键逻辑待补 7 步"
+    },
+    {
+      "ts": "2026-09-07",
+      "stage": "plan",
+      "text": "编码计划重算：30 步（full），关键逻辑待补 7 步"
+    },
+    {
+      "ts": "2026-09-07",
+      "stage": "plan",
+      "text": "人确认编码计划（30 步）"
+    }
+  ]
 }

@@ -157,9 +157,13 @@
             "enum": [
               "slice",
               "model",
+              "plan",
+              "contracts",
               "code",
-              "validate"
-            ]
+              "validate",
+              "pre-pr"
+            ],
+            "description": "plan：编码计划；contracts：接口契约；pre-pr：代码审查"
           },
           "text": {
             "type": "string",

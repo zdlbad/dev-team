@@ -56,7 +56,7 @@ export class OrderAggregateRoot extends AggregateRoot<string> {
   }
 
   /**
-   * @trace G-004 R-001
+   * @trace G-004 R-001 U-001
    * @rule 只有草稿状态可以确认
    * @rule 没有订单行的订单被拒绝而不是确认
    */

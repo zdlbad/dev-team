@@ -1,16 +1,20 @@
 # agents/ — 角色指令
 
-七份文件对应 [seed/05-roles.md](../seed/05-roles.md) 的七个角色。它们不是自动注册的子 agent，而是**路由启动角色时交给它的指令**：路由（`SKILL.md`）读取对应文件，连同任务上下文一起用 Agent 工具启动一个子 agent。
+九份文件对应 [seed/05-roles.md](../seed/05-roles.md) 的九个角色。它们不是自动注册的子 agent，而是**路由启动角色时交给它的指令**：路由（`SKILL.md`）读取对应文件，连同任务上下文一起用 Agent 工具启动一个子 agent。
 
 | 文件 | 角色 | 阶段 | 唯一写入目标 |
 |---|---|---|---|
-| `business-analyst.md` | 业务分析 | 一 | `business/`、`glossary.json` |
+| `business-analyst.md` | 业务分析 | 一 | `business/`（目标、规则、**使用语句**）、`glossary.json` |
 | `guide.md` | 讲解 | 一（贯穿） | `slices/<id>.story.json`（故事、题目、缺口）、`导读/` |
 | `modeler.md` | 模型师 | 一 | `model/`；故事文件的 `walk` 与 `choices` |
-| `prototyper.md` | 原型 | 一→二 | 代码库里故事的领域层、应用层、内存适配器、组合根、`src/proto/main.ts`；故事的 `walk.input` |
-| `coder.md` | 编码 | 二 | 代码库（生产外壳） |
-| `validator.md` | 模型校验 | 三 | `reports/` |
+| `prototyper.md` | 原型 | 一→二 | 代码库里故事的领域层、应用层、内存适配器、组合根、`src/proto/main.ts`、领域与用例测试；故事的 `walk.input`；计划的 `keyLogic` / `doneAt` |
+| `interface.md` | 接口 | 二（实现切片开头） | `contracts/`（HTTP 入口、表结构、错误 → 状态码） |
+| `coder.md` | 编码 | 二 | 代码库（生产外壳与外壳测试）；计划的 `keyLogic` / `doneAt` |
+| `validator.md` | 模型校验 | 三 | `reports/validate-*` |
+| `pre-pr-reviewer.md` | pre-pr 审查 | 三 | `reports/pre-pr-*` |
 | `reader.md` | 解读 | 零（既有代码入门） | `business/`、`glossary.json`、`model/` 草稿、`model/_解读说明.md` |
+
+路由自己写 `slices/`、`plans/`（`plan build` 出骨架）与模型文件的 `decisions[]`（`slice apply`）。人可以直接编辑任何工件。
 
 讲解是为**人**设的角色：别的角色的产物大小由内容决定，它的产物大小由人一次能消化多少决定。子 agent 不能和人聊天，所以它只出教材（故事、题、卡的措辞），对话仍由路由执行；人的回答由路由记回裁定文件。
 
@@ -41,4 +45,5 @@
 - 只读角色文件点名的那几份 `seed/` 文档，不把全部规范加载进上下文。
 - 只写自己的写入目标；发现别的工件有问题，写进问题清单，不动手。
 - 不造词：模型与代码里的名词必须是 `glossary.json` 的法定名（`name`），别名只出现在注释里。
-- 不猜业务：原料里没有的，问人。
+- 不猜业务：原料里没有的，问人。会不会同时、会不会重复这类**使用**上的事也是业务，问人（业务分析的五问）。
+- 写代码的角色（原型、编码）**先补计划的关键逻辑、等人确认、再按计划顺序写**；每完成一步登记一次。

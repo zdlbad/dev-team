@@ -4,7 +4,7 @@
 
 ```
 raw/                原料，任意格式，人放入
-business/           业务描述：陈述性语句（目标 G-nnn、规则 R-nnn），按主题分文件
+business/           业务描述：陈述性语句（目标 G-nnn、规则 R-nnn、使用 U-nnn），按主题分文件
 glossary.json       词汇表：业务的语言
 model/              设计模型（模型师唯一写入目标）
 model-decoded/      解码出的实际模型（临时，不入库）
