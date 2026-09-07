@@ -135,7 +135,9 @@ const CSS = `
   header { display:flex; align-items:center; gap:14px; padding:8px 16px; border-bottom:1px solid var(--line); background:#fff; position:sticky; top:0; z-index:5; }
   header h1 { font-size:16px; margin:0; } header a { color:var(--blue); } header .sp { flex:1; } header .st { color:var(--muted); font-size:12px; }
   button { font:inherit; font-size:13px; padding:5px 12px; border:1px solid #d0d7de; background:#fff; border-radius:6px; cursor:pointer; } button.primary { background:var(--blue); color:#fff; border-color:var(--blue); } button:disabled { opacity:.5; cursor:default; }
-  main { display:grid; grid-template-columns: 320px minmax(0,1fr) 380px; gap:12px; padding:12px 16px; align-items:start; }
+  main { display:grid; grid-template-columns: 300px minmax(0,1fr) minmax(0,1.25fr); gap:12px; padding:12px 16px; align-items:start; }
+  #state-box { position:sticky; top:52px; max-height:calc(100vh - 64px); overflow:auto; }
+  @media (max-width: 1250px) { main { grid-template-columns: 280px minmax(0,1fr); } #state-box { grid-column: 1 / -1; position:static; max-height:none; } }
   .col { display:flex; flex-direction:column; gap:12px; }
   .box { background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
   .box h2 { font-size:14px; margin:0 0 8px; } .box h3 { font-size:13px; margin:10px 0 4px; color:var(--muted); }
@@ -146,8 +148,18 @@ const CSS = `
   .steps { margin:8px 0 0; padding-left:18px; font-size:12px; color:var(--muted); }
   .res { margin-top:10px; border-radius:8px; padding:8px 10px; font-size:13px; } .res.ok { background:var(--ok); } .res.bad { background:var(--bad); }
   .res pre { margin:6px 0 0; font-size:12px; white-space:pre-wrap; }
-  table { border-collapse:collapse; width:100%; font-size:12px; } th, td { border-bottom:1px solid var(--line); padding:3px 6px; text-align:left; vertical-align:top; } th { color:var(--muted); font-weight:600; }
-  td pre { margin:0; font-size:11px; white-space:pre-wrap; }
+  .rec { border:1px solid var(--line); border-radius:8px; padding:6px 10px; margin:6px 0; font-size:12px; background:#fff; }
+  .rec .rh { display:flex; gap:8px; align-items:baseline; margin-bottom:4px; } .rec .rh b { font-size:13px; } .rec .rh .v { color:var(--muted); font-size:11px; }
+  .rec .chg { border-color:#f2c57c; background:#fffbf0; }
+  .kv { display:grid; grid-template-columns: minmax(110px, 38%) 1fr; column-gap:10px; row-gap:2px; }
+  .kv .k { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .kv .k[title] { cursor:help; }
+  .kv .n { font-variant-numeric: tabular-nums; } .kv .b { color:#166534; } .kv .b.no { color:#9ca3af; }
+  .kv .sub { grid-column:1 / -1; margin:2px 0 4px 12px; padding-left:8px; border-left:2px solid var(--line); }
+  .kv .list { grid-column:1 / -1; margin:2px 0 4px 12px; }
+  .kv .list .item { padding-left:8px; border-left:2px solid var(--line); margin:3px 0; }
+  .kv .list .item .kv { font-size:12px; }
+  .agg-h { display:flex; align-items:baseline; gap:8px; margin:12px 0 2px; } .agg-h h3 { margin:0; }
+  .tags { color:var(--muted); font-size:11px; }
   .ev { font-size:12px; padding:4px 0; border-bottom:1px solid var(--line); } .ev b { color:var(--blue); } .ev .d { color:var(--muted); }
   .story select { width:100%; font:inherit; font-size:13px; padding:5px; margin-bottom:6px; }
   .step { border:1px solid var(--line); border-radius:8px; padding:6px 8px; margin:5px 0; font-size:12px; }
@@ -170,7 +182,7 @@ const PAGE = `<!doctype html>
     <div class="box" id="form-box"><h2 id="op-title">选一个命令</h2><div class="muted" id="op-meta"></div><form id="form"></form><div id="res"></div></div>
   </div>
   <div class="col">
-    <div class="box"><div class="tabs"><button data-t="state" class="on">聚合状态</button><button data-t="events">事件流水</button></div><div id="state"></div><div id="events" hidden></div></div>
+    <div class="box" id="state-box"><div class="tabs"><button data-t="state" class="on">聚合状态</button><button data-t="events">事件流水</button></div><div id="state"></div><div id="events" hidden></div></div>
   </div>
 </main>
 <script>
@@ -206,23 +218,46 @@ function readForm() {
   return out
 }
 function showResult(el, r) {
-  if (r.ok) el.innerHTML = '<div class="res ok">成功' + (r.result !== undefined && r.result !== null ? '<pre>' + esc(JSON.stringify(r.result, null, 1)) + '</pre>' : '') + (r.events.length ? '<div>发出：' + r.events.map(e => '<b>' + esc(e.name) + '</b>').join('、') + '</div>' : '') + '</div>'
+  if (r.ok) el.innerHTML = '<div class="res ok">成功' + (r.result !== undefined && r.result !== null ? '<div style="margin-top:6px">' + kv(unwrap(r.result)) + '</div>' : '') + (r.events.length ? '<div>发出：' + r.events.map(e => '<b>' + esc(e.name) + '</b>').join('、') + '</div>' : '') + '</div>'
   else { const known = D.errors[r.error.name]; el.innerHTML = '<div class="res bad">拒绝：<b>' + esc(r.error.name) + '</b>' + (known ? '<div>' + esc(known.condition) + (known.traces.length ? ' <span class="muted">' + known.traces.join(' ') + '</span>' : '') + '</div>' : '') + '<pre>' + esc(r.error.message) + '</pre></div>' }
 }
 $('#form').addEventListener('submit', async (ev) => { ev.preventDefault(); const op = D.ops.find(o => o.q === sel); let input; try { input = readForm() } catch (e) { $('#res').innerHTML = '<div class="res bad">输入不是合法 JSON</div>'; return } const r = await api('/run', { kind: op.kind, name: op.q, input }); showResult($('#res'), r); refresh() })
 async function refresh() {
   const st = await api('/state'), ev = await api('/events')
-  $('#state').innerHTML = Object.keys(st).length ? Object.entries(st).map(([name, rows]) => '<h3>' + esc(name) + ' <span class="muted">' + rows.length + ' 条</span></h3>' + (rows.length ? table(rows) : '<div class="muted">（空）</div>')).join('') : '<div class="muted">原型没登记仓储</div>'
-  $('#events').innerHTML = ev.length ? ev.slice().reverse().map(e => '<div class="ev"><b>' + esc(e.name) + '</b> <span class="d">' + esc(e.at.slice(11, 19)) + (e.during ? ' · ' + esc(e.during) : '') + '</span><pre style="margin:2px 0 0;font-size:11px;white-space:pre-wrap">' + esc(JSON.stringify(e.payload)) + '</pre></div>').join('') : '<div class="muted">还没有事件</div>'
+  $('#state').innerHTML = Object.keys(st).length ? Object.entries(st).map(([name, rows]) => '<div class="agg-h"><h3>' + esc(name) + '</h3><span class="tags">' + rows.length + ' 条</span></div>' + (rows.length ? records(rows) : '<div class="muted">（空）</div>')).join('') : '<div class="muted">原型没登记仓储</div>'
+  $('#events').innerHTML = ev.length ? ev.slice().reverse().map(e => '<div class="rec"><div class="rh"><b>' + esc(e.name) + '</b><span class="v">' + esc(e.at.slice(11, 19)) + (e.during ? ' · ' + esc(e.during) : '') + '</span></div>' + kv(unwrap(e.payload), ['eventId', 'occurredAt']) + '</div>').join('') : '<div class="muted">还没有事件</div>'
   $('#st').textContent = '状态已刷新 ' + new Date().toLocaleTimeString()
 }
 function unwrap(v) { if (Array.isArray(v)) return v.map(unwrap); if (v && typeof v === 'object') { if (v.props && typeof v.props === 'object' && Object.keys(v).every(k => ['props', 'id', 'version', '_version'].includes(k))) { const o = { ...(v.id !== undefined ? { id: v.id } : {}), ...(v.version !== undefined ? { version: v.version } : {}), ...unwrap(v.props) }; return Object.keys(o).length === 1 && 'value' in o ? o.value : o } const o = {}; for (const k in v) o[k] = unwrap(v[k]); return o } return v }
-function table(rows) {
-  rows = unwrap(rows)
-  const keys = [...new Set(rows.flatMap(r => Object.keys(r || {})))]
-  return '<div style="overflow:auto"><table><tr>' + keys.map(k => '<th>' + esc(k) + '</th>').join('') + '</tr>' + rows.map(r => '<tr>' + keys.map(k => '<td>' + cell(r[k]) + '</td>').join('') + '</tr>').join('') + '</table></div>'
+const ISO = /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z?$/
+const MONEY = /(amount|price|budget|balance|total|allocation|gst|fee|cost)/i
+function fmtv(k, v) {
+  if (v === undefined || v === null || v === '') return '<span class="muted">—</span>'
+  if (typeof v === 'boolean') return '<span class="b' + (v ? '' : ' no') + '">' + (v ? '是' : '否') + '</span>'
+  if (typeof v === 'number') return '<span class="n">' + (MONEY.test(k) && Number.isFinite(v) ? v.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(v)) + '</span>'
+  if (typeof v === 'string') { if (ISO.test(v)) return esc(v.slice(0, 10)) + (v.slice(11, 19) !== '00:00:00' ? ' <span class="muted">' + esc(v.slice(11, 19)) + '</span>' : ''); return esc(v) }
+  return esc(String(v))
 }
-function cell(v) { if (v === undefined || v === null) return '<span class="muted">—</span>'; if (typeof v === 'object') { const s = JSON.stringify(v); return s.length > 60 ? '<details><summary>' + esc(s.slice(0, 40)) + '…</summary><pre>' + esc(JSON.stringify(v, null, 1)) + '</pre></details>' : '<code>' + esc(s) + '</code>' } return esc(v) }
+function kv(obj, skip = []) {
+  if (!obj || typeof obj !== 'object') return fmtv('', obj)
+  let h = '<div class="kv">'
+  for (const [k, v] of Object.entries(obj)) {
+    if (skip.includes(k)) continue
+    if (Array.isArray(v)) {
+      if (!v.length) { h += '<div class="k" title="' + esc(k) + '">' + esc(k) + '</div><div><span class="muted">（空）</span></div>'; continue }
+      if (v.every(x => x === null || typeof x !== 'object')) { h += '<div class="k" title="' + esc(k) + '">' + esc(k) + '</div><div>' + v.map(x => fmtv(k, x)).join('、') + '</div>'; continue }
+      h += '<div class="k" title="' + esc(k) + '">' + esc(k) + '</div><div class="tags">' + v.length + ' 项</div><div class="list">' + v.map((x, i) => '<div class="item">' + kv(x) + '</div>').join('') + '</div>'
+      continue
+    }
+    if (v && typeof v === 'object') { h += '<div class="k" title="' + esc(k) + '">' + esc(k) + '</div><div></div><div class="sub">' + kv(v) + '</div>'; continue }
+    h += '<div class="k" title="' + esc(k) + '">' + esc(k) + '</div><div>' + fmtv(k, v) + '</div>'
+  }
+  return h + '</div>'
+}
+function records(rows) {
+  rows = unwrap(rows)
+  return rows.map(r => { const o = r && typeof r === 'object' ? r : { value: r }; return '<div class="rec"><div class="rh"><b>' + esc(o.id ?? '（无 id）') + '</b>' + (o.version !== undefined ? '<span class="v">v' + esc(o.version) + '</span>' : '') + '</div>' + kv(o, ['id', 'version']) + '</div>' }).join('')
+}
 function resolveName(w) { const kind = w.kind === 'query' ? 'query' : 'command'; const list = kind === 'query' ? M.queries : M.commands; if (list.includes(w.name)) return { kind, q: w.name }; const hit = list.filter(n => n.endsWith('.' + w.name)); return { kind, q: hit.length === 1 ? hit[0] : null } }
 function renderStories() {
   $('#story-sel').innerHTML = '<option value="">（选一条故事）</option>' + D.stories.map(s => '<option value="' + esc(s.slice) + '"' + (s.slice === storyId ? ' selected' : '') + '>' + esc(s.slice) + ' ' + esc(s.title) + '</option>').join('')
