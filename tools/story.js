@@ -105,7 +105,7 @@ if (cmd === 'apply') {
     for (const c of pending) {
       const opt = c.options.find((o) => o.key === c.ruling.choice)
       const changed = c.ruling.choice !== c.current
-      lines.push(`| ${c.question} | **${c.ruling.choice}**：${opt?.text ?? ''}${c.ruling.note ? `（${c.ruling.note}）` : ''}${changed ? ' — 与模型现状不同，回流模型师' : ' — 与模型现状一致'} |`)
+      lines.push(`| ${c.question} | ${c.ruling.previous ? `**改判**（原 ${c.ruling.previous}）→ ` : ''}**${c.ruling.choice}**：${opt?.text ?? ''}${c.ruling.note ? `（${c.ruling.note}）` : ''}${changed ? ' — 与模型现状不同，回流模型师' : ' — 与模型现状一致'} |`)
       if (changed) rework.push(`${c.id} ${c.question}：改为「${c.ruling.choice}」${opt ? '（' + opt.text + '）' : ''}${c.ruling.note ? '——' + c.ruling.note : ''}`)
       c.applied = true
     }
@@ -383,10 +383,14 @@ function render() {
   }))
   m.querySelectorAll('.opt').forEach(el => el.addEventListener('click', () => {
     const c = data.choices[Number(el.dataset.c)]
+    if (c.ruling && c.ruling.choice === el.dataset.k) return
+    if (c.applied && !c.unlocked) { if (!confirm('这张卡的裁定已经写进裁定文件。要改判吗？改判会记成新的一条裁定，原来的保留。')) return; c.unlocked = true }
     const note = c.ruling?.note
+    const prev = c.applied ? c.ruling.choice : c.ruling?.previous
     c.ruling = { choice: el.dataset.k, at: new Date().toISOString() }
     if (note) c.ruling.note = note
-    c.applied = false; render(); dirty()
+    if (prev && prev !== el.dataset.k) c.ruling.previous = prev
+    c.applied = false; delete c.unlocked; render(); dirty()
   }))
   m.querySelectorAll('[data-cnote]').forEach(el => el.addEventListener('input', () => { const c = data.choices[Number(el.dataset.cnote)]; if (!c.ruling) return; c.ruling.note = el.value; if (!c.ruling.note) delete c.ruling.note; dirty() }))
   $('#note').addEventListener('input', () => { data.note = $('#note').value; if (!data.note) delete data.note; dirty() })

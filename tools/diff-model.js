@@ -20,7 +20,8 @@ if (!modelDir || !decodedDir) {
   process.exit(2)
 }
 
-const IGNORE = new Set(['questions', 'decisions', 'denylist', 'writesNote', 'system'])
+const IGNORE = new Set(['questions', 'decisions', 'denylist', 'writesNote', 'system', 'groups', 'relations'])
+const DESIGN_ONLY_IN_STEPS = new Set(['input'])
 const SET_KEYS = new Set(['traces', 'throws', 'writes', 'reads', 'coordinates', 'members', 'raises'])
 const KEYED = { fields: 'name', behaviors: 'name', methods: 'name', operations: 'name', input: 'name', result: 'name', payload: 'name', aggregates: 'name', modules: 'name', invariants: 'text', aggregateInvariants: 'text', idRefs: 'field' }
 
@@ -72,7 +73,8 @@ function diff(a, b, file, p) {
     return
   }
   if (a && b && typeof a === 'object' && typeof b === 'object') {
-    const keys = new Set([...Object.keys(a), ...Object.keys(b)].filter((k) => !IGNORE.has(k)))
+    const inStep = /\/steps\/\d+$/.test(p)
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)].filter((k) => !IGNORE.has(k) && !(inStep && DESIGN_ONLY_IN_STEPS.has(k))))
     for (const k of keys) {
       if (!(k in a)) findings.push({ file, path: `${p}/${k}`, kind: 'extra', model: null, code: b[k] })
       else if (!(k in b)) findings.push({ file, path: `${p}/${k}`, kind: 'missing', model: a[k], code: null })
@@ -85,8 +87,11 @@ function diff(a, b, file, p) {
 
 const modelFiles = walk(modelDir)
 const decodedFiles = walk(decodedDir)
+const codedModules = new Set(decodedFiles.filter((f) => f.endsWith('/module.json')).map((f) => f.split('/')[0]))
+function trimUnbuilt(m) { if (!m || !Array.isArray(m.modules)) return m; return { ...m, modules: m.modules.filter((x) => codedModules.has(x.name)) } }
 for (const f of modelFiles) {
   if (!decodedFiles.includes(f)) findings.push({ file: f, path: '', kind: 'missing-file', model: null, code: null })
+  else if (f === 'modules.json') diff(trimUnbuilt(load(modelDir, f)), load(decodedDir, f), f, '')
   else diff(load(modelDir, f), load(decodedDir, f), f, '')
 }
 for (const f of decodedFiles) if (!modelFiles.includes(f)) findings.push({ file: f, path: '', kind: 'extra-file', model: null, code: null })

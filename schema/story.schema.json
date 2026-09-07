@@ -325,6 +325,10 @@
               },
               "at": {
                 "type": "string"
+              },
+              "previous": {
+                "type": "string",
+                "description": "改判：原来的裁定"
               }
             }
           },

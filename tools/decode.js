@@ -63,7 +63,7 @@ const registry = new Map()
 /** 每个模块：{ name, dir, aggregates: Map<folder, {root, members: []}> } */
 const modules = new Map()
 
-for (const modName of fs.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== 'shared').map((e) => e.name)) {
+for (const modName of fs.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== 'shared' && e.name !== 'proto').map((e) => e.name)) {
   const modDir = path.join(srcDir, modName)
   modules.set(modName, { name: modName, dir: modDir, aggregates: new Map() })
   for (const file of walk(modDir)) {

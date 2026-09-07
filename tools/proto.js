@@ -216,7 +216,9 @@ async function refresh() {
   $('#events').innerHTML = ev.length ? ev.slice().reverse().map(e => '<div class="ev"><b>' + esc(e.name) + '</b> <span class="d">' + esc(e.at.slice(11, 19)) + (e.during ? ' · ' + esc(e.during) : '') + '</span><pre style="margin:2px 0 0;font-size:11px;white-space:pre-wrap">' + esc(JSON.stringify(e.payload)) + '</pre></div>').join('') : '<div class="muted">还没有事件</div>'
   $('#st').textContent = '状态已刷新 ' + new Date().toLocaleTimeString()
 }
+function unwrap(v) { if (Array.isArray(v)) return v.map(unwrap); if (v && typeof v === 'object') { if (v.props && typeof v.props === 'object' && Object.keys(v).every(k => ['props', 'id', 'version', '_version'].includes(k))) { const o = { ...(v.id !== undefined ? { id: v.id } : {}), ...(v.version !== undefined ? { version: v.version } : {}), ...unwrap(v.props) }; return Object.keys(o).length === 1 && 'value' in o ? o.value : o } const o = {}; for (const k in v) o[k] = unwrap(v[k]); return o } return v }
 function table(rows) {
+  rows = unwrap(rows)
   const keys = [...new Set(rows.flatMap(r => Object.keys(r || {})))]
   return '<div style="overflow:auto"><table><tr>' + keys.map(k => '<th>' + esc(k) + '</th>').join('') + '</tr>' + rows.map(r => '<tr>' + keys.map(k => '<td>' + cell(r[k]) + '</td>').join('') + '</tr>').join('') + '</table></div>'
 }
