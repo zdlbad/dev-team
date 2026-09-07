@@ -21,7 +21,8 @@ const root = args[1] && path.resolve(args[1])
 const opt = (k) => { const i = args.indexOf(k); return i > 0 ? args[i + 1] : undefined }
 const codebase = opt('--code') && path.resolve(opt('--code'))
 const port = Number(opt('--port') ?? 4872)
-const protoPort = Number(opt('--proto-port') ?? 4873)
+let protoPort = Number(opt('--proto-port') ?? 4873)
+const protoPortGiven = args.includes('--proto-port')
 if (!['serve', 'check'].includes(cmd) || !root || !fs.existsSync(path.join(root, 'project.json')) || !codebase) {
   console.error('用法：node tools/proto.js <serve|check> <项目目录> --code <代码库> [--port 4872] [--proto-port 4873]')
   process.exit(2)
@@ -38,9 +39,28 @@ function build() {
   return { ok: r.ok, output: r.output }
 }
 let child = null
-function startHost() {
+/** 端口上有没有人在听（不是我们自己起的宿主也算） */
+function portBusy(p) {
   return new Promise((resolve) => {
+    const s = require('node:net').createServer()
+    s.once('error', () => resolve(true))
+    s.once('listening', () => s.close(() => resolve(false)))
+    s.listen(p, '127.0.0.1')
+  })
+}
+async function freePort(from) {
+  for (let p = from; p < from + 40; p++) if (!(await portBusy(p))) return p
+  return from
+}
+function startHost() {
+  return new Promise(async (resolve) => {
     if (child) { child.kill(); child = null }
+    // 别的项目的原型可能占着这个口：占着就换，否则会连到人家的宿主，检查结果张冠李戴
+    if (await portBusy(protoPort)) {
+      const p = await freePort(protoPort + 1)
+      if (protoPortGiven) console.error(`[原型] 端口 ${protoPort} 被占用，改用 ${p}（是别的项目的原型还在跑吗？）`)
+      protoPort = p
+    }
     const c = spawn(process.execPath, [path.join(__dirname, 'lib', 'proto-run.js'), codebaseInBuild, tsconfig], { env: { ...process.env, PROTO_PORT: String(protoPort) }, stdio: ['ignore', 'pipe', 'pipe'] })
     let log = ''
     c.stdout.on('data', (d) => { log += d; process.stdout.write('[原型] ' + d) })
