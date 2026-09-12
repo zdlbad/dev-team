@@ -41,7 +41,8 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 | `run <项目> <切片id>` | 跑切片周期的下一步（见下） | 开发指挥自己执行 |
 | `board <项目> [--md]` | 状态看板 | `node $DEV_TEAM/tools/board.js …` |
 | `scene <项目> set --slice <id> --step "<做什么>" --who <角色> [--phase 业务\|模型\|编码\|校验] [--note …] [--done]` | **现场看板**：把当前这一段、这一步、谁在干什么写上去。派角色前写一次，角色交稿后再写一次（`--done`） | `node $DEV_TEAM/tools/scene.js … set …` |
-| `scene serve <项目> [--port 4873]` | 起现场页面：人开着它就近似实时看得见后台角色的动向（页面每 2 秒自取一次） | `node $DEV_TEAM/tools/scene.js … serve` |
+| `scene handoff <项目> "<一段话>"` | **收工交接**：停在哪、等谁、有什么坑。随 `reports/_现场.json` 进 git，换台机器的人开工先看它 | `node $DEV_TEAM/tools/scene.js … handoff …` |
+| `scene serve <项目> [--port 4873]` | 起现场页面：人开着它就近似实时看得见后台角色的动向（页面每 2 秒自取一次）；换了机器没 pull 会在页顶提醒 | `node $DEV_TEAM/tools/scene.js … serve` |
 | `check <项目>` | 校验模型、切片、计划、契约文件的形状 | `node $DEV_TEAM/tools/check-schema.js …` |
 | `rename-check <改前解码目录> <改后解码目录> <新旧对照.json>` | 改说法切片的门禁：把改名对照套在改前的解码结果（`model-decoded/<版本>/`）上，与改后的逐字节比，一字不差才算只改了说法 | `node $DEV_TEAM/tools/rename-check.js …` |
 | `validate <项目> [--code <代码库>] [--slice <id>]` | 校验：方向 ① 总是执行（每条语句的落点、标签与文件和字母对得上），带 `--code` 时执行方向 ② | `node $DEV_TEAM/tools/validate.js …` |
@@ -148,4 +149,4 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 - **人在对话中拍板的事要落地**：先分流标层（上节）。一层与所有者口述的二层追加到项目的 `raw/项目所有者的裁定.md`（按批次累积，每条标层，写明依据、作废项与已知缺口），并用 `slice log` 记一条；三层不进裁定文件。角色只读它、遵守它，不得自行推翻——有疑虑写进问题清单。校验报告里的裁决走 `slice apply`，那是另一条路径。
 - **三不做**：不替所有者裁一层和二层，问题清单原样汇总不替答；不自己扩段落范围——讲解或模型师报装不下就切段，不加模块；不因为自己看得懂就跳过讲解直接派模型师。
 - **写码前先有计划、计划先给人看**：原型与编码两个角色在 `plan confirm` 之前只补关键逻辑，不写代码；写的时候按计划顺序、每步 `plan done`。这是让人能看见 agent 在做什么的地方，不省。
-- 报告不留历史，可追溯性靠项目自己的 git：每个门禁通过后提醒人提交。
+- 报告不留历史，可追溯性靠项目自己的 git：每个门禁通过后提醒人提交。**收工三件事**：审过的裁决先 `slice apply` 写回；`scene handoff` 写一段交接；提交并推送，提交说明写清停在哪、定了什么、有什么坑（不是「update」）。人在两台机器之间切换，会话带不走，文件和交接就是接力棒；开工先 `git pull`，`slice next` 与看板发现换了机器会提醒。

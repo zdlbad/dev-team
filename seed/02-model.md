@@ -21,7 +21,7 @@
   slices/<id>.json            切片记录；<id>.story.json 故事
   plans/<id>.json             编码计划：这次要动哪些代码文件、按什么顺序、每步守什么（开发指挥算骨架，写码角色补关键逻辑，人确认）
   contracts/                  生产外壳的契约：http.<UseCase> / table.<Aggregate> / errors.<Module>（接口角色写，人确认）
-  reports/                    校验与审查报告，每种只留最新一份（临时物）
+  reports/                    校验与审查报告，每种只留最新一份；json 进 git（审到一半的裁决、现场看板要随人换机器），md / html 重算得出、不进
 ```
 
 代码库在项目目录之外，其路径记在切片记录里。计划与契约的形状见 `schema/plan.schema.json`、`schema/contract.schema.json`。

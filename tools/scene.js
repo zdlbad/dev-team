@@ -6,15 +6,20 @@
  * 用法：
  *   node tools/scene.js <项目> set --slice <id> --step "<这一步在做什么>" --who <角色>
  *                                  [--phase 业务|模型|编码|校验] [--note "<一句话>"] [--done]
+ *   node tools/scene.js <项目> handoff "<一段话>"    收工交接：停在哪、等谁、有什么坑。换台机器的人打开看板先看它
  *   node tools/scene.js <项目> serve [--port 4873]
  *   node tools/scene.js <项目>                      打印一屏（不起页面）
  *
- * 状态存 reports/_现场.json（临时物，开发指挥的写入目标之一，见 seed/01 的写入权表）。
+ * 每次写都记下机器名；换了机器还没 git pull 就动手，看板和 slice next 都会提醒。
+ *
+ * 状态存 reports/_现场.json（随 git 走——reports/ 里的 json 都进 git，md 与 html 是重算出来的才忽略；开发指挥的写入目标之一，见 seed/01 的写入权表）。
  * 角色名用 seed/05 的叫法：人、开发指挥、业务分析、讲解、模型师、原型、接口、编码、模型校验、pre-pr 审查、解读。
  */
 const fs = require('fs')
 const path = require('path')
 const http = require('http')
+const os = require('os')
+const ME = os.hostname()
 
 const ROLES = ['人', '开发指挥', '业务分析', '讲解', '模型师', '原型', '接口', '编码', '模型校验', 'pre-pr 审查', '解读']
 const PHASES = ['业务', '模型', '编码', '校验']
@@ -44,7 +49,7 @@ const readJson = (p, d) => {
 const projectName = readJson(path.join(root, 'project.json'), {}).name ?? path.basename(root)
 
 function readScene() {
-  return readJson(scenePath, { slice: null, phase: null, step: null, who: null, note: null, since: null, updatedAt: null, timeline: [] })
+  return readJson(scenePath, { slice: null, phase: null, step: null, who: null, note: null, since: null, updatedAt: null, machine: null, handoff: null, timeline: [] })
 }
 function writeScene(s) {
   fs.mkdirSync(path.dirname(scenePath), { recursive: true })
@@ -97,8 +102,9 @@ if (cmd === 'set') {
   if (!step) die('--step 是必填的：这一步在做什么，一句人话')
   const now = new Date().toISOString()
   const changed = step !== s.step || who !== s.who || slice !== s.slice
-  const entry = { ts: now, slice, phase, step, who, note, done: args.includes('--done') }
+  const entry = { ts: now, slice, phase, step, who, note, done: args.includes('--done'), machine: ME }
   writeScene({
+    ...s,
     slice,
     phase,
     step,
@@ -106,10 +112,34 @@ if (cmd === 'set') {
     note,
     since: changed ? now : (s.since ?? now),
     updatedAt: now,
+    machine: ME,
     timeline: [...(s.timeline ?? []), entry].slice(-60),
   })
   console.log(`现场已更新：${slice ?? '—'} · ${phase ?? '—'} · ${who ?? '—'} · ${step}`)
   process.exit(0)
+}
+
+// ---------- handoff：收工交接 ----------
+if (cmd === 'handoff') {
+  const text = args.slice(2).filter((a) => !a.startsWith('--')).join(' ').trim()
+  if (!text) die('用法：scene handoff <项目> "<一段话：停在哪、等谁、有什么坑>"')
+  const s = readScene()
+  const now = new Date().toISOString()
+  writeScene({
+    ...s,
+    handoff: { text, at: now, machine: ME, slice: s.slice },
+    updatedAt: now,
+    machine: ME,
+    timeline: [...(s.timeline ?? []), { ts: now, slice: s.slice, phase: s.phase, step: '交接：' + text.slice(0, 60) + (text.length > 60 ? '…' : ''), who: '开发指挥', note: null, done: true, machine: ME }].slice(-60),
+  })
+  console.log(`交接已写（${ME}）：${text.slice(0, 80)}`)
+  process.exit(0)
+}
+
+/** 换了机器还没同步的提醒；没换机器返回 null */
+function machineWarning(s) {
+  if (!s.machine || s.machine === ME) return null
+  return `现场上一次是在「${s.machine}」写的，本机是「${ME}」——先确认 git pull 过了再动手`
 }
 
 // ---------- 一屏文字 ----------
@@ -120,6 +150,9 @@ function textView() {
   const L = []
   L.push(`现场 · ${projectName}`)
   L.push('')
+  const mw = machineWarning(s)
+  if (mw) { L.push('⚠ ' + mw); L.push('') }
+  if (s.handoff) { L.push(`交接（${s.handoff.machine}，${ago(s.handoff.at)}前）　${s.handoff.text}`); L.push('') }
   if (cur) {
     if (cur.line) L.push(`故事线　${cur.line}`)
     L.push(`段落　　${cur.title}（${cur.id}）`)
@@ -149,7 +182,7 @@ if (cmd === 'show') {
 }
 
 // ---------- serve ----------
-if (cmd !== 'serve') die(`不认得的子命令：${cmd}（set | serve | 不带子命令打印一屏）`)
+if (cmd !== 'serve') die(`不认得的子命令：${cmd}（set | handoff | serve | 不带子命令打印一屏）`)
 
 const esc = (x) => String(x ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 
@@ -188,6 +221,8 @@ tr.cur td{background:rgba(125,211,252,.07)}
 .tl .r{color:var(--hi);flex:none;width:88px}
 .dim{color:var(--dim)}
 .empty{color:var(--dim);padding:8px 0}
+.warn{background:rgba(252,211,77,.12);border:1px solid rgba(252,211,77,.5);color:var(--warn);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+.hand{border-left:3px solid var(--hi);padding:4px 12px;margin:4px 0 6px;white-space:pre-wrap}
 </style></head><body><div class="wrap">
 <h1>现场 · ${esc(projectName)}</h1>
 <div class="sub" id="upd">连接中…</div>
@@ -203,6 +238,8 @@ function stageTag(s){if(s==='done')return '<span class="tag done">完</span>';if
 function render(d){
   const s=d.scene,cur=d.slices.find(x=>x.id===s.slice)
   let h=''
+  if(d.warning)h+='<div class="warn">⚠ '+esc(d.warning)+'</div>'
+  if(s.handoff)h+='<div class="card"><div class="row"><div class="k">交接</div><div class="v"><div class="hand">'+esc(s.handoff.text)+'</div><span class="dim">'+esc(s.handoff.machine||'')+' · '+ago(s.handoff.at)+'前'+(s.handoff.slice?' · '+esc(s.handoff.slice):'')+'</span></div></div></div>'
   h+='<div class="card">'
   if(cur){
     if(cur.line)h+='<div class="row"><div class="k">故事线</div><div class="v">'+esc(cur.line)+'</div></div>'
@@ -243,7 +280,8 @@ function listen(port, tries = 12) {
   const srv = http.createServer((req, res) => {
     if (req.url.startsWith('/data')) {
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
-      return res.end(JSON.stringify({ scene: readScene(), slices: slices() }))
+      const sc = readScene()
+      return res.end(JSON.stringify({ scene: sc, slices: slices(), machine: ME, warning: machineWarning(sc) }))
     }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
     res.end(PAGE)

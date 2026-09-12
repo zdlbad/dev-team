@@ -1,3 +1,4 @@
 model-decoded/
-reports/
+reports/*.md
+reports/*.html
 .viewer/
