@@ -97,7 +97,7 @@ function render() {
   const main = $('#main'); main.innerHTML = ''
   const intro = document.createElement('div'); intro.className='intro'
   intro.innerHTML = '<b>怎么用：</b>每条都先显示校验角色的判断和理由，你只需要<b>同意</b>或<b>不同意</b>；不确定时展开「怎么判断」。'
-    + '顺序是重要度从高到低、校验角色信心从低到高——最值得你看的排在最前。做完点右上角保存。'
+    + '顺序是重要度从高到低、校验角色信心从低到高——最值得你看的排在最前。每次改动都会自动保存（右上角显示时间），保存按钮随时可以手动按。'
   main.appendChild(intro)
   section(main, '需人确认', data.confirms, (it, i) => {
     const opts = (it.options||[]).map((o, k) => '<option value="'+(k+1)+'">'+ (k+1) + '. ' + esc(o) + '</option>').join('')
@@ -119,7 +119,7 @@ function render() {
     const it = data[el.dataset.k][el.dataset.i]
     const v = it.human?.[el.dataset.f]
     if (v !== undefined && v !== null) el.value = v
-    el.addEventListener('input', () => { it.human = it.human || {}; it.human[el.dataset.f] = el.value; it.human.at = new Date().toISOString().slice(0,10); el.closest('.item').classList.toggle('done', !!it.human.verdict) })
+    el.addEventListener('input', () => { it.human = it.human || {}; it.human[el.dataset.f] = el.value; it.human.at = new Date().toISOString().slice(0,10); el.closest('.item').classList.toggle('done', !!it.human.verdict); scheduleSave() })
     if (it.human?.verdict) el.closest('.item').classList.add('done')
   }
 }
@@ -141,10 +141,17 @@ function section(main, title, items, controls, withGuide) {
   }
 }
 async function load() { data = await (await fetch('/data')).json(); render() }
-$('#save').addEventListener('click', async () => {
-  const r = await fetch('/save', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(data) })
-  $('#status').textContent = r.ok ? '已保存 ' + new Date().toLocaleTimeString() : '保存失败'
-})
+async function save(auto) {
+  $('#status').textContent = '保存中…'
+  try {
+    const r = await fetch('/save', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(data) })
+    $('#status').textContent = r.ok ? (auto ? '已自动保存 ' : '已保存 ') + new Date().toLocaleTimeString() : '保存失败——再点一次保存'
+  } catch { $('#status').textContent = '保存失败——服务没在跑？' }
+}
+// 每次改动 800ms 后自动写盘；保存按钮留着，随时可以手动按
+let saveTimer = null
+function scheduleSave() { clearTimeout(saveTimer); $('#status').textContent = '有改动，稍后自动保存'; saveTimer = setTimeout(() => save(true), 800) }
+$('#save').addEventListener('click', () => { clearTimeout(saveTimer); save(false) })
 load()
 </script></body></html>`
 

@@ -66,6 +66,7 @@ const WHO = {
   编码: { side: '等团队', hint: '' },
   模型校验: { side: '等团队', hint: '' },
   'pre-pr 审查': { side: '等团队', hint: '' },
+  '文职': { side: '等团队', hint: '' },
   解读: { side: '等团队', hint: '' },
 }
 function sideOf(role) {
@@ -146,7 +147,7 @@ L.push(reportLine('校验 ②', r2))
 
 // ---------- 现场（scene set 写的，不是算出来的）----------
 // 状态看板算的是「走到哪」，现场写的是「此刻谁在干什么」；两块板子人只开一页，所以现场也摆在这里。
-const scenePath = path.join(root, 'reports', '_现场.json')
+const scenePath = path.join(root, 'reports', '_scene.json')
 const scene = fs.existsSync(scenePath) ? JSON.parse(fs.readFileSync(scenePath, 'utf8')) : null
 const hhmm = (iso) => {
   const d = new Date(iso)

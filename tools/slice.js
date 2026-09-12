@@ -222,7 +222,7 @@ function computeNext(slice) {
   if (st.model.status !== 'done' && slice.kind !== 'refactor') {
     const { business, glossary } = loadProject(root)
     const inScope = slice.traces.length ? business.filter((s) => slice.traces.includes(s.id)) : business
-    if (!business.length && !fs.existsSync(path.join(root, 'business', '00-全景.md'))) return step('业务分析', '粗读 raw/：写全景（business/00-全景.md）、模块候选、词汇表种子；不写编号语句，语句按段落点亮', null, '本项目还没粗读过')
+    if (!business.length && !fs.existsSync(path.join(root, 'business', '00-overview.md'))) return step('业务分析', '粗读 raw/：写全景（business/00-overview.md）、模块候选、词汇表种子；不写编号语句，语句按段落点亮', null, '本项目还没粗读过')
     if (!glossary.terms.length) return step('业务分析', '补词汇表：业务描述里的名词逐个收录', null, '模型只能使用词汇表的法定名')
     if (slice.traces.length && !inScope.length) return step('业务分析', `切片追溯的编号在业务描述里不存在：${slice.traces.join('、')}`, null, '切片的 traces 必须指向已有的业务语句')
     // 故事切片：先有故事，人在业务理解上与团队一致后才有范围
@@ -240,9 +240,9 @@ function computeNext(slice) {
     const r1 = reportOf(1, slice.id)
     const s1 = reportState(r1)
     // 人在模型图上留的意见：先有人看、有人回，再往下走
-    const mnP = path.join(root, 'reports', '_模型意见.json')
+    const mnP = path.join(root, 'reports', '_model-notes.json')
     const mnOpen = fs.existsSync(mnP) ? Object.entries(readJson(mnP)).flatMap(([f, ns]) => ns.filter((n) => !n.handled).map((n) => ({ f, ...n }))) : []
-    if (mnOpen.length) return step('路由', `读人对模型的 ${mnOpen.length} 条意见（reports/_模型意见.json）：逐条回应；要改的派模型师，改完把 handled 置真`, null, '人在模型图上留了意见，先回应再推进')
+    if (mnOpen.length) return step('路由', `读人对模型的 ${mnOpen.length} 条意见（reports/_model-notes.json）：逐条回应；要改的派模型师，改完把 handled 置真`, null, '人在模型图上留了意见，先回应再推进')
     if (st.model.status === 'pending') return step('模型师', story ? (story.basedOn ? `只建这一版新增那段所需的最少模型（上一版 ${story.basedOn} 的模型已在）；给每一步填 walk——老步骤也要重走，保证老路没被新东西弄断；做过的选择列进 choices` : '按故事建走通它所需的最少模型；写完给每一步填 walk，把做过的选择列进 choices') : '在范围内建模 / 改模', `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '范围已定，模型阶段尚未开始')
     // in-progress：看方向 ① 报告走到哪
     if (s1.state === 'none' || (r1.slice && r1.slice !== slice.id)) return step('模型校验', '跑校验 ①（机械检查 + 生成判断清单）', validateCmd(false), '模型阶段进行中，还没有本切片的方向 ① 报告')
@@ -267,7 +267,7 @@ function computeNext(slice) {
       if (st.code.status === 'pending') return step('编码', '按这条切片的范围把代码里的说法改齐：一个字的业务行为都不许变，测试的断言值一个都不许改。改完先跑测试，再把代码解回来跟模型比', `node tools/slice.js advance ${rel(root)} ${slice.id} code in-progress`, '只改说法，不改行为')
       return step('人', '代码改齐、测试全绿（门禁）', `node tools/slice.js advance ${rel(root)} ${slice.id} code done`, '改完才比对')
     }
-    if (st.validate.status !== 'done') return step('模型校验', '证明只有说法变了：改前的解码结果在 model-decoded/<改前版本>/（上一次校验 ② 留下的；没有就先 git 切回改前跑一次 validate --code），改后再跑一次 validate --code 得到新版本；然后把改名对照套在改前那份上与改后逐字节比，必须一字不差。不要求跟模型 0 差异——模型常跑在代码前面，那跟改名无关', `node tools/rename-check.js ${rel(path.join(root, 'model-decoded', '<改前版本>'))} ${rel(path.join(root, 'model-decoded', '<改后版本>'))} <新旧对照.json>`, '代码已改齐')
+    if (st.validate.status !== 'done') return step('模型校验', '证明只有说法变了：改前的解码结果在 model-decoded/<改前版本>/（上一次校验 ② 留下的；没有就先 git 切回改前跑一次 validate --code），改后再跑一次 validate --code 得到新版本；然后把改名对照套在改前那份上与改后逐字节比，必须一字不差。不要求跟模型 0 差异——模型常跑在代码前面，那跟改名无关', `node tools/rename-check.js ${rel(path.join(root, 'model-decoded', '<改前版本>'))} ${rel(path.join(root, 'model-decoded', '<改后版本>'))} <rename-map.json>`, '代码已改齐')
     return step('人', '合并（门禁）', null, '套上改名逐字节比过、一字不差，且测试照旧全绿：行为没变，说法改齐了')
   }
   const isStory = slice.kind === 'story' || !!story
@@ -331,7 +331,7 @@ if (cmd === 'next') {
   const slice = loadSlice(args[2] ?? die('用法：slice next <项目目录> <切片id> [--json]'))
   const n = computeNext(slice)
   // 换了机器还没 git pull 就动手，先提醒一句（现场看板记着上一次是哪台机器写的）
-  const sceneP = path.join(root, 'reports', '_现场.json')
+  const sceneP = path.join(root, 'reports', '_scene.json')
   if (!args.includes('--json') && fs.existsSync(sceneP)) {
     try {
       const sc = JSON.parse(fs.readFileSync(sceneP, 'utf8'))

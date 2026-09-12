@@ -39,7 +39,7 @@ const unrename = (() => {
 })()
 if (!root || !fs.existsSync(path.join(root, 'model'))) {
   console.error('用法：node tools/validate.js <项目目录> [--code <代码库目录>] [--slice <切片id>]')
-  console.error('　　　　重新定基：node tools/validate.js <项目目录> --重新定基 <新旧对照.json> --说明 "第几批只改了名字、换的是哪几个说法"')
+  console.error('　　　　重新定基：node tools/validate.js <项目目录> --重新定基 <rename-map.json> --说明 "第几批只改了名字、换的是哪几个说法"')
   process.exit(2)
 }
 const devTeam = path.resolve(__dirname, '..')
@@ -50,8 +50,8 @@ const GUIDES = {
   '模型规则是否与业务一致？': {
     question: '模型里这句话（不变量 / 行为规则 / 错误条件）是否完整、准确地表达了业务语句的意思？',
     pass: '意思一致。粒度可以不同：业务一句话可以拆到多个落点，每个落点只覆盖一部分也算通过，只要合起来不漏。',
-    fail: '模型说得比业务少（漏了条件或例外）、说得比业务多（加了业务没说的限制）、或方向相反。',
-    how: '对照编号把业务语句拆成条件逐个核对：主语、条件、结果各对应到模型里的哪个词。',
+    fail: '模型说得比业务少（漏了条件或例外）、说得比业务多（加了业务没说的限制）、或方向相反。落点本身站不住也不通过：一条不变量只是叙述、聚合自己核对不了、没有字段或守卫去查——那是为了给编号凑落点写的，修法是删掉、挪到端口或用例。',
+    how: '先问落点站不站得住：不变量是聚合随时能核对的一句话吗？错误有没有条件？站得住再对照编号把业务语句拆成条件逐个核对：主语、条件、结果各对应到模型里的哪个词。',
   },
   '用例是否按步骤完成了业务目标？': {
     question: '这个命令 / 查询的步骤走完，业务目标是否真的达成？',
@@ -194,6 +194,12 @@ const byId = new Map(business.map((s) => [s.id, s]))
 const sliceRec = sliceId ? (project.slices ?? []).map((s) => s.data).find((s) => s.id === sliceId) : null
 const scopeIds = sliceRec?.traces?.length ? new Set(sliceRec.traces) : null
 const inScope = (id) => !scopeIds || scopeIds.has(id)
+// 聚合粗版（module.json 的 aggregates / members / idRefs）是战略设计时人确认的路标，段落建到哪个聚合再细化哪个（seed/01）。
+// 带 --slice 时，切片 scope 之外还没建的聚合、成员、引用与范围外模块的空追溯不算错，记进 report.deferred 给人看个数。
+const scopeAggs = sliceRec?.scope?.aggregates?.length ? new Set(sliceRec.scope.aggregates) : null
+const scopeMods = sliceRec?.scope?.modules?.length ? new Set(sliceRec.scope.modules) : null
+const qualify = (name, mod) => (name.includes('.') ? name : `${mod}.${name}`)
+const defer = (kind, target, text) => { (r1.deferred ??= []).push({ kind, target, text }) }
 const goals = business.filter((s) => s.kind === 'goal' && inScope(s.id))
 const rules = business.filter((s) => s.kind === 'rule' && inScope(s.id))
 const usages = business.filter((s) => s.kind === 'usage' && inScope(s.id))
@@ -249,7 +255,7 @@ for (const s of business) {
   if (s.fileLayer && !s.labelLayer) add(r1, 'error', 'label.missing-layer', s.id, `${s.file} 是分层文件，每条语句都要标层：(${s.fileLayer}-种类)`)
   if (!s.fileLayer && !s.labelLayer) unlayered++
 }
-if (unlayered) add(r1, 'warning', 'label.unlayered', 'business/', `${unlayered} 条语句还没分层（老布局；按段落点亮时补标签、搬进 business/<Module>/业务抽象.md 或 业务落地.md）`)
+if (unlayered) add(r1, 'warning', 'label.unlayered', 'business/', `${unlayered} 条语句还没分层（老布局；按段落点亮时补标签、搬进 business/<Module>/abstraction.md 或 practice.md）`)
 
 // 覆盖：能力 → 命令/查询
 for (const g of goals) {
@@ -297,10 +303,12 @@ function ruleLandings(id) {
   for (const s of services) for (const op of s.data.operations) if (op.traces.includes(id)) out.push({ kind: 'service', el: s, text: `领域服务 ${s.data.name}.${sig(op.name, op.input, op.output)}　${rulesText(op.rules, id)}${throwsText(op.throws)}` })
   for (const h of handlers) if (h.data.traces.includes(id)) out.push({ kind: 'event-handler', el: h, text: `事件处理 ${h.data.name}（触发：${h.data.trigger}）：${h.data.steps.map((s) => s.text).join(' → ')}` })
   for (const e of errors) if (e.data.traces.includes(id)) out.push({ kind: 'error', el: e, text: `错误 ${e.data.name}：${e.data.condition ? pickText(e.data.condition, id, '；') : '（无条件说明）'}` })
+  // 端口也是落点：描述我方系统之外的业务流程（政府门户上收到转介）的事实落在边界上，不落聚合（seed/02；验收项目第六十八批）
+  for (const p of ports) if ((p.data.traces ?? []).includes(id)) out.push({ kind: 'port', el: p, text: `端口 ${p.data.name}（${p.data.kind === 'external-system' ? '外部系统' : '模块'} ${p.data.target}）：${(p.data.operations ?? []).map((op) => `${op.name}${op.note ? '——' + op.note : ''}`).join('；')}` })
   return out
 }
 // 种类 → 该落在哪种元素上（只是提醒，报警告）。消息里用文件里写的那个词（rawKind），旧标签的语句指纹才对得上以前的裁决：事实落字段或结构性的不变量；约束落不变量、守卫、错误；公式落计算；触发落事件处理
-const EXPECTED = { 事实: ['field', 'invariant', 'behavior'], 约束: ['invariant', 'behavior-guard', 'error', 'field'], 公式: ['behavior', 'behavior-guard', 'service', 'field'], 触发: ['event-handler'], 流程: ['behavior-guard', 'invariant', 'error', 'command'], 情形: ['behavior', 'behavior-guard', 'invariant', 'error', 'field', 'command'] }
+const EXPECTED = { 事实: ['field', 'invariant', 'behavior', 'port'], 约束: ['invariant', 'behavior-guard', 'error', 'field'], 公式: ['behavior', 'behavior-guard', 'service', 'field'], 触发: ['event-handler', 'port'], 流程: ['behavior-guard', 'invariant', 'error', 'command', 'port'], 情形: ['behavior', 'behavior-guard', 'invariant', 'error', 'field', 'command'] }
 for (const r of rules) {
   const landings = ruleLandings(r.id)
   if (!landings.length) {
@@ -337,7 +345,7 @@ function checkTraces(target, traces, level = 'error') {
 for (const el of [...domainObjects, ...events, ...errors, ...ports, ...commands, ...queries, ...handlers]) checkTraces(el.file, el.data.traces)
 for (const el of domainObjects) for (const b of el.data.behaviors) checkTraces(`${el.file}#behaviors.${b.name}`, b.traces)
 for (const s of services) for (const op of s.data.operations) checkTraces(`${s.file}#operations.${op.name}`, op.traces)
-for (const m of model.modules?.data.modules ?? []) checkTraces(`${model.modules.file}#${m.name}`, m.traces, 'warning')
+for (const m of model.modules?.data.modules ?? []) { if (scopeMods && !scopeMods.has(m.name) && !(m.traces ?? []).length) defer('traces.empty', `${model.modules.file}#${m.name}`, `模块 ${m.name} 本段外未建，追溯待填`); else checkTraces(`${model.modules.file}#${m.name}`, m.traces, 'warning') }
 for (const g of goals) {
   const ucs = [...commands, ...queries].filter((x) => x.data.traces.includes(g.id))
   if (!ucs.length) continue
@@ -494,13 +502,14 @@ for (const mf of model.moduleFiles) {
   for (const a of mf.data.aggregates) {
     const r = modRoots.find((x) => x.data.name === a.name)
     if (!r) {
-      add(r1, 'error', 'module.aggregates', mf.file, `聚合清单中的 ${a.name} 没有 aggregate-root 文件`)
+      if (scopeAggs && !scopeAggs.has(`${mf.module}.${a.name}`)) defer('module.aggregates', mf.file, `粗版聚合 ${a.name} 本段外未建`)
+      else add(r1, 'error', 'module.aggregates', mf.file, `聚合清单中的 ${a.name} 没有 aggregate-root 文件`)
       continue
     }
     const members = new Set([...entities, ...vos].filter((m) => m.module === mf.module && m.aggregateFolder === r.aggregateFolder).map((m) => m.data.name))
-    for (const m of a.members) if (!members.has(m)) add(r1, 'error', 'module.members', `${mf.file}#${a.name}`, `members 中的 ${m} 没有实体 / 值对象文件`)
+    for (const m of a.members) if (!members.has(m)) { if (scopeAggs) defer('module.members', `${mf.file}#${a.name}`, `粗版成员 ${m} 本段外未建`); else add(r1, 'error', 'module.members', `${mf.file}#${a.name}`, `members 中的 ${m} 没有实体 / 值对象文件`) }
     for (const m of members) if (!a.members.includes(m)) add(r1, 'error', 'module.members', `${mf.file}#${a.name}`, `members 缺少 ${m}`)
-    for (const ref of a.idRefs) if (!find(['aggregate-root'], ref.to, mf.module)) add(r1, 'error', 'module.idRefs', `${mf.file}#${a.name}`, `idRef 指向不存在的聚合：${ref.to}`)
+    for (const ref of a.idRefs) if (!find(['aggregate-root'], ref.to, mf.module)) { if (scopeAggs && !scopeAggs.has(qualify(ref.to, mf.module))) defer('module.idRefs', `${mf.file}#${a.name}`, `idRef 指向的粗版聚合 ${ref.to} 本段外未建`); else add(r1, 'error', 'module.idRefs', `${mf.file}#${a.name}`, `idRef 指向不存在的聚合：${ref.to}`) }
   }
   if (!model.modules?.data.modules.some((m) => m.name === mf.module)) add(r1, 'error', 'modules.list', mf.file, `modules.json 未列出模块 ${mf.module}`)
 }
@@ -634,7 +643,7 @@ function finish(report, name) {
   fs.writeFileSync(path.join(dir, `${name}.md`), renderMd(report))
   const j = report.judgments.length
   const blank = report.judgments.filter((x) => !x.verdict).length
-  console.log(`方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 需人确认 ${report.confirms.length} · 待判断 ${j}${kept ? `（沿用上一份已填的 ${kept} 条，还要填 ${blank} 条）` : ''} · 已裁决 ${report.decided.length} → ${report.conclusion === 'clean' ? '干净' : '不干净'}（${path.relative(process.cwd(), path.join(dir, name + '.md'))}）`)
+  console.log(`方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 需人确认 ${report.confirms.length} · 待判断 ${j}${kept ? `（沿用上一份已填的 ${kept} 条，还要填 ${blank} 条）` : ''} · 已裁决 ${report.decided.length}${report.deferred?.length ? ` · 本段外未建 ${report.deferred.length} 项（粗版，--slice 不计）` : ''} → ${report.conclusion === 'clean' ? '干净' : '不干净'}（${path.relative(process.cwd(), path.join(dir, name + '.md'))}）`)
   if (report.conclusion !== 'clean') process.exitCode = 1
 }
 function rank(x) {

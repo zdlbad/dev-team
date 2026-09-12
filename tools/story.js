@@ -6,7 +6,7 @@
  *   node tools/story.js approve <项目目录> <切片id>            人与团队对故事的业务理解一致：写 approved，把故事的编号顺带并入切片 traces
  *   node tools/story.js serve   <项目目录> [切片id] [--port 4871]
  *                                                         本地页面：/ 框架图（模块 × 故事）；/story?slice=<id> 走故事 + 裁定卡；/glossary 名词目录
- *   node tools/story.js apply   <项目目录> <切片id>            把裁定卡写进 raw/项目所有者的裁定.md 与切片 log；算出回流
+ *   node tools/story.js apply   <项目目录> <切片id>            把裁定卡写进 raw/rulings.md 与切片 log；算出回流
  *   node tools/story.js usage   <项目目录> <切片id> propose <R-001,R-002 | --none>
  *                                                         业务分析按五问补完语句后，开发指挥登记本故事新增的编号（--none = 本故事没有新增）
  *   node tools/story.js usage   <项目目录> <切片id> confirm    人确认后：编号并入故事与切片的 traces，建模可以开始
@@ -138,7 +138,7 @@ if (cmd === 'usage') {
 // ---------- apply ----------
 if (cmd === 'apply') {
   const slice = readJson(slicePath(id))
-  const rulingsFile = path.join(root, 'raw', '项目所有者的裁定.md')
+  const rulingsFile = path.join(root, 'raw', 'rulings.md')
   const pending = story.choices.filter((c) => c.ruling && !c.applied)
   const rework = []
   if (pending.length) {
@@ -152,8 +152,8 @@ if (cmd === 'apply') {
     }
     fs.appendFileSync(rulingsFile, lines.join('\n') + '\n')
   }
-  // 人同意的步骤：它依据的业务语句算「已在这条故事里被人确认」，记到 business/_已确认.json（不是语句，解析器不读）
-  const confirmedP = path.join(root, 'business', '_已确认.json')
+  // 人同意的步骤：它依据的业务语句算「已在这条故事里被人确认」，记到 business/_confirmed.json（不是语句，解析器不读）
+  const confirmedP = path.join(root, 'business', '_confirmed.json')
   const confirmed = fs.existsSync(confirmedP) ? readJson(confirmedP) : {}
   let newlyConfirmed = 0
   for (const s of story.steps.filter((x) => x.review?.verdict === 'agree')) {
@@ -176,13 +176,13 @@ if (cmd === 'apply') {
   for (const s of notes.filter((x) => x.review.verdict === 'agree')) slice.log.push({ ts: today, stage: 'slice', text: `想法：第 ${s.n} 步（${s.traces.join('、')}）——${s.review.note}` })
   for (const s of notes) s.review.handled = true
   if (story.note && !story.noteHandled) { slice.log.push({ ts: today, stage: 'slice', text: `整条故事的想法：${story.note}` }); story.noteHandled = true }
-  if (newlyConfirmed) slice.log.push({ ts: today, stage: 'slice', text: `人确认了 ${newlyConfirmed} 条语句在本故事中的用法（business/_已确认.json）` })
+  if (newlyConfirmed) slice.log.push({ ts: today, stage: 'slice', text: `人确认了 ${newlyConfirmed} 条语句在本故事中的用法（business/_confirmed.json）` })
   for (const g of gaps) slice.log.push({ ts: today, stage: 'model', text: `走不通：${g}` })
   for (const s of wrong) slice.log.push({ ts: today, stage: 'model', text: `预测错：第 ${s.n} 步「${s.quiz.ask}」人答 ${s.human.answer}，模型 ${s.quiz.answer}${s.human.note ? '——' + s.human.note : ''}` })
   story.log = [...(story.log ?? []), `${today} 写回 ${pending.length} 条裁定，回流 ${rework.length}`]
   writeJson(storyPath(id), story)
   writeJson(slicePath(id), slice)
-  console.log(`已写回 ${pending.length} 条裁定到 raw/项目所有者的裁定.md；回流 ${rework.length} 项；质疑 ${challenges.length} 步；确认语句 ${newlyConfirmed} 条；预测错 ${wrong.length} 题；走不通 ${gaps.length} 处`)
+  console.log(`已写回 ${pending.length} 条裁定到 raw/rulings.md；回流 ${rework.length} 项；质疑 ${challenges.length} 步；确认语句 ${newlyConfirmed} 条；预测错 ${wrong.length} 题；走不通 ${gaps.length} 处`)
   for (const s of challenges) console.log(`  质疑：第 ${s.n} 步——${s.review.note ?? ''}`)
   for (const s of notes.filter((x) => x.review.verdict === 'agree')) console.log(`  想法：第 ${s.n} 步——${s.review.note}`)
   if (story.note) console.log(`  整条故事：${story.note}`)
@@ -716,7 +716,7 @@ load()
     for (const st of stories) for (const q of st.aggregates) { const [mod, agg] = q.includes('.') ? q.split('.') : [null, q]; const m = modules.find((x) => x.name === mod); if (m && !m.aggregates.includes(agg)) m.aggregates.push(agg) }
     const statements = {}
     for (const s of loadBusiness(root)) statements[s.id] = { kind: s.kind, file: s.file }
-    // 模块关系：modules.json 的 relations 优先；缺省时从端口（模块 → 目标模块）与 business/00-全景.md 的主题图推导
+    // 模块关系：modules.json 的 relations 优先；缺省时从端口（模块 → 目标模块）与 business/00-overview.md 的主题图推导
     let relations = model.modules?.data.relations ?? null
     if (!relations) {
       const rel = new Map() // "A>B" → Set(what)
@@ -724,7 +724,7 @@ load()
       for (const el of model.elements.filter((e) => e.kind === 'port' && e.data.kind === 'module')) add(el.module, el.data.target, (el.data.operations ?? []).map((o) => o.name).join('、'))
       const topicsOf = {}
       for (const m of modules) for (const mm of m.responsibility.matchAll(/主题 ?([0-9、，, ]+)/g)) for (const n of mm[1].split(/[、，, ]+/).filter(Boolean)) (topicsOf[n] = topicsOf[n] ?? []).push(m.name)
-      const pano = path.join(root, 'business', '00-全景.md')
+      const pano = path.join(root, 'business', '00-overview.md')
       if (fs.existsSync(pano)) for (const mm of fs.readFileSync(pano, 'utf8').matchAll(/T(\d+)\s*-->\s*\|"([^"]*)"\|\s*T(\d+)/g)) for (const a of topicsOf[mm[1]] ?? []) for (const b of topicsOf[mm[3]] ?? []) add(a, b, mm[2])
       relations = [...rel].map(([k, ws]) => ({ from: k.split('>')[0], to: k.split('>')[1], what: [...ws].join('；') }))
     }
@@ -903,8 +903,8 @@ load()
 </script></body></html>`
   const fileOf = (sid) => (sid ? storyPath(sid) : null)
   const { loadBusiness, loadGlossary, labelOf } = require('./lib/project')
-  const notesP = path.join(root, 'business', '_词汇意见.json')
-  const modelNotesP = path.join(root, 'reports', '_模型意见.json')
+  const notesP = path.join(root, 'business', '_glossary-notes.json')
+  const modelNotesP = path.join(root, 'reports', '_model-notes.json')
   const MODEL_INJECT = "\n<style>\n  .mnote { margin-top:8px; border-top:1px dashed #d0d7de; padding-top:6px; font-size:12px; }\n  .mnote textarea { width:100%; min-height:38px; box-sizing:border-box; font:inherit; font-size:12px; border:1px solid #d0d7de; border-radius:6px; padding:4px 6px; }\n  .mnote .row { display:flex; gap:6px; align-items:center; margin-top:4px; }\n  .mnote button { font-size:12px; padding:3px 10px; border:1px solid #1f6feb; background:#1f6feb; color:#fff; border-radius:6px; cursor:pointer; }\n  .mnote .old { background:#fff7e6; border:1px solid #f2c57c; border-radius:6px; padding:4px 8px; margin:3px 0; }\n  .mnote .old.done { background:#f3f4f6; border-color:#d0d7de; color:#6b7280; }\n  .mnote .old small { color:#6b7280; margin-left:6px; }\n  .mnote-top { position:fixed; right:16px; top:52px; z-index:9; }\n  .mnote-top button.dd { font-size:12px; padding:4px 10px; border:1px solid #d0d7de; background:#fff; border-radius:6px; cursor:pointer; }\n  .mnote-top .menu { display:none; position:absolute; right:0; top:30px; width:360px; max-height:60vh; overflow:auto; background:#fff; border:1px solid #d0d7de; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.1); padding:6px; }\n  .mnote-top.open .menu { display:block; }\n  .mnote-top .menu a { display:block; padding:5px 6px; border-bottom:1px solid #f0f0f0; color:#111; text-decoration:none; font-size:12px; }\n  .mnote-top .menu a b { color:#1f6feb; }\n  .mnote-top .menu a.done { color:#9ca3af; }\n</style>\n<div class=\"mnote-top\" id=\"mnote-top\"><button class=\"dd\" id=\"mnote-dd\">对模型的意见（0）▾</button><div class=\"menu\" id=\"mnote-menu\"></div></div>\n<script>\n(function () {\n  const esc = (s) => String(s ?? '').replace(/[&<>\"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' })[c])\n  let notes = {}\n  function box(file) {\n    const old = (notes[file] || []).map((n) => '<div class=\"old' + (n.handled ? ' done' : '') + '\">' + esc(n.text) + '<small>' + n.at.slice(0, 16).replace('T', ' ') + (n.handled ? ' · 已处理' : ' · 待模型师') + '</small></div>').join('')\n    return '<div class=\"mnote\" data-mfile=\"' + esc(file) + '\">' + old + '<textarea placeholder=\"对这个模型元素的意见：名字不对、放错地方、多了少了、和业务不符……\"></textarea><div class=\"row\"><button data-msave=\"' + esc(file) + '\">保存意见</button><span class=\"st\"></span></div></div>'\n  }\n  function paint() {\n    document.querySelectorAll('.card[id]').forEach((c) => { const f = c.id; let m = c.querySelector(':scope > .mnote'); if (m) m.outerHTML = box(f); else c.insertAdjacentHTML('beforeend', box(f)) })\n    const all = []; for (const f in notes) for (const n of notes[f]) all.push({ f, ...n })\n    all.sort((a, b) => b.at.localeCompare(a.at))\n    const open = all.filter((n) => !n.handled).length\n    document.getElementById('mnote-dd').textContent = '对模型的意见（' + open + (all.length !== open ? '/' + all.length : '') + '）▾'\n    document.getElementById('mnote-menu').innerHTML = all.length ? all.map((n) => '<a href=\"#\" data-jump=\"' + esc(n.f) + '\" class=\"' + (n.handled ? 'done' : '') + '\"><b>' + esc(n.f.split('/').pop().replace(/\\.json$/, '')) + '</b> ' + esc(n.text.slice(0, 60)) + '</a>').join('') : '<a>还没有意见。在「卡片」视图每张卡下面写。</a>'\n  }\n  async function load() { try { notes = await (await fetch('/model-notes')).json() } catch (e) { notes = {} } paint() }\n  document.addEventListener('click', async (ev) => {\n    const b = ev.target.closest('[data-msave]')\n    if (b) {\n      const wrap = b.closest('.mnote'); const ta = wrap.querySelector('textarea'); const text = ta.value.trim(); if (!text) return\n      b.disabled = true\n      const r = await fetch('/model-notes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ file: b.dataset.msave, text }) })\n      b.disabled = false; ta.value = ''\n      if (r.ok) { notes = await r.json(); paint() } else wrap.querySelector('.st').textContent = '保存失败'\n      return\n    }\n    if (ev.target.id === 'mnote-dd') { document.getElementById('mnote-top').classList.toggle('open'); return }\n    const j = ev.target.closest('[data-jump]')\n    if (j) { ev.preventDefault(); document.getElementById('mnote-top').classList.remove('open'); document.querySelector('nav [data-v=\"cards\"]')?.click(); const el = document.getElementById(j.dataset.jump); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.style.outline = '2px solid #f59e0b'; setTimeout(() => (el.style.outline = ''), 2000) } return }\n    if (!ev.target.closest('#mnote-top')) document.getElementById('mnote-top').classList.remove('open')\n  })\n  load()\n})()\n</script>"
   /** board.js 的输出是 markdown；这里只认它真的会用到的几种写法 */
   function boardHtml(md) {

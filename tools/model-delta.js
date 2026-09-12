@@ -35,12 +35,16 @@ if (top.status !== 0) die('项目目录不在 git 仓库里，算不出基线')
 const gitRoot = top.stdout.trim()
 const relModel = path.relative(gitRoot, path.join(root, 'model')).replaceAll('\\', '/')
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'model-delta-'))
-const tar = path.join(tmp, 'base.tar')
-// 路径相对仓库根解析，所以在仓库根跑
-const ar = spawnSync('git', ['archive', '--format=tar', '-o', tar, base, '--', relModel], { cwd: gitRoot, encoding: 'utf8' })
-if (ar.status !== 0) die(`导出基线失败（${base}）：${ar.stderr.trim()}`)
-const ex = spawnSync('tar', ['-xf', tar, '-C', tmp], { encoding: 'utf8' })
-if (ex.status !== 0) die(`解开基线失败：${ex.stderr.trim()}`)
+// 逐文件从基线提交写出（不用 git archive + tar：Windows 的 tar 会把 C:\… 当成远程主机）；路径相对仓库根解析，所以在仓库根跑
+const ls = spawnSync('git', ['ls-tree', '-r', '-z', '--name-only', base, '--', relModel], { cwd: gitRoot, encoding: 'utf8', maxBuffer: 1 << 28 })
+if (ls.status !== 0) die(`导出基线失败（${base}）：${ls.stderr.trim()}`)
+for (const f of ls.stdout.split('\0').filter(Boolean)) {
+  const show = spawnSync('git', ['show', `${base}:${f}`], { cwd: gitRoot, maxBuffer: 1 << 28 })
+  if (show.status !== 0) die(`导出基线文件失败（${f}）：${show.stderr.toString().trim()}`)
+  const dest = path.join(tmp, f)
+  fs.mkdirSync(path.dirname(dest), { recursive: true })
+  fs.writeFileSync(dest, show.stdout)
+}
 const baseDir = path.join(tmp, relModel)
 if (!fs.existsSync(baseDir)) fs.mkdirSync(baseDir, { recursive: true }) // 基线里还没有 model/：全部算新增
 

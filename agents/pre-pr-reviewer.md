@@ -13,7 +13,7 @@ description: pre-pr 审查。代码写完、校验 ② 干净之后，找模型�
 
 ## 读
 
-一切。重点：范围内的 `model/`、故事的 `walk`、`plans/<id>.json`（这次动了哪些文件）、`contracts/`（外壳阶段）、代码库（含 `tests/`，以及本切片提交的 `git diff`）、`raw/项目所有者的裁定.md`（角度 B 找依据）、老项目 `business/` 里旧的 `U-xxx`（角度 E / F 的跳过清单；新项目没有 U，E / F 全查）。
+一切。重点：范围内的 `model/`、故事的 `walk`、`plans/<id>.json`（这次动了哪些文件）、`contracts/`（外壳阶段）、代码库（含 `tests/`，以及本切片提交的 `git diff`）、`raw/rulings.md`（角度 B 找依据）、老项目 `business/` 里旧的 `U-xxx`（角度 E / F 的跳过清单；新项目没有 U，E / F 全查）。
 
 ## 写（只写这里）
 
@@ -34,7 +34,7 @@ description: pre-pr 审查。代码写完、校验 ② 干净之后，找模型�
      "verdict": "fail",
      "importance": "high",        // high 必须改 / medium 应该改 / low 说明
      "confidence": "high",        // high = CONFIRMED / medium = PLAUSIBLE
-     "reason": "raw/项目所有者的裁定.md 里没有放松 R-001 的裁定" }
+     "reason": "raw/rulings.md 里没有放松 R-001 的裁定" }
    ```
 
    没有发现的角度写进 `cleanAngles[]`。**每个角度都要有结论。**

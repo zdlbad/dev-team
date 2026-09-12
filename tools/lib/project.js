@@ -24,7 +24,8 @@ const LAYERS = ['业务抽象', '业务落地']
 const KINDS = { 能力: 'G', 事实: 'R', 约束: 'R', 公式: 'R', 触发: 'R', 流程: 'R', 情形: 'R' }
 // 旧标签自动对上新名。「使用」是已停发的 U 类：老项目里还有，整体迁移时逐条过五问——公司事实改写成 R，软件行为作废
 const LEGACY_KINDS = { 目标: '能力', 不变量: '约束', 推导: '公式', 反应: '触发', 使用: '使用' }
-const LEGACY_LAYER_FILES = { '领域.md': '业务抽象', '公司.md': '业务落地' }
+const LAYER_FILES = { 'abstraction.md': '业务抽象', 'practice.md': '业务落地' }
+const LEGACY_LAYER_FILES = { '业务抽象.md': '业务抽象', '业务落地.md': '业务落地', '领域.md': '业务抽象', '公司.md': '业务落地' }
 /** 给人看的标签：层-种类，缺哪样省哪样 */
 const labelOf = (s) => [s.layer, s.ruleKind].filter(Boolean).join('-')
 
@@ -36,7 +37,7 @@ function loadBusiness(root) {
     const rel = path.relative(root, f).replaceAll('\\', '/')
     const base = path.basename(f)
     const stem = base.replace(/\.md$/, '')
-    const fileLayer = rel.split('/').length === 3 ? (LAYERS.includes(stem) ? stem : LEGACY_LAYER_FILES[base] ?? null) : null
+    const fileLayer = rel.split('/').length === 3 ? (LAYER_FILES[base] ?? LEGACY_LAYER_FILES[base] ?? null) : null
     const lines = fs.readFileSync(f, 'utf8').split('\n')
     let inFence = false
     lines.forEach((line, i) => {

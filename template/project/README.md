@@ -4,7 +4,7 @@
 
 ```
 raw/                原料，任意格式，人放入；暗的，按段落点亮
-business/           业务描述：00-全景.md；<Module>/业务抽象.md（第一层）、<Module>/业务落地.md（第二层，含五问问出来的公司事实）
+business/           业务描述：00-overview.md；<Module>/abstraction.md（第一层）、<Module>/practice.md（第二层，含五问问出来的公司事实）
 glossary.json       词汇表：业务的语言
 model/              设计模型（模型师唯一写入目标）
 model-decoded/      解码出的实际模型（临时，不入库）
