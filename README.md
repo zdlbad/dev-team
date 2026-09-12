@@ -7,7 +7,7 @@
 ```
 SKILL.md           开发指挥（主持角色：子命令表、run 的分派、节奏、裁定分流）
 seed/              规范（决策文档，入口 seed/README.md；00–07）
-agents/            九个角色的指令（开发指挥启动子 agent 时使用）
+agents/            十个角色的指令（开发指挥启动子 agent 时使用）
 schema/            模型 / 切片 / 故事 / 计划 / 契约的 JSON schema（2020-12），每种文件一份 + common
 building-block/    src/shared/building-block 的 TypeScript 源码（含原型宿主 proto/）
 template/project/  新项目模板
@@ -40,7 +40,7 @@ tools/             脚本（全部 Node）
 → pre-pr 审查（C 契约完整 / E 防御正确性 / F 并发与状态 / S 风格）→ 人审阅 → 合并
 ```
 
-既有代码用 `read` 让解读角色先写出一份原料（`raw/旧系统解读.md`）与模型草稿，再走粗读与点亮。`slice next` 随时能算出当前卡在哪、下一步该谁；`board` 看全部切片。
+既有代码用 `read` 让解读角色先写出一份原料（`raw/legacy-reading.md`）与模型草稿，再走粗读与点亮。`slice next` 随时能算出当前卡在哪、下一步该谁；`board` 看全部切片。
 
 ## 三个让 agent 少出错的位置
 
@@ -103,7 +103,7 @@ node tools/board.js example/order-sample && node tools/render.js example/order-s
 | 解码器（代码 → 模型） | 完成（样例零差异；跳过 `src/shared`、`src/proto` 与测试） |
 | 校验器（机械检查 + 判断清单 + 报告） | 完成（方向 ① 含标签检查、每条语句的落点与判断；方向 ② 解码 + 比对 + lint） |
 | 审阅工具 | 完成（校验报告与 pre-pr 报告通用） |
-| 开发指挥 + 九个角色指令 | 完成（`SKILL.md` 的 `run` 一次推进一步；`agents/` 九份） |
+| 开发指挥 + 十个角色指令 | 完成（`SKILL.md` 的 `run` 一次推进一步；`agents/` 十份） |
 | 切片驱动 | 完成（`slice.js`：new / next / advance / apply / log；`story.js` 含五问补出语句的登记与确认） |
 | 编码计划 | 完成（`plan.js`：从模型算链路、人确认、记完成、核对顺序与文件） |
 | 契约 | 完成（`contract.js`：骨架、核对字段名与模型一致、人确认；两级标记） |

@@ -2,7 +2,7 @@
 /**
  * rename-check —— 改说法切片的门禁：证明这一趟只改了名字，业务行为一个字没变。
  *
- * 用法：node tools/rename-check.js <改前解码目录> <改后解码目录> <新旧对照.json> [--json]
+ * 用法：node tools/rename-check.js <改前解码目录> <改后解码目录> <rename-map.json> [--json]
  *
  * 对照文件与 validate.js --改名 用同一份：{ "新说法": "旧说法", … }。这里反着用——
  * 把「旧 → 新」套在改前的解码结果上（文件名与内容一起换），再与改后的解码结果逐字节比。
@@ -18,7 +18,7 @@ const { walk, applyWordMap } = require('./lib/project')
 const args = process.argv.slice(2)
 const [beforeDir, afterDir, mapFile] = args.filter((a) => !a.startsWith('--')).map((p) => path.resolve(p))
 if (!beforeDir || !afterDir || !mapFile || !fs.existsSync(beforeDir) || !fs.existsSync(afterDir) || !fs.existsSync(mapFile)) {
-  console.error('用法：node tools/rename-check.js <改前解码目录> <改后解码目录> <新旧对照.json> [--json]')
+  console.error('用法：node tools/rename-check.js <改前解码目录> <改后解码目录> <rename-map.json> [--json]')
   process.exit(2)
 }
 

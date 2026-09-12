@@ -1,24 +1,25 @@
 # agents/ — 角色指令
 
-九份文件对应 [seed/05-roles.md](../seed/05-roles.md) 的九个角色。它们不是自动注册的子 agent，而是**开发指挥启动角色时交给它的指令**：开发指挥（`SKILL.md`，就是和人对话的主 agent，第十个角色）读取对应文件，连同任务上下文一起用 Agent 工具启动一个子 agent。
+十份文件对应 [seed/05-roles.md](../seed/05-roles.md) 的十个角色。它们不是自动注册的子 agent，而是**开发指挥启动角色时交给它的指令**：开发指挥（`SKILL.md`，就是和人对话的主 agent）读取对应文件，连同任务上下文一起用 Agent 工具启动一个子 agent。（开发指挥自己是第十一个。）
 
-主力（产真相工件）：业务分析、讲解、模型师、编码。辅助：解读、原型、接口、模型校验、pre-pr 审查——讲解与解读为人而设，其余为质量而设。
+主力（产真相工件）：业务分析、讲解、模型师、编码。辅助：解读、文职、原型、接口、模型校验、pre-pr 审查——讲解、解读、文职为人而设，其余为质量而设。
 
 | 文件 | 角色 | 阶段 | 唯一写入目标 |
 |---|---|---|---|
-| `business-analyst.md` | 业务分析 | 一（粗读一次；之后按段落点亮） | `business/00-全景.md`、`business/<Module>/业务抽象.md`、`business/<Module>/业务落地.md`（含五问问出来的情形）、`glossary.json` |
+| `business-analyst.md` | 业务分析 | 一（粗读一次；之后按段落点亮） | `business/00-overview.md`、`business/<Module>/abstraction.md`、`business/<Module>/practice.md`（含五问问出来的情形）、`glossary.json` |
 | `guide.md` | 讲解 | 一（衔接业务到模型） | `slices/<id>.story.json`（故事、每步的 `needs`、题目、缺口）、`导读/` |
 | `modeler.md` | 模型师 | 一 | `model/`；故事文件的 `walk` 与 `choices` |
+| `editor.md` | 文职 | 一（点亮之后、模型师交稿之后各一次） | 只改文字不改意：`business/` 语句的正文、`model/` 元素给人读的文字（规则、字段说明、错误说明、步骤）；编号、标签、追溯、结构不碰 |
 | `prototyper.md` | 原型 | 一→二 | 代码库里故事的领域层、应用层、内存适配器、组合根、`src/proto/main.ts`、领域与用例测试；故事的 `walk.input`；计划的 `keyLogic` / `doneAt` |
 | `interface.md` | 接口 | 二（实现切片开头） | `contracts/`（HTTP 入口、表结构、错误 → 状态码） |
 | `coder.md` | 编码 | 二 | 代码库（生产外壳与外壳测试）；计划的 `keyLogic` / `doneAt` |
 | `validator.md` | 模型校验 | 三 | `reports/validate-*` |
 | `pre-pr-reviewer.md` | pre-pr 审查 | 三 | `reports/pre-pr-*` |
-| `reader.md` | 解读 | 零（既有代码入门） | `raw/旧系统解读.md`（一份原料）、`glossary.json` 的别名、`model/` 草稿、`model/_解读说明.md` |
+| `reader.md` | 解读 | 零（既有代码入门） | `raw/legacy-reading.md`（一份原料）、`glossary.json` 的别名、`model/` 草稿、`model/_reader-notes.md` |
 
-开发指挥自己写 `slices/`、`stories/`（故事线索引）、`plans/`（`plan build` 出骨架）、模型文件的 `decisions[]`（`slice apply`）与 `raw/项目所有者的裁定.md`。人可以直接编辑任何工件。
+开发指挥自己写 `slices/`、`stories/`（故事线索引）、`plans/`（`plan build` 出骨架）、模型文件的 `decisions[]`（`slice apply`）与 `raw/rulings.md`。人可以直接编辑任何工件。
 
-**业务分三层**（[seed/07-business-layers.md](../seed/07-business-layers.md)）：业务抽象（手册层，进 `业务抽象.md`）、业务落地（这家公司的做法，进 `业务落地.md`）、应用行为（谁填、取数、界面、守卫、五问的回应，只在模型和代码里，不裁）。每条语句带 `(层-种类)` 标签。每个角色报上来的问题都先由开发指挥标层再分流；角色自己分不清就写进问题清单，不硬归。
+**业务分三层**（[seed/07-business-layers.md](../seed/07-business-layers.md)）：业务抽象（手册层，进 `abstraction.md`）、业务落地（这家公司的做法，进 `practice.md`）、应用行为（谁填、取数、界面、守卫、五问的回应，只在模型和代码里，不裁）。每条语句带 `(层-种类)` 标签。每个角色报上来的问题都先由开发指挥标层再分流；角色自己分不清就写进问题清单，不硬归。
 
 **`decisions[]` 只装人的裁决，任何角色都不许往里写。**它记的是「人在校验页面上拍过板了」，校验器据此不再重复问同一条；角色往里写一条，就等于替人在自己的作品上签字，那一条从此不再经过校验。裁决带 `by` 字段：`human` 是人裁的（`slice apply` 写回时自动标上），`role` 是角色误写的、校验一律不认。角色要留下「为什么这么建」，写进「产出」说给人听，或用元素自己的说明文字与 `questions`。
 
@@ -56,7 +57,7 @@
 ## 共同的纪律
 
 - 只读角色文件点名的那几份 `seed/` 文档，不把全部规范加载进上下文。
-- 只写自己的写入目标；发现别的工件有问题，写进问题清单，不动手。现场看板（`reports/_现场.json`）也不是你的：开发指挥在派你之前已经写了「谁在干什么」，交稿后它再写一次。
+- 只写自己的写入目标；发现别的工件有问题，写进问题清单，不动手。现场看板（`reports/_scene.json`）也不是你的：开发指挥在派你之前已经写了「谁在干什么」，交稿后它再写一次。
 - 不造词：模型与代码里的名词必须是 `glossary.json` 的法定名（`name`），别名只出现在注释里。
 - 不猜业务：原料里没有的，问人。会不会同时、会不会重复这类**使用**上的事也是业务，问人（业务分析的五问）。
 - 写代码的角色（原型、编码）**先补计划的关键逻辑、等人确认、再按计划顺序写**；每完成一步登记一次。

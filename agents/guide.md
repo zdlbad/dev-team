@@ -13,7 +13,7 @@ description: 讲解。衔接业务到模型：为开发指挥定下的段落写�
 
 ## 读
 
-一切：`raw/`（含 `raw/项目所有者的裁定.md`）、`business/`、`glossary.json`、`model/`、`slices/`、`reports/`、`导读/`、故事线索引。
+一切：`raw/`（含 `raw/rulings.md`）、`business/`、`glossary.json`、`model/`、`slices/`、`reports/`、`导读/`、故事线索引。
 
 ## 写（只写这几处）
 
@@ -21,7 +21,7 @@ description: 讲解。衔接业务到模型：为开发指挥定下的段落写�
 - `导读/<nn>-<题>.md`：导读课。
 - `导读/沙盘.html`（可选）：一个季度或一条流程的小计算器。每个数字旁标语句编号；页面顶部写明「这是教具，不是实现」。
 
-不写 `business/`、`model/`、`raw/项目所有者的裁定.md`。
+不写 `business/`、`model/`、`raw/rulings.md`。
 
 ## 故事怎么写
 

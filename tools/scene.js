@@ -12,8 +12,8 @@
  *
  * 每次写都记下机器名；换了机器还没 git pull 就动手，看板和 slice next 都会提醒。
  *
- * 状态存 reports/_现场.json（随 git 走——reports/ 里的 json 都进 git，md 与 html 是重算出来的才忽略；开发指挥的写入目标之一，见 seed/01 的写入权表）。
- * 角色名用 seed/05 的叫法：人、开发指挥、业务分析、讲解、模型师、原型、接口、编码、模型校验、pre-pr 审查、解读。
+ * 状态存 reports/_scene.json（随 git 走——reports/ 里的 json 都进 git，md 与 html 是重算出来的才忽略；开发指挥的写入目标之一，见 seed/01 的写入权表）。
+ * 角色名用 seed/05 的叫法：人、开发指挥、业务分析、讲解、文职、模型师、原型、接口、编码、模型校验、pre-pr 审查、解读。
  */
 const fs = require('fs')
 const path = require('path')
@@ -21,7 +21,7 @@ const http = require('http')
 const os = require('os')
 const ME = os.hostname()
 
-const ROLES = ['人', '开发指挥', '业务分析', '讲解', '模型师', '原型', '接口', '编码', '模型校验', 'pre-pr 审查', '解读']
+const ROLES = ['人', '开发指挥', '业务分析', '讲解', '文职', '模型师', '原型', '接口', '编码', '模型校验', 'pre-pr 审查', '解读']
 const PHASES = ['业务', '模型', '编码', '校验']
 const die = (m) => {
   console.error(m)
@@ -38,7 +38,7 @@ const opt = (k, d = null) => {
   return i > 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : d
 }
 
-const scenePath = path.join(root, 'reports', '_现场.json')
+const scenePath = path.join(root, 'reports', '_scene.json')
 const readJson = (p, d) => {
   try {
     return JSON.parse(fs.readFileSync(p, 'utf8'))
