@@ -200,7 +200,7 @@ export class CreateOrderCommandHandler {
 
 | 标签 | 放在 | 对应模型字段 |
 |---|---|---|
-| `@trace G-001 R-002` | 领域类、行为、领域服务操作、处理器的 `execute` / `handle`、端口接口、`module.ts` | `traces` |
+| `@trace G-001 R-002` | 领域类、行为、领域服务操作、处理器的 `execute` / `handle`、端口接口、`module.ts`、**`props` 字段** | `traces` |
 | `@narrative 文本` | 聚合根类 | `aggregateNarrative` |
 | `@aggregate-invariant [R-001] 文本` | 聚合根类 | `aggregateInvariants` |
 | `@invariant [R-001 R-002] 文本 {ErrA ErrB}` | 聚合根类（根自身）、实体 / 值对象类 | `invariants`；方括号内是 traces，花括号内是创建时违反抛出的错误（`throws`），两者可省 |
@@ -215,6 +215,8 @@ export class CreateOrderCommandHandler {
 | `// 文本` | `if` 语句上方（处理器体内，或行为体内包住 `raise` 的 `if`） | 分支内步骤的 `when`；条件 raise 的 `when`。无注释时用条件源码；`else` 分支为「否则」 |
 
 缺少 `@trace` 的类、行为、处理器是违规。
+
+字段上的 `@trace` 是**选填**：`id`、创建时间这类没有业务出处的字段不必写，缺了不算违规。一条业务语句要求「必须记着某样东西」「这一栏照抄纸上印的字、供人查」时，它的落点就是那个字段——写上 `@trace`，校验才指得出它落在哪儿。
 
 ---
 

@@ -302,6 +302,9 @@ function membersOfType(t, currentModule) {
       const tags = docTags(decl)
       const note = tagValues(tags, 'note')[0]
       if (note) f.note = note
+      // 字段本身也在承载业务语句（一栏照抄纸上印的名目、供人查），带了追溯就读回来
+      const fieldTraces = traceTags(tags)
+      if (fieldTraces.length) f.traces = fieldTraces
       const ref = tagValues(tags, 'ref')[0]
       if (ref) refs.push({ field: p.name, to: ref })
     }
@@ -558,6 +561,11 @@ function stepsOf(body, currentModule, ctx) {
       }
       let call = null
       let skipped = false
+      let each = false
+      // 「对一批东西逐个做一次」：代码里是 xs.map(x => …) / forEach / flatMap，
+      // 外层那个 map 本身不是业务调用，要读的是循环体里的那一次。
+      const inner = eachCallOf(expr)
+      if (inner) { each = true; expr = inner }
       if (expr && ts.isCallExpression(expr)) {
         const r = resolveCall(expr)
         if (r?.skip) skipped = true
@@ -582,6 +590,7 @@ function stepsOf(body, currentModule, ctx) {
       const step = { text: comment ?? `(${expr?.getText().slice(0, 40) ?? s.getText().slice(0, 40)})` }
       if (!comment) issue(ctx.file, `步骤缺少 // 注释：${step.text}`)
       if (call) step.call = call
+      if (each) step.each = true
       if (when) step.when = when
       if (output) step.output = output
       steps.push(step)
@@ -589,6 +598,40 @@ function stepsOf(body, currentModule, ctx) {
   }
   handle(blockStmts(body), undefined)
   return steps
+}
+/**
+ * 这一句是不是「对一批东西逐个做一次」？是就返回循环体里那一次调用，不是就返回 null。
+ * 认得出：xs.map(x => f(x))、xs.forEach(…)、xs.flatMap(…)，以及套在 Promise.all(…) 里的同一批。
+ */
+function eachCallOf(expr) {
+  if (!expr || !ts.isCallExpression(expr)) return null
+  let e = expr
+  // Promise.all(xs.map(…)) 剥一层
+  if (ts.isPropertyAccessExpression(e.expression) && e.expression.name.text === 'all' && e.arguments.length === 1) {
+    const first = unwrap(e.arguments[0])
+    if (first && ts.isCallExpression(first)) e = first
+  }
+  if (!ts.isPropertyAccessExpression(e.expression)) return null
+  if (!['map', 'forEach', 'flatMap'].includes(e.expression.name.text)) return null
+  const fn = e.arguments[0]
+  if (!fn || !(ts.isArrowFunction(fn) || ts.isFunctionExpression(fn))) return null
+  const body = fn.body
+  // 箭头直接返回一个调用
+  if (!ts.isBlock(body)) {
+    const one = unwrap(body)
+    return one && ts.isCallExpression(one) ? one : null
+  }
+  // 带花括号的：取里面第一句能认出来的调用
+  for (const s of body.statements) {
+    let ex = null
+    if (ts.isVariableStatement(s)) ex = s.declarationList.declarations[0]?.initializer
+    else if (ts.isExpressionStatement(s)) ex = s.expression
+    else if (ts.isReturnStatement(s)) ex = s.expression
+    if (!ex) continue
+    const one = unwrap(ex)
+    if (one && ts.isCallExpression(one)) return one
+  }
+  return null
 }
 function blockStmts(node) {
   return ts.isBlock(node) ? [...node.statements] : [node]

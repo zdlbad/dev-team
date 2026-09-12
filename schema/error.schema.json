@@ -2,13 +2,64 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:dev-team:error",
   "title": "error.<Name>Error.json — 领域错误",
-  "type": "object", "additionalProperties": false,
-  "required": ["name", "aggregate", "condition", "traces"],
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "aggregate",
+    "condition",
+    "traces"
+  ],
   "properties": {
-    "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
-    "aggregate": { "$ref": "urn:dev-team:common#/$defs/modelName" },
-    "condition": { "type": "string", "description": "何时抛出；解码结果为空字符串" },
-    "traces": { "$ref": "urn:dev-team:common#/$defs/traces" },
-    "decisions": { "$ref": "urn:dev-team:common#/$defs/decisions" }
+    "name": {
+      "$ref": "urn:dev-team:common#/$defs/modelName"
+    },
+    "aggregate": {
+      "$ref": "urn:dev-team:common#/$defs/modelName"
+    },
+    "condition": {
+      "description": "何时抛出；解码结果为空字符串。写成数组就能一句一标：校验问某一条业务语句时只摆相关的那几句，不再把整张清单端出来",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "text",
+                  "traces"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "traces": {
+                    "$ref": "urn:dev-team:common#/$defs/traces"
+                  },
+                  "carries": {
+                    "$ref": "urn:dev-team:common#/$defs/carries"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "traces": {
+      "$ref": "urn:dev-team:common#/$defs/traces"
+    },
+    "decisions": {
+      "$ref": "urn:dev-team:common#/$defs/decisions"
+    }
   }
 }

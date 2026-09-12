@@ -20,8 +20,9 @@ if (!modelDir || !decodedDir) {
   process.exit(2)
 }
 
-const IGNORE = new Set(['questions', 'decisions', 'denylist', 'writesNote', 'system', 'groups', 'relations'])
-const DESIGN_ONLY_IN_STEPS = new Set(['input'])
+const IGNORE = new Set(['questions', 'decisions', 'denylist', 'writesNote', 'system', 'groups', 'relations', 'carries'])
+// 步骤上的 traces 是模型自己用来挑步骤的，代码注释里不写它，不算差异
+const DESIGN_ONLY_IN_STEPS = new Set(['input', 'traces'])
 const SET_KEYS = new Set(['traces', 'throws', 'writes', 'reads', 'coordinates', 'members', 'raises'])
 const KEYED = { fields: 'name', behaviors: 'name', methods: 'name', operations: 'name', input: 'name', result: 'name', payload: 'name', aggregates: 'name', modules: 'name', invariants: 'text', aggregateInvariants: 'text', idRefs: 'field' }
 
@@ -43,6 +44,17 @@ function raiseKey(r) {
 
 const findings = [] // { file, path, kind: missing-file|extra-file|missing|extra|changed, model, code }
 function diff(a, b, file, p) {
+  // 规则带了编号的（模型里写成 { text, traces }），跟代码比的时候只比那句话：
+  // 编号是模型自己用来挑规则的，代码注释里不写它，不算差异
+  // 条件写成数组、或某一句标了编号的，跟代码比的时候只比那句话
+  if (p.endsWith(String.fromCharCode(47) + 'condition')) {
+    const flat = (v) => (Array.isArray(v) ? v.map((x) => (x && typeof x === 'object' ? x.text : x)).join('；') : v)
+    a = flat(a); b = flat(b)
+  }
+  if (p.endsWith(String.fromCharCode(47) + 'rules')) {
+    if (Array.isArray(a)) a = a.map((x) => (x && typeof x === 'object' ? x.text : x))
+    if (Array.isArray(b)) b = b.map((x) => (x && typeof x === 'object' ? x.text : x))
+  }
   if (Array.isArray(a) && Array.isArray(b)) {
     const key = p.split('/').pop()
     if (SET_KEYS.has(key)) {

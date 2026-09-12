@@ -7,7 +7,7 @@
   "required": ["slice", "kind", "role", "builtAt", "codebase", "scope", "steps", "confirmedAt", "log"],
   "properties": {
     "slice": { "type": "string", "pattern": "^s-[0-9]{3,}$" },
-    "kind": { "enum": ["proto", "shell", "full"], "description": "proto：故事切片的原型（领域 + 应用 + 内存适配器）；shell：实现切片的生产外壳；full：老式切片，两者都有" },
+    "kind": { "enum": ["proto", "shell", "full"], "description": "proto：段落切片的原型（领域 + 应用 + 内存适配器）；shell：实现切片的生产外壳；full：老式切片，两者都有" },
     "role": { "enum": ["原型", "编码"], "description": "谁按这份计划写" },
     "builtAt": { "type": "string" },
     "codebase": { "type": "string", "description": "代码库，相对项目目录" },
@@ -38,10 +38,37 @@
           "needsKeyLogic": { "type": "boolean", "description": "这一步有业务判断（行为、规则、分流、事务、锁、状态码），角色必须补关键逻辑" },
           "keyLogic": { "type": ["string", "null"], "description": "角色填：这一步守哪条规则、哪条不变量在这里生效、分流怎么走；外壳步骤写事务边界、锁、错误 → 状态码" },
           "doneAt": { "type": ["string", "null"], "description": "角色完成这一步的时间（plan done）；核对顺序用" },
+          "noFile": { "type": "string", "description": "这一步用现成的东西（构建块里已有的）结掉，不另建文件；写清楚用的是哪个、为什么不另建。plan done --已有 <说明> 写上，核对时照它放行、并单独列一行" },
           "contract": { "type": ["string", "null"], "description": "外壳步骤：对应的契约文件（contracts/…）" }
         }
       }
     },
+    "already": {
+      "type": "array",
+      "description": "别的切片已经做过、代码还在、跟现在的模型仍然一致的那些项：不列进 steps，只记在这里给人看。模型改了、代码没跟上的，下次算计划会自动回到 steps 里",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["layer", "file", "target", "what", "by"],
+        "properties": {
+          "layer": { "enum": ["building-block", "domain", "repository", "service", "application", "port", "adapter", "shell", "composition", "proto", "test", "input"] },
+          "file": { "type": ["string", "null"] },
+          "target": { "type": "string", "minLength": 1 },
+          "what": { "type": "string", "minLength": 1 },
+          "by": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slice", "n"],
+            "properties": {
+              "slice": { "type": "string", "pattern": "^s-[0-9]{3,}$", "description": "哪一条切片的施工单做的" },
+              "n": { "type": "integer", "minimum": 1, "description": "那张单子上的第几步" },
+              "noFile": { "type": "string", "description": "当初就是按「用现成的、不另建文件」结掉的，理由照抄过来" }
+            }
+          }
+        }
+      }
+    },
+    "modelFingerprint": { "type": ["string", "null"], "description": "算这份计划时模型的样子（不含 decisions 与 questions）。核对时再算一次，对不上就说明模型之后又改过，这份单子不作数，要 plan build --force 重算" },
     "confirmedAt": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}", "description": "人确认计划的日期；确认前不开写" },
     "log": { "type": "array", "items": { "type": "string" } }
   }

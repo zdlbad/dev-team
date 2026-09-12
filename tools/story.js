@@ -7,8 +7,8 @@
  *   node tools/story.js serve   <项目目录> [切片id] [--port 4871]
  *                                                         本地页面：/ 框架图（模块 × 故事）；/story?slice=<id> 走故事 + 裁定卡；/glossary 名词目录
  *   node tools/story.js apply   <项目目录> <切片id>            把裁定卡写进 raw/项目所有者的裁定.md 与切片 log；算出回流
- *   node tools/story.js usage   <项目目录> <切片id> propose <U-001,U-002 | --none>
- *                                                         业务分析补完使用语句后，路由登记本故事新增的编号（--none = 本故事没有新增）
+ *   node tools/story.js usage   <项目目录> <切片id> propose <R-001,R-002 | --none>
+ *                                                         业务分析按五问补完语句后，开发指挥登记本故事新增的编号（--none = 本故事没有新增）
  *   node tools/story.js usage   <项目目录> <切片id> confirm    人确认后：编号并入故事与切片的 traces，建模可以开始
  *   node tools/story.js state   <项目目录> <切片id> [--json]   故事走到哪（切片驱动也用它）
  *
@@ -42,6 +42,10 @@ function slicePath(sliceId) {
   return path.join(root, 'slices', `${sliceId}.json`)
 }
 
+/** 这张卡是不是已经作废：争点被后来的裁定推翻了，裁定写的是「作废」而不是某个选项 */
+function voided(c) {
+  return c.ruling?.choice === '作废' || /^本卡作废/.test(c.ruling?.note ?? '')
+}
 /** 故事走到哪。顺序就是切片周期里的顺序。 */
 function storyState(story) {
   if (story.basedOn && (!story.adds || /^（.*）$/.test(story.adds.trim()))) return { state: 'adds-missing', count: 1 }
@@ -51,7 +55,7 @@ function storyState(story) {
   const notes = story.steps.filter((s) => s.review?.note && !s.review.handled).length + (story.note && !story.noteHandled ? 1 : 0)
   if (notes) return { state: 'notes', count: notes }
   if (!story.approved) return { state: 'unapproved' }
-  // 理解一致之后、建模之前：使用语句（同时 / 重复 / 一次几条 / 失败处置 / 可见性）按故事细补，人确认
+  // 理解一致之后、建模之前：业务分析按五问（同时 / 重复 / 一次几条 / 失败处置 / 可见性）补出本段还缺的公司事实，人确认
   if (!story.usage?.confirmedAt) return story.usage?.proposedAt ? { state: 'usage-proposed', count: (story.usage.proposed ?? []).length } : { state: 'usage-pending' }
   const noWalk = story.steps.filter((s) => !s.walk)
   if (noWalk.length) return { state: 'no-walk', count: noWalk.length }
@@ -62,7 +66,7 @@ function storyState(story) {
   if (pendingQuiz || pendingChoice) return { state: 'awaiting-human', quiz: pendingQuiz, choices: pendingChoice }
   const unapplied = story.choices.filter((c) => c.ruling && !c.applied).length
   if (unapplied) return { state: 'unapplied', count: unapplied }
-  const rework = story.choices.filter((c) => c.ruling && c.ruling.choice !== c.current)
+  const rework = story.choices.filter((c) => c.ruling && !voided(c) && c.ruling.choice !== c.current)
   const gaps = story.steps.filter((s) => s.walk?.gap)
   if (rework.length || gaps.length) return { state: 'rework', rework: rework.length, gaps: gaps.length }
   const wrong = story.steps.filter((s) => s.human && !s.human.correct).length
@@ -99,36 +103,36 @@ if (cmd === 'approve') {
   console.log(`业务理解一致：${story.steps.length} 步，${ids.size} 条编号已并入 ${id} 的 traces`)
 }
 
-// ---------- usage：使用语句按故事细补 ----------
+// ---------- usage：五问补出的语句按故事登记（编号不限字母；U 已停发，只为老项目保留） ----------
 if (cmd === 'usage') {
   const sub = args[3]
-  if (!story.approved) die('故事还没有理解一致（approve），使用语句等理解一致之后再补')
+  if (!story.approved) die('故事还没有理解一致（approve），五问补语句等理解一致之后再做')
   if (sub === 'propose') {
     const none = args.includes('--none')
     const ids = none ? [] : (args[4] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
-    if (!none && !ids.length) die('用法：story usage <项目目录> <切片id> propose <U-001,U-002 | --none>')
-    if (ids.some((x) => !/^U-\d{3,}$/.test(x))) die(`使用语句的编号形如 U-001：${ids.join('、')}`)
+    if (!none && !ids.length) die('用法：story usage <项目目录> <切片id> propose <R-001,R-002 | --none>')
+    if (ids.some((x) => !/^[GRU]-\d{3,}$/.test(x))) die(`编号形如 R-001：${ids.join('、')}`)
     const { loadBusiness } = require('./lib/project')
-    const known = new Set(loadBusiness(root).filter((s) => s.kind === 'usage').map((s) => s.id))
+    const known = new Set(loadBusiness(root).map((s) => s.id))
     const missing = ids.filter((x) => !known.has(x))
     if (missing.length) die(`这些编号在 business/ 里不存在（业务分析要先写进语句）：${missing.join('、')}`)
     story.usage = { proposed: ids, proposedAt: today, confirmedAt: null }
-    story.log = [...(story.log ?? []), `${today} 业务分析按本故事补使用语句：${ids.length ? ids.join('、') : '无新增'}`]
+    story.log = [...(story.log ?? []), `${today} 业务分析按五问补语句：${ids.length ? ids.join('、') : '无新增'}`]
     writeJson(storyPath(id), story)
-    console.log(`已登记本故事的使用语句 ${ids.length} 条${ids.length ? '：' + ids.join('、') : '（无新增）'}；下一步：人确认（story usage ${id} confirm）`)
+    console.log(`已登记本故事按五问补出的语句 ${ids.length} 条${ids.length ? '：' + ids.join('、') : '（无新增）'}；下一步：人确认（story usage ${id} confirm）`)
   } else if (sub === 'confirm') {
-    if (!story.usage?.proposedAt) die('业务分析还没登记本故事的使用语句（story usage … propose）')
+    if (!story.usage?.proposedAt) die('业务分析还没登记本故事按五问补出的语句（story usage … propose）')
     const slice = readJson(slicePath(id))
     const ids = story.usage.proposed ?? []
     story.usage.confirmedAt = today
     story.traces = [...new Set([...story.traces, ...ids])].sort()
     slice.traces = [...new Set([...slice.traces, ...ids])].sort()
-    slice.log.push({ ts: today, stage: 'slice', text: `人确认了本故事的使用语句：${ids.length ? ids.join('、') : '无新增'}${ids.length ? '；已并入切片 traces，模型必须回应它们' : ''}` })
-    story.log = [...(story.log ?? []), `${today} 人确认使用语句 ${ids.length} 条`]
+    slice.log.push({ ts: today, stage: 'slice', text: `人确认了本故事按五问补出的语句：${ids.length ? ids.join('、') : '无新增'}${ids.length ? '；已并入切片 traces，模型必须回应它们' : ''}` })
+    story.log = [...(story.log ?? []), `${today} 人确认五问补出的语句 ${ids.length} 条`]
     writeJson(storyPath(id), story)
     writeJson(slicePath(id), slice)
-    console.log(`使用语句已确认 ${ids.length} 条；${ids.length ? '已并入 ' + id + ' 的 traces；' : ''}下一步：模型师建模`)
-  } else die('用法：story usage <项目目录> <切片id> propose <U-001,… | --none> | confirm')
+    console.log(`五问补出的语句已确认 ${ids.length} 条；${ids.length ? '已并入 ' + id + ' 的 traces；' : ''}下一步：模型师建模`)
+  } else die('用法：story usage <项目目录> <切片id> propose <R-001,… | --none> | confirm')
 }
 
 // ---------- apply ----------
@@ -141,8 +145,8 @@ if (cmd === 'apply') {
     const lines = [`\n## ${today}（故事切片 ${id}「${story.title}」的裁定卡）\n`, '| 事项 | 裁定 |', '|---|---|']
     for (const c of pending) {
       const opt = c.options.find((o) => o.key === c.ruling.choice)
-      const changed = c.ruling.choice !== c.current
-      lines.push(`| ${c.question} | ${c.ruling.previous ? `**改判**（原 ${c.ruling.previous}）→ ` : ''}**${c.ruling.choice}**：${opt?.text ?? ''}${c.ruling.note ? `（${c.ruling.note}）` : ''}${changed ? ' — 与模型现状不同，回流模型师' : ' — 与模型现状一致'} |`)
+      const changed = !voided(c) && c.ruling.choice !== c.current
+      lines.push(`| ${c.question} | ${c.ruling.previous ? `**改判**（原 ${c.ruling.previous}）→ ` : ''}**${c.ruling.choice}**：${opt?.text ?? ''}${c.ruling.note ? `（${c.ruling.note}）` : ''}${voided(c) ? ' — 本卡作废，争点已不存在' : changed ? ' — 与模型现状不同，回流模型师' : ' — 与模型现状一致'} |`)
       if (changed) rework.push(`${c.id} ${c.question}：改为「${c.ruling.choice}」${opt ? '（' + opt.text + '）' : ''}${c.ruling.note ? '——' + c.ruling.note : ''}`)
       c.applied = true
     }
@@ -193,17 +197,55 @@ if (cmd === 'serve') {
   const CSS = `
   :root { --fg:#1f2328; --muted:#57606a; --line:#e6e8eb; --bg:#fff; --lo:#f6f8fa; --ok:#1a7f37; --bad:#cf222e; --walk:#eef4ff; --gap:#fff1f0; --rec:#fff8e1; --biz:#f3f7ee; }
   body { margin:0; font: 14px/1.6 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; color:var(--fg); background:var(--bg); }
-  header { position:sticky; top:0; background:#fff; border-bottom:1px solid var(--line); padding:10px 20px; display:flex; gap:16px; align-items:center; z-index:2; }
+  header { position:sticky; top:0; background:#fff; border-bottom:1px solid var(--line); padding:10px 20px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; z-index:3; }
+  #rail { flex-basis:100%; display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
+  #rail:empty { display:none; }
+  #rail a { display:inline-flex; align-items:center; gap:3px; min-width:24px; height:24px; padding:0 7px; border:1px solid var(--line); border-radius:6px; font-size:12px; text-decoration:none; color:var(--muted); background:#fff; }
+  #rail a.done { background:#dcfce7; border-color:#9ccc9c; color:#166534; }
+  #rail a.todo { background:#fff7e6; border-color:#f2c57c; color:#8a5a00; }
+  #rail a.challenge { background:#ffe9e9; border-color:#e5a0a0; color:#a40e26; }
+  #rail a.old { opacity:.55; }
+  #rail a i { font-style:normal; font-size:10px; }
+  #rail .lab { font-size:12px; color:var(--muted); margin-right:2px; }
+  #rail button.fold { height:24px; padding:0 8px; font-size:12px; margin-left:6px; }
+  .todo { background:#fff7e6; border:1px solid #f2c57c; border-radius:8px; padding:9px 11px; margin-bottom:12px; font-size:13px; }
+  .todo.clear { background:#f0fbf2; border-color:#9ccc9c; }
+  .todo b { display:block; margin-bottom:5px; }
+  .todo a { display:block; color:#0969da; text-decoration:none; padding:2px 0; border-top:1px solid rgba(0,0,0,.06); }
+  .todo a:first-of-type { border-top:0; }
+  .todo a:hover { text-decoration:underline; }
+  .todo .why { color:var(--muted); }
   header h1 { font-size:16px; margin:0; flex:1; }
+  #segs { position:sticky; top:43px; z-index:2; background:var(--lo); border-bottom:1px solid var(--line); padding:5px 20px; font-size:12px; }
+  #segs .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:2px 0; opacity:.55; }
+  #segs .row.here { opacity:1; }
+  #segs .row .chain { min-width:190px; }
+  #segs .chain { color:var(--muted); margin-right:4px; }
+  #segs a { display:inline-flex; gap:6px; align-items:baseline; text-decoration:none; color:var(--fg); background:#fff; border:1px solid #d0d7de; border-radius:999px; padding:3px 11px; }
+  #segs a:hover { border-color:#1f6feb; }
+  #segs a.on { border-color:#1f6feb; background:#eef4ff; font-weight:600; }
+  #segs a .d { color:var(--muted); font-weight:400; font-size:11px; }
+  #segs .arrow { color:#9ca3af; }
   header a { color:#0969da; font-size:13px; }
   button { font:inherit; padding:6px 14px; border:1px solid #d0d7de; border-radius:6px; background:#f6f8fa; cursor:pointer; }
   button.primary { background:#1f6feb; color:#fff; border-color:#1f6feb; }
   button:disabled { opacity:.5; cursor:default; }
   main { display:grid; grid-template-columns: minmax(0, 1fr) 380px; gap:20px; padding:16px 20px 80px; align-items:start; }
   main.one { grid-template-columns: minmax(0, 1fr); max-width:1000px; }
-  aside { position:sticky; top:56px; max-height: calc(100vh - 72px); overflow:auto; padding-right:4px; }
+  aside { position:sticky; top:96px; max-height: calc(100vh - 112px); overflow:auto; padding-right:4px; }
+  .step, .choice { scroll-margin-top:104px; }
+  .flash { outline:2px solid #f59e0b; outline-offset:2px; }
+  .step .head { cursor:pointer; user-select:none; }
+  .step .head .fold { color:var(--muted); font-size:11px; width:12px; }
+  .step .head .sum { font-size:12px; color:var(--muted); margin-left:8px; }
+  .step .head .sum.todo-sum { color:#8a5a00; }
+  .step.collapsed .body { display:none; }
+  .step.collapsed { padding:8px 14px; }
   .persona { background:var(--lo); border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin-bottom:12px; }
   .lineage { margin-top:6px; font-size:13px; } .lineage b { color:#1f6feb; }
+  .prev { margin-top:8px; background:#fff; border:1px solid var(--line); border-left:3px solid #1f6feb; border-radius:6px; padding:8px 11px; font-size:13px; }
+  .prev .t { color:var(--muted); font-weight:600; font-size:12px; margin-bottom:3px; }
+  .prev.leads { border-left-color:#8250df; margin-top:14px; }
   .badge { font-size:11px; border-radius:6px; padding:1px 6px; margin-left:auto; } .badge.new { background:#dcfce7; color:#166534; } .badge.old { background:#f3f4f6; color:#6b7280; }
   .step.old-step { opacity:.82; }
   h2 { font-size:15px; margin:18px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
@@ -221,6 +263,14 @@ if (cmd === 'serve') {
   .biz .t { color:var(--muted); font-weight:600; font-size:12px; margin-bottom:4px; display:flex; justify-content:space-between; }
   .biz label.s { display:grid; grid-template-columns: 18px 56px 1fr; gap:6px; padding:3px 0; cursor:pointer; align-items:start; }
   .biz label.s.on { color:#1a7f37; }
+  .biz .seen { margin-top:6px; border-top:1px dashed #cbd8bd; padding-top:5px; }
+  .biz .seen .bar { display:flex; gap:8px; align-items:center; color:var(--muted); font-size:12px; cursor:pointer; }
+  .biz .seen .bar button { font-size:11px; padding:2px 8px; }
+  .biz .seen.shut .body { display:none; }
+  .biz .seen label.s .where { color:var(--muted); font-size:11px; }
+  .cnote-kept { font-size:12px; color:#1a7f37; margin-top:3px; }
+  .walk .dup { color:#9aa4b0; }
+  .walk .dup em { font-style:normal; font-size:11px; color:#9aa4b0; }
   .biz code { font-family: ui-monospace, Consolas, monospace; font-size:12px; color:#0969da; }
   .biz .kind { color:var(--muted); }
   .quiz { margin-top:8px; padding:8px 10px; border:1px dashed #d0d7de; border-radius:6px; }
@@ -297,52 +347,143 @@ function linkTerms(text) {
   const html = `<!doctype html>
 <html lang="zh"><head><meta charset="utf-8"><title>走故事</title><style>${CSS}</style></head>
 <body>
-<header><a href="/">← 框架图</a><h1 id="title">走故事</h1><a href="/glossary" target="glossary">名词目录 ↗</a><a href="/model" target="model">模型图 ↗</a><span id="status"></span><button id="approve">业务理解一致</button><button id="save" class="primary">保存</button></header>
+<header><a href="/">← 框架图</a><h1 id="title">走故事</h1><a href="/board" target="board">谁在做什么 ↗</a><a href="/glossary" target="glossary">名词目录 ↗</a><a href="/model" target="model">模型图 ↗</a><span id="status"></span><button id="approve">业务理解一致</button><button id="save" class="primary">保存</button><div id="rail"></div></header>
+<nav id="segs"></nav>
 <main><section id="story"></section><aside id="side"></aside></main>
 <script>
 ${SHARED_JS}
 let data = null, biz = {}
 let revealed = {}
+let collapsed = {}, collapsedInit = false
 function fmt(v) { return typeof v === 'number' ? (Number.isInteger(v) && Math.abs(v) < 1000 ? String(v) : v.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : esc(v) }
 function numEq(a, b) { const x = Number(String(a).replace(/[,$\\s]/g,'')), y = Number(String(b).replace(/[,$\\s]/g,'')); return Number.isFinite(x) && Number.isFinite(y) && Math.abs(x-y) < 0.005 }
 function isCorrect(q, ans) { return q.kind === 'number' ? numEq(ans, q.answer) : String(ans).trim() === String(q.answer).trim() }
 function maxFact(label) { let m = 0; for (const s of data.steps) { const v = s.facts?.[label]; if (typeof v === 'number' && v > m) m = v } return m }
 function confirmedSet(s) { return new Set(s.review?.confirmed ?? []) }
-function bizLine(s, i, id) {
+function bizLine(s, i, id, seenAt) {
   const b = biz[id]
   const on = confirmedSet(s).has(id)
-  const body = b ? (b.ruleKind ? '<span class="kind">(' + esc(b.ruleKind) + ') </span>' : '') + linkTerms(b.text) : '<span class="kind">（业务描述里找不到这条）</span>'
-  return '<label class="s' + (on ? ' on' : '') + '"><input type="checkbox" data-conf="' + i + '" data-id="' + esc(id) + '"' + (on ? ' checked' : '') + '><code>' + esc(id) + '</code><span>' + body + '</span></label>'
+  const body = b ? (b.label ? '<span class="kind">(' + esc(b.label) + ') </span>' : '') + linkTerms(b.text) : '<span class="kind">（业务描述里找不到这条）</span>'
+  const where = seenAt ? '<span class="where">第 ' + seenAt + ' 步已看过</span> ' : ''
+  return '<label class="s' + (on ? ' on' : '') + '"><input type="checkbox" data-conf="' + i + '" data-id="' + esc(id) + '"' + (on ? ' checked' : '') + '><code>' + esc(id) + '</code><span>' + where + body + '</span></label>'
+}
+/** 每个编号头一次出现在第几步；同一条语句在后面的步骤里只是又用到一次，不必重读 */
+function firstSeen() {
+  const at = {}
+  for (const s of data.steps) for (const id of s.traces || []) if (at[id] == null) at[id] = s.n
+  return at
 }
 function stepComplete(s) { const c = confirmedSet(s); return s.review?.verdict === 'agree' && (s.traces||[]).every(t => c.has(t)) }
+/** 这一步还差什么：一句话一件事，索引、步骤条与折叠摘要都用它 */
+function stepTodo(s) {
+  const out = []
+  const c = confirmedSet(s)
+  const miss = (s.traces || []).filter(t => !c.has(t))
+  if (miss.length) out.push({ kind: 'biz', text: miss.length + ' 条语句没勾（' + miss.join('、') + '）' })
+  if (s.quiz && !s.human) out.push({ kind: 'quiz', text: '一道题没答' })
+  const cards = data.choices.filter(x => x.step === s.n && !x.ruling)
+  if (cards.length) out.push({ kind: 'card', text: cards.length + ' 张卡没裁（' + cards.map(x => x.id).join('、') + '）' })
+  if (!s.review) out.push({ kind: 'review', text: '这一步没审过' })
+  else if (s.review.verdict === 'challenge') out.push({ kind: 'challenge', text: '你在这里留了质疑' })
+  return out
+}
+function jump(sel) {
+  const el = document.querySelector(sel)
+  if (!el) return
+  const host = el.closest('.step')
+  if (host?.classList.contains('collapsed')) { collapsed[Number(host.dataset.i)] = false; host.classList.remove('collapsed') }
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  el.classList.add('flash')
+  setTimeout(() => el.classList.remove('flash'), 1600)
+}
+function renderRail() {
+  const st = data.steps
+  let h = '<span class="lab">跳到：</span>'
+  st.forEach(s => {
+    const td = stepTodo(s)
+    const bad = s.review?.verdict === 'challenge'
+    const cls = bad ? 'challenge' : (td.length ? 'todo' : 'done')
+    const tip = '第 ' + s.n + ' 步　' + s.day + '　' + s.actor + (td.length ? '　还差：' + td.map(x => x.text).join('；') : '　已过')
+    h += '<a href="#step-' + s.n + '" class="' + cls + (inherited(s) ? ' old' : '') + '" title="' + esc(tip) + '" data-go="#step-' + s.n + '">' + s.n + (td.length ? '<i>●</i>' : '') + '</a>'
+  })
+  const loose = data.choices.filter(c => !c.step || !st.some(s => s.n === c.step))
+  const looseOpen = loose.filter(c => !c.ruling)
+  if (looseOpen.length) h += '<a href="#card-' + esc(looseOpen[0].id) + '" class="todo" title="' + esc('不挂在某一步上的卡还有 ' + looseOpen.length + ' 张没裁') + '" data-go="#card-' + esc(looseOpen[0].id) + '">卡<i>●</i></a>'
+  const shut = data.steps.every((s, i) => collapsed[i])
+  h += '<button class="fold" id="foldall">' + (shut ? '全部展开' : '全部收起') + '</button>'
+  $('#rail').innerHTML = h
+}
+function renderTodo() {
+  const st = data.steps
+  const rows = []
+  st.forEach(s => { for (const td of stepTodo(s)) rows.push({ href: '#step-' + s.n, label: '第 ' + s.n + ' 步', why: td.text, kind: td.kind }) })
+  for (const c of data.choices) {
+    if (c.ruling) continue
+    if (c.step && st.some(s => s.n === c.step)) continue
+    rows.push({ href: '#card-' + c.id, label: '裁定 ' + c.id, why: '没裁（不挂在某一步上）', kind: 'card' })
+  }
+  const order = { quiz: 0, card: 1, biz: 2, review: 3, challenge: 4 }
+  rows.sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9))
+  if (!rows.length) return '<div class="todo clear"><b>都走完了</b>每一步都勾全并审过，题答了，卡裁了。</div>'
+  return '<div class="todo"><b>还差 ' + rows.length + ' 处</b>' + rows.map(r => '<a href="' + r.href + '" data-go="' + r.href + '">' + esc(r.label) + '　<span class="why">' + esc(r.why) + '</span></a>').join('') + '</div>'
+}
 function canApprove() { return data.steps.length && data.steps.every(stepComplete) }
 function choiceCard(c, ci) {
-  let a = '<div class="choice' + (c.ruling ? ' ruled' : '') + '"><div class="q">裁定 ' + esc(c.id) + '　' + esc(c.question) + '</div>' + (c.context ? '<div class="ctx">' + esc(c.context) + '</div>' : '')
+  let a = '<div class="choice' + (c.ruling ? ' ruled' : '') + '" id="card-' + esc(c.id) + '"><div class="q">裁定 ' + esc(c.id) + '　' + esc(c.question) + '</div>' + (c.context ? '<div class="ctx">' + esc(c.context) + '</div>' : '')
   for (const o of c.options) {
     const sel = c.ruling?.choice === o.key
     a += '<div class="opt' + (sel ? ' sel' : '') + '" data-c="' + ci + '" data-k="' + esc(o.key) + '"><span class="key">' + esc(o.key) + '</span><span>' + esc(o.text) + (o.key === c.recommended ? '<span class="tag rec">推荐</span>' : '') + (o.key === c.current ? '<span class="tag cur">模型现状</span>' : '') + '</span>' + (o.consequence ? '<span class="cons">' + esc(o.consequence) + '</span>' : '') + '</div>'
   }
-  a += '<div class="row"><input type="text" style="flex:1" data-cnote="' + ci + '" placeholder="理由或补充（可空）" value="' + esc(c.ruling?.note ?? '') + '"></div></div>'
+  a += '<div class="row"><input type="text" style="flex:1" data-cnote="' + ci + '" placeholder="理由或补充（可空；还没裁也存得住）" value="' + esc(c.ruling?.note ?? c.note ?? '') + '"></div>' + (!c.ruling && c.note ? '<div class="cnote-kept">这段话已经存下来了，等你裁定时并进裁定备注</div>' : '') + '</div>'
   return a
+}
+function bindRail() {
+  document.querySelectorAll('#rail [data-go]').forEach(el => el.addEventListener('click', ev => { ev.preventDefault(); jump(el.dataset.go) }))
+  const fa = document.getElementById('foldall')
+  if (fa) fa.addEventListener('click', () => {
+    const shut = data.steps.every((s, i) => collapsed[i])
+    data.steps.forEach((s, i) => { collapsed[i] = !shut })
+    render()
+  })
 }
 function render() {
   $('#title').textContent = data.title + '（' + data.slice + '）'
   const ab = $('#approve'); ab.textContent = data.approved ? '理解一致 ' + data.approved : '业务理解一致'; ab.disabled = !!data.approved || !canApprove()
   ab.title = data.approved ? '' : '每一步的语句都打了勾、并点了「同意」，才算理解一致；点了之后故事用到的编号顺带成为切片范围'
   const st = data.steps
+  if (!collapsedInit) { st.forEach((s, i) => { collapsed[i] = stepTodo(s).length === 0 }); collapsedInit = true }
+  const seenAt = firstSeen()
+  const walkSeen = {}
+  for (const s of st) for (const k of ['asks', 'changes']) for (const x of s.walk?.[k] ?? []) for (const line of String(x).split(/；/).map(y => y.trim()).filter(Boolean)) if (walkSeen[line] == null) walkSeen[line] = s.n
   const done = st.filter(stepComplete).length, challenged = st.filter(s => s.review?.verdict === 'challenge').length
   const answered = st.filter(s => s.human).length, right = st.filter(s => s.human?.correct).length, quizzes = st.filter(s => s.quiz).length
   const ruled = data.choices.filter(c => c.ruling).length
   const total = st.reduce((n, s) => n + (s.traces||[]).length, 0), conf = st.reduce((n, s) => n + confirmedSet(s).size, 0)
-  let h = '<div class="persona"><b>' + esc(data.persona.name) + '</b>　' + linkTerms(data.persona.description) + '<div class="summary">已过 ' + done + '/' + st.length + ' 步，语句确认 ' + conf + '/' + total + '，质疑 ' + challenged + (quizzes ? '　·　预测 ' + answered + '/' + quizzes + '，答对 ' + right : '') + '　·　裁定 ' + ruled + '/' + data.choices.length + '</div>' + (data.basedOn ? '<div class="lineage">上一版：<a href="/story?slice=' + esc(data.basedOn) + '">' + esc(data.basedOn) + (base ? '「' + esc(base.title) + '」' : '') + '</a>　这一版加了：<b>' + esc(data.adds || '') + '</b>' + (base ? '　·　新步骤 ' + st.filter(s => !inherited(s)).length + ' 步，老步骤 ' + st.filter(inherited).length + ' 步（灰标）' : '') + '</div>' : '') + '<div class="hint">每一步下面是它依据的业务语句，看懂一条勾一条；全勾了就是同意这一步。觉得不对点「质疑」写理由。带虚线的词点一下看名词目录。裁定挂在它发生的那一步下面。</div></div>'
+  let h = '<div class="persona"><b>' + esc(data.persona.name) + '</b>　' + linkTerms(data.persona.description) + '<div class="summary">已过 ' + done + '/' + st.length + ' 步，语句确认 ' + conf + '/' + total + '，质疑 ' + challenged + (quizzes ? '　·　预测 ' + answered + '/' + quizzes + '，答对 ' + right : '') + '　·　裁定 ' + ruled + '/' + data.choices.length + '</div>' + (data.basedOn ? '<div class="lineage">上一版：<a href="/story?slice=' + esc(data.basedOn) + '">' + esc(data.basedOn) + (base ? '「' + esc(base.title) + '」' : '') + '</a>　这一版加了：<b>' + esc(data.adds || '') + '</b>' + (base ? '　·　新步骤 ' + st.filter(s => !inherited(s)).length + ' 步，老步骤 ' + st.filter(inherited).length + ' 步（灰标）' : '') + '</div>' : '') + (data.previously ? '<div class="prev"><div class="t">前情提要 — 上一版结束时</div>' + linkTerms(data.previously.text) + (data.previously.facts && Object.keys(data.previously.facts).length ? '<div class="facts">' + Object.entries(data.previously.facts).map(([k, v]) => '<div class="fact"><b>' + esc(k) + '</b><span>' + fmt(v) + '</span></div>').join('') + '</div>' : '') + '</div>' : '') + '<div class="hint">每一步下面是它依据的业务语句，看懂一条勾一条；全勾了就是同意这一步。觉得不对点「质疑」写理由。带虚线的词点一下看名词目录。裁定挂在它发生的那一步下面。</div></div>'
   let lock = false
   st.forEach((s, i) => {
     const open = !s.quiz || s.human || revealed[i]
     const old = inherited(s)
-    const cls = 'step' + (s.review ? ' ' + s.review.verdict : '') + (lock ? ' locked' : '') + (old ? ' old-step' : '')
-    h += '<div class="' + cls + '" id="step-' + s.n + '"><div class="head"><span class="n">' + s.n + '</span><span class="day">' + esc(s.day) + '</span><span class="actor">' + esc(s.actor) + '</span>' + (base ? '<span class="badge ' + (old ? 'old">上一版已有' : 'new">本版新增') + '</span>' : '') + '</div>'
-    h += '<div class="text">' + linkTerms(s.text) + '</div>'
-    if (s.traces?.length) h += '<div class="biz"><div class="t"><span>业务内容：看懂一条勾一条</span><span>' + confirmedSet(s).size + '/' + s.traces.length + '</span></div>' + s.traces.map(t => bizLine(s, i, t)).join('') + '</div>'
+    const td = stepTodo(s)
+    const shut = !!collapsed[i]
+    const cls = 'step' + (s.review ? ' ' + s.review.verdict : '') + (lock ? ' locked' : '') + (old ? ' old-step' : '') + (shut ? ' collapsed' : '')
+    const sum = td.length ? '<span class="sum todo-sum">还差：' + esc(td.map(x => x.text).join('；')) + '</span>' : '<span class="sum">已过</span>'
+    h += '<div class="' + cls + '" id="step-' + s.n + '" data-i="' + i + '"><div class="head" data-fold="' + i + '"><span class="fold">' + (shut ? '▸' : '▾') + '</span><span class="n">' + s.n + '</span><span class="day">' + esc(s.day) + '</span><span class="actor">' + esc(s.actor) + '</span>' + sum + (base ? '<span class="badge ' + (old ? 'old">上一版已有' : 'new">本版新增') + '</span>' : '') + '</div>'
+    h += '<div class="body"><div class="text">' + linkTerms(s.text) + '</div>'
+    if (s.traces?.length) {
+      const fresh = s.traces.filter(t => seenAt[t] === s.n)
+      const again = s.traces.filter(t => seenAt[t] !== s.n)
+      const cf = confirmedSet(s)
+      const againOn = again.filter(t => cf.has(t)).length
+      h += '<div class="biz"><div class="t"><span>业务内容：看懂一条勾一条</span><span>' + cf.size + '/' + s.traces.length + '</span></div>'
+      h += fresh.map(t => bizLine(s, i, t)).join('')
+      if (again.length) {
+        // 全勾过了就收起；还有没勾的，只在这一步另有新语句时才收起（免得整块内容都藏起来）
+        const seenShut = againOn === again.length || fresh.length > 0
+        h += '<div class="seen' + (seenShut ? ' shut' : '') + '" data-seen="' + i + '"><div class="bar"><span data-seentog="' + i + '">前面看过的 ' + again.length + ' 条（已勾 ' + againOn + '）　▾</span>' + (againOn < again.length ? '<button data-seenall="' + i + '">这几条前面看过，勾上</button>' : '') + '</div><div class="body">' + again.map(t => bizLine(s, i, t, seenAt[t])).join('') + '</div></div>'
+      }
+      h += '</div>'
+    }
     if (s.quiz) {
       h += '<div class="quiz"><div class="ask">先猜：' + esc(s.quiz.ask) + '</div>'
       if (s.human) {
@@ -366,7 +507,8 @@ function render() {
       if (w.kind === 'none') h += '<span class="k">模型里没有动作</span>'
       else h += '<span class="k">' + ({command:'命令',query:'查询',event:'事件',time:'时间触发'})[w.kind] + '</span> <code>' + esc(w.name) + '</code>' + (w.aggregate ? ' → <code>' + esc(w.aggregate) + '</code>' : '')
       const lines = (arr) => arr.flatMap(x => String(x).split(/；/).map(s => s.trim()).filter(Boolean))
-      const ol = (arr) => { const L = lines(arr); return L.length === 1 ? ' ' + esc(L[0]) : '<ol>' + L.map(x => '<li>' + esc(x) + '</li>').join('') + '</ol>' }
+      const mark = (x) => { const at = walkSeen[x]; return at != null && at !== s.n ? '<span class="dup">' + esc(x) + ' <em>（同第 ' + at + ' 步）</em></span>' : esc(x) }
+      const ol = (arr) => { const L = lines(arr); return L.length === 1 ? ' ' + mark(L[0]) : '<ol>' + L.map(x => '<li>' + mark(x) + '</li>').join('') + '</ol>' }
       if (w.asks?.length) h += '<div><span class="k">先问：</span>' + ol(w.asks) + '</div>'
       if (w.changes?.length) h += '<div><span class="k">写入的事实：</span>' + ol(w.changes) + '</div>'
       if (w.emits?.length) h += '<div><span class="k">发出：</span>' + w.emits.map(e => '<code>' + esc(e) + '</code>').join(' ') + '</div>'
@@ -378,17 +520,37 @@ function render() {
     const rv = s.review?.verdict
     h += '<div class="review"><div class="btns"><button class="agree' + (rv === 'agree' ? ' on' : '') + '" data-rev="agree" data-i="' + i + '">同意（勾全部）</button><button class="challenge' + (rv === 'challenge' ? ' on' : '') + '" data-rev="challenge" data-i="' + i + '">质疑</button>' + (stepComplete(s) ? '<span class="verdict ok">已过</span>' : '') + '</div>'
     h += '<textarea data-rnote="' + i + '" placeholder="' + (rv === 'challenge' ? '质疑的理由（必填）' : '你的想法：哪里不对、哪里没讲清、旧系统是怎么做的……') + '">' + esc(s.review?.note ?? '') + '</textarea></div>'
-    h += '</div>'
+    h += '</div></div>'
     if (s.quiz && !s.human && !revealed[i]) lock = true
   })
+  if (data.leadsTo) h += '<div class="prev leads"><div class="t">往下接什么 — 不在本段展开</div>' + linkTerms(data.leadsTo) + '</div>'
   $('#story').innerHTML = h
-  let a = ''
+  renderRail()
+  let a = renderTodo()
   const loose = data.choices.map((c, ci) => [c, ci]).filter(([c]) => !c.step || !st.some(s => s.n === c.step))
   if (loose.length) { a += '<h2>裁定（不挂在某一步上）</h2>'; for (const [c, ci] of loose) a += choiceCard(c, ci) }
   if (data.gaps?.length) a += '<h2>缺口 = 下一版故事的候选</h2><p class="summary">这条主线没走到的怪事，不用在这里答。勾的是「下一版先做哪个」：从这条故事起笔只加那一段，整条重新走通。没勾的不丢，自动跟到下一版的候选栏，一版做一个；勾多个就按顺序排。</p><ul class="gaps">' + data.gaps.map((g, gi) => '<li><label><input type="checkbox" data-gap="' + gi + '"' + ((data.gapPicks || []).includes(gi) ? ' checked' : '') + '> 滚成下一版</label>　' + linkTerms(g) + '</li>').join('') + '</ul>'
   a += '<h2>整条故事的想法</h2><textarea id="note" placeholder="整体上哪里不对、缺了什么、顺序不合理……">' + esc(data.note ?? '') + '</textarea>'
   $('#side').innerHTML = a
   const m = document
+  m.querySelectorAll('#side [data-go]').forEach(el => el.addEventListener('click', ev => { ev.preventDefault(); jump(el.dataset.go) }))
+  m.querySelectorAll('[data-fold]').forEach(el => el.addEventListener('click', () => {
+    const i = Number(el.dataset.fold); collapsed[i] = !collapsed[i]
+    const box = el.closest('.step'); box.classList.toggle('collapsed', collapsed[i])
+    el.querySelector('.fold').textContent = collapsed[i] ? '▸' : '▾'
+    renderRail(); bindRail()
+  }))
+  bindRail()
+  m.querySelectorAll('[data-seentog]').forEach(el => el.addEventListener('click', () => el.closest('.seen').classList.toggle('shut')))
+  m.querySelectorAll('[data-seenall]').forEach(b => b.addEventListener('click', () => {
+    const s = data.steps[Number(b.dataset.seenall)]
+    const box = b.closest('.seen')
+    const set = new Set(s.review?.confirmed ?? [])
+    box.querySelectorAll('input[data-id]').forEach(cb => set.add(cb.dataset.id))
+    s.review = s.review ?? { verdict: 'agree', at: new Date().toISOString() }
+    s.review.confirmed = [...set]
+    render(); dirty()
+  }))
   m.querySelectorAll('[data-reveal]').forEach(b => b.addEventListener('click', () => {
     const i = Number(b.dataset.reveal); const s = data.steps[i]
     const inp = m.querySelector('[data-ans="' + i + '"]'); const ans = (inp?.value ?? '').trim()
@@ -427,15 +589,46 @@ function render() {
     c.ruling = { choice: el.dataset.k, at: new Date().toISOString() }
     if (note) c.ruling.note = note
     if (prev && prev !== el.dataset.k) c.ruling.previous = prev
+    if (c.note && !c.ruling.note) { c.ruling.note = c.note; delete c.note }
     c.applied = false; delete c.unlocked; render(); dirty()
   }))
-  m.querySelectorAll('[data-cnote]').forEach(el => el.addEventListener('input', () => { const c = data.choices[Number(el.dataset.cnote)]; if (!c.ruling) return; c.ruling.note = el.value; if (!c.ruling.note) delete c.ruling.note; dirty() }))
+  m.querySelectorAll('[data-cnote]').forEach(el => el.addEventListener('input', () => {
+    const c = data.choices[Number(el.dataset.cnote)]
+    const v = el.value
+    // 还没选甲乙丙也要存得住：先记在卡上，裁定时并进 ruling.note。从前这里直接 return，人写的字会被默默丢掉。
+    if (c.ruling) { c.ruling.note = v; if (!v) delete c.ruling.note; delete c.note }
+    else { if (v) c.note = v; else delete c.note }
+    dirty()
+  }))
   $('#note').addEventListener('input', () => { data.note = $('#note').value; if (!data.note) delete data.note; dirty() })
   m.querySelectorAll('[data-gap]').forEach(cb => cb.addEventListener('change', () => { const set = new Set(data.gapPicks || []); cb.checked ? set.add(Number(cb.dataset.gap)) : set.delete(Number(cb.dataset.gap)); data.gapPicks = [...set].sort((x, y) => x - y); if (!data.gapPicks.length) delete data.gapPicks; dirty() }))
 }
 const SLICE = new URLSearchParams(location.search).get('slice') || ''
 let base = null
-async function load() { const r = await (await fetch('/data?slice=' + SLICE)).json(); if (!r.story) { $('#story').innerHTML = '<p>没有这条故事：' + esc(SLICE) + '</p>'; return } data = r.story; base = r.base; biz = r.business; buildTerms(r.glossary); render() }
+function renderSegs(segs) {
+  const box = $('#segs')
+  if (!box) return
+  if (!segs || segs.length < 2) { box.style.display = 'none'; return }
+  // 按业务故事分行，行内按故事里最早那一天排；没归到链上的（比如走完整条链的老切片）单独一行
+  const groups = []
+  for (const s of segs) {
+    const key = s.businessStory || ''
+    let g = groups.find((x) => x.key === key)
+    if (!g) { g = { key: key, items: [] }; groups.push(g) }
+    g.items.push(s)
+  }
+  const chip = (s) => {
+    const when = s.day ? s.day.slice(5).split('-').join('/') : '待写'
+    const on = s.slice === data.slice ? ' on' : ''
+    return '<a class="seg' + on + '" href="/story?slice=' + esc(s.slice) + '" title="' + esc(s.intent || '') + '">' + esc(s.title) + '<span class="d">' + when + '·' + s.steps + '步' + (s.approved ? '' : '·待认可') + '</span></a>'
+  }
+  box.innerHTML = groups.map((g) => {
+    const here = g.items.some((s) => s.slice === data.slice)
+    const label = g.key ? '业务故事「' + esc(g.key) + '」' : '没归到业务故事链上'
+    return '<div class="row' + (here ? ' here' : '') + '"><span class="chain">' + label + '</span>' + g.items.map(chip).join('<span class="arrow">→</span>') + '</div>'
+  }).join('')
+}
+async function load() { const r = await (await fetch('/data?slice=' + SLICE)).json(); if (!r.story) { $('#story').innerHTML = '<p>没有这条故事：' + esc(SLICE) + '</p>'; return } data = r.story; base = r.base; biz = r.business; buildTerms(r.glossary); render(); renderSegs(r.segs) }
 function inherited(s) { return !!(base && base.texts.includes(s.text)) }
 async function save(auto) {
   if (!auto) { const bad = data.steps.filter(s => s.review?.verdict === 'challenge' && !s.review.note); if (bad.length) { alert('第 ' + bad.map(s => s.n).join('、') + ' 步点了质疑但没写理由'); return false } }
@@ -506,7 +699,7 @@ load()
 
   /** 框架图的数据：模块 × 故事。模块来自 model/modules.json；聚合来自 module.json（若有）与故事的 walk */
   function mapData() {
-    const { loadModel, loadSlices, loadBusiness, walk } = require('./lib/project')
+    const { loadModel, loadSlices, loadBusiness, walk, labelOf } = require('./lib/project')
     const model = loadModel(root)
     const modules = (model.modules?.data.modules ?? []).map((m) => {
       const mf = model.moduleFiles.find((f) => f.module === m.name)
@@ -583,7 +776,7 @@ load()
   .aggs code { background:var(--lo); padding:0 5px; border-radius:3px; margin-right:4px; font-size:12px; } .aggs code.lit { background:#dbe4ff; color:#1f6feb; }
 </style></head>
 <body>
-<header><h1 id="title">框架图</h1><a href="/glossary" target="glossary">名词目录 ↗</a><a href="/model" target="model">模型图 ↗</a><span id="status"></span></header>
+<header><h1 id="title">框架图</h1><a href="/board" target="board">谁在做什么 ↗</a><a href="/glossary" target="glossary">名词目录 ↗</a><a href="/model" target="model">模型图 ↗</a><span id="status"></span></header>
 <main class="map"><section id="m"></section></main>
 <script>
 ${SHARED_JS}
@@ -713,8 +906,63 @@ load()
   const notesP = path.join(root, 'business', '_词汇意见.json')
   const modelNotesP = path.join(root, 'reports', '_模型意见.json')
   const MODEL_INJECT = "\n<style>\n  .mnote { margin-top:8px; border-top:1px dashed #d0d7de; padding-top:6px; font-size:12px; }\n  .mnote textarea { width:100%; min-height:38px; box-sizing:border-box; font:inherit; font-size:12px; border:1px solid #d0d7de; border-radius:6px; padding:4px 6px; }\n  .mnote .row { display:flex; gap:6px; align-items:center; margin-top:4px; }\n  .mnote button { font-size:12px; padding:3px 10px; border:1px solid #1f6feb; background:#1f6feb; color:#fff; border-radius:6px; cursor:pointer; }\n  .mnote .old { background:#fff7e6; border:1px solid #f2c57c; border-radius:6px; padding:4px 8px; margin:3px 0; }\n  .mnote .old.done { background:#f3f4f6; border-color:#d0d7de; color:#6b7280; }\n  .mnote .old small { color:#6b7280; margin-left:6px; }\n  .mnote-top { position:fixed; right:16px; top:52px; z-index:9; }\n  .mnote-top button.dd { font-size:12px; padding:4px 10px; border:1px solid #d0d7de; background:#fff; border-radius:6px; cursor:pointer; }\n  .mnote-top .menu { display:none; position:absolute; right:0; top:30px; width:360px; max-height:60vh; overflow:auto; background:#fff; border:1px solid #d0d7de; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.1); padding:6px; }\n  .mnote-top.open .menu { display:block; }\n  .mnote-top .menu a { display:block; padding:5px 6px; border-bottom:1px solid #f0f0f0; color:#111; text-decoration:none; font-size:12px; }\n  .mnote-top .menu a b { color:#1f6feb; }\n  .mnote-top .menu a.done { color:#9ca3af; }\n</style>\n<div class=\"mnote-top\" id=\"mnote-top\"><button class=\"dd\" id=\"mnote-dd\">对模型的意见（0）▾</button><div class=\"menu\" id=\"mnote-menu\"></div></div>\n<script>\n(function () {\n  const esc = (s) => String(s ?? '').replace(/[&<>\"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' })[c])\n  let notes = {}\n  function box(file) {\n    const old = (notes[file] || []).map((n) => '<div class=\"old' + (n.handled ? ' done' : '') + '\">' + esc(n.text) + '<small>' + n.at.slice(0, 16).replace('T', ' ') + (n.handled ? ' · 已处理' : ' · 待模型师') + '</small></div>').join('')\n    return '<div class=\"mnote\" data-mfile=\"' + esc(file) + '\">' + old + '<textarea placeholder=\"对这个模型元素的意见：名字不对、放错地方、多了少了、和业务不符……\"></textarea><div class=\"row\"><button data-msave=\"' + esc(file) + '\">保存意见</button><span class=\"st\"></span></div></div>'\n  }\n  function paint() {\n    document.querySelectorAll('.card[id]').forEach((c) => { const f = c.id; let m = c.querySelector(':scope > .mnote'); if (m) m.outerHTML = box(f); else c.insertAdjacentHTML('beforeend', box(f)) })\n    const all = []; for (const f in notes) for (const n of notes[f]) all.push({ f, ...n })\n    all.sort((a, b) => b.at.localeCompare(a.at))\n    const open = all.filter((n) => !n.handled).length\n    document.getElementById('mnote-dd').textContent = '对模型的意见（' + open + (all.length !== open ? '/' + all.length : '') + '）▾'\n    document.getElementById('mnote-menu').innerHTML = all.length ? all.map((n) => '<a href=\"#\" data-jump=\"' + esc(n.f) + '\" class=\"' + (n.handled ? 'done' : '') + '\"><b>' + esc(n.f.split('/').pop().replace(/\\.json$/, '')) + '</b> ' + esc(n.text.slice(0, 60)) + '</a>').join('') : '<a>还没有意见。在「卡片」视图每张卡下面写。</a>'\n  }\n  async function load() { try { notes = await (await fetch('/model-notes')).json() } catch (e) { notes = {} } paint() }\n  document.addEventListener('click', async (ev) => {\n    const b = ev.target.closest('[data-msave]')\n    if (b) {\n      const wrap = b.closest('.mnote'); const ta = wrap.querySelector('textarea'); const text = ta.value.trim(); if (!text) return\n      b.disabled = true\n      const r = await fetch('/model-notes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ file: b.dataset.msave, text }) })\n      b.disabled = false; ta.value = ''\n      if (r.ok) { notes = await r.json(); paint() } else wrap.querySelector('.st').textContent = '保存失败'\n      return\n    }\n    if (ev.target.id === 'mnote-dd') { document.getElementById('mnote-top').classList.toggle('open'); return }\n    const j = ev.target.closest('[data-jump]')\n    if (j) { ev.preventDefault(); document.getElementById('mnote-top').classList.remove('open'); document.querySelector('nav [data-v=\"cards\"]')?.click(); const el = document.getElementById(j.dataset.jump); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.style.outline = '2px solid #f59e0b'; setTimeout(() => (el.style.outline = ''), 2000) } return }\n    if (!ev.target.closest('#mnote-top')) document.getElementById('mnote-top').classList.remove('open')\n  })\n  load()\n})()\n</script>"
+  /** board.js 的输出是 markdown；这里只认它真的会用到的几种写法 */
+  function boardHtml(md) {
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
+    const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '<code>$1</code>')
+    const lines = md.split('\n')
+    let h = '', i = 0
+    while (i < lines.length) {
+      const L = lines[i]
+      if (/^\|/.test(L) && /^\|[\s:-]+\|/.test(lines[i + 1] ?? '')) {
+        const cells = (row) => row.replace(/^\||\|$/g, '').split('|').map((c) => c.trim())
+        const head = cells(L)
+        i += 2
+        const body = []
+        while (i < lines.length && /^\|/.test(lines[i])) { body.push(cells(lines[i])); i++ }
+        h += '<div class="tw"><table><thead><tr>' + head.map((c) => '<th>' + inline(c) + '</th>').join('') + '</tr></thead><tbody>'
+        for (const r of body) {
+          const you = r.some((c) => c === '等你')
+          h += '<tr class="' + (you ? 'you' : '') + '">' + r.map((c) => '<td>' + inline(c) + '</td>').join('') + '</tr>'
+        }
+        h += '</tbody></table></div>'
+        continue
+      }
+      const m = /^(#{1,3})\s+(.*)$/.exec(L)
+      if (m) { h += '<h' + m[1].length + '>' + inline(m[2]) + '</h' + m[1].length + '>'; i++; continue }
+      if (/^- /.test(L)) {
+        const items = []
+        while (i < lines.length && /^- /.test(lines[i])) { items.push(lines[i].slice(2)); i++ }
+        h += '<ul>' + items.map((x) => '<li>' + inline(x) + '</li>').join('') + '</ul>'
+        continue
+      }
+      if (L.trim()) h += '<p>' + inline(L) + '</p>'
+      i++
+    }
+    return '<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>谁在做什么</title><style>' + CSS + `
+  body { margin:0 }
+  .wrap { max-width:1100px; margin:0 auto; padding:16px 20px 60px }
+  h1 { font-size:20px; margin:0 0 4px } h2 { font-size:16px; margin:24px 0 8px }
+  .tw { overflow-x:auto; margin:8px 0 }
+  table { border-collapse:collapse; width:100%; font-size:13px }
+  th, td { border:1px solid var(--line); padding:6px 9px; text-align:left; vertical-align:top }
+  th { background:var(--lo); font-weight:600; white-space:nowrap }
+  tr.you td { background:#fff7e6 }
+  tr.you td:first-child { border-left:3px solid #f59e0b }
+  ul { margin:6px 0; padding-left:20px } li { margin:2px 0 }
+  code { font-family:ui-monospace,Consolas,monospace; font-size:12px; color:#0969da }
+  .foot { margin-top:24px; color:var(--muted); font-size:12px }
+` + '</style></head><body><div class="wrap">' + h + '<div class="foot">每 20 秒自动刷新。这一页的数据就是 <code>node tools/board.js &lt;项目&gt;</code> 的输出，两边永远一致。</div></div><script>setTimeout(() => location.reload(), 20000)</script></body></html>'
+  }
   const server = http.createServer((req, res) => {
     const url = req.url.split('?')[0]
+    if (req.method === 'GET' && url === '/board') {
+      // 直接跑 board.js 拿它的 markdown，页面只做渲染——两边永远说同一件事
+      const r = require('child_process').spawnSync(process.execPath, [path.join(__dirname, 'board.js'), root], { encoding: 'utf8' })
+      const md = r.stdout || ('看板算不出来：' + (r.stderr || ''))
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      return res.end(boardHtml(md))
+    }
     if (req.method === 'GET' && url === '/model') {
       // 每次打开都重新画：模型是活的
       const out = path.join(root, 'reports', 'model.html')
@@ -756,13 +1004,26 @@ load()
       const sid = new URLSearchParams(req.url.split('?')[1] || '').get('slice') || id
       const file = fileOf(sid)
       const business = {}
-      for (const s of loadBusiness(root)) business[s.id] = { text: s.text, kind: s.kind, ruleKind: s.ruleKind }
+      for (const s of loadBusiness(root)) business[s.id] = { text: s.text, kind: s.kind, ruleKind: s.ruleKind, layer: s.layer, label: labelOf(s) }
       const termNotes = fs.existsSync(notesP) ? readJson(notesP) : {}
       const story = file && fs.existsSync(file) ? readJson(file) : null
       let base = null
       if (story?.basedOn) { const bf = fileOf(story.basedOn); if (bf && fs.existsSync(bf)) { const b = readJson(bf); base = { slice: b.slice, title: b.title, texts: b.steps.map((s) => s.text) } } }
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
-      return res.end(JSON.stringify({ story, base, business, glossary: loadGlossary(root).terms, termNotes }))
+      // 段落清单：按故事里最早的那一天排，没有步骤的（还没写）排在最后。故事页顶上那一排就用它
+      const segs = []
+      const slicesDir = path.join(root, 'slices')
+      for (const f of (fs.existsSync(slicesDir) ? fs.readdirSync(slicesDir) : []).filter((n) => n.endsWith('.story.json'))) {
+        try {
+          const s = readJson(path.join(root, 'slices', f))
+          const sp = path.join(root, 'slices', s.slice + '.json')
+          const sl = fs.existsSync(sp) ? readJson(sp) : null
+          const days = (s.steps || []).map((x) => String(x.day || '')).filter((d) => /^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(d)).sort()
+          segs.push({ slice: s.slice, title: s.title, day: days[0] || '', steps: (s.steps || []).length, approved: s.approved || null, businessStory: (sl && sl.businessStory) || '', intent: (sl && sl.intent) || '' })
+        } catch (e) { /* 读不动的跳过，页面照开 */ }
+      }
+      segs.sort((x, y) => (x.day ? 0 : 1) - (y.day ? 0 : 1) || String(x.day).localeCompare(String(y.day)) || String(x.slice).localeCompare(String(y.slice)))
+      return res.end(JSON.stringify({ story, base, business, glossary: loadGlossary(root).terms, termNotes, segs }))
     }
     if (req.method === 'POST' && (url === '/save' || url === '/term-notes')) {
       let body = ''
