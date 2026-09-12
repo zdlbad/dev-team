@@ -62,28 +62,34 @@ const show = (v) => (v === null || v === undefined ? '—' : typeof v === 'strin
 const KIND_LABEL = { 'aggregate-root': '聚合根', entity: '实体', 'value-object': '值对象', event: '事件', error: '错误', repository: '仓储', service: '领域服务', 'command-handler': '命令', 'query-handler': '查询', 'event-handler': '事件处理', port: '端口' }
 
 // ---------- 卡片 ----------
+// 字段成表：名字 | 类型 | 说明（说明下挂追溯标签）。一行挤成 "a: string, b: date" 人看不清哪栏是干什么的
+function fieldsTable(fields) {
+  return `<table class="fields">${fields.map((f) => `<tr><td class="fn"><code>${esc(f.name)}</code></td><td class="ft">${esc(f.type)}${f.nullable ? '<span class="muted">（可空）</span>' : ''}</td><td class="fd">${f.note ? esc(f.note) : '<span class="muted">—</span>'}${f.traces?.length ? `<div class="meta">${chips(f.traces)}</div>` : ''}</td></tr>`).join('')}</table>`
+}
+// 卡片头：种类 + 名字一行，追溯标签自己一行（原来挤在名字后面，七八个标签把标题冲散）
+const cardHead = (kind, name, traces) => `<div class="hd"><span class="kind">${kind}</span><b class="name">${esc(name)}</b></div>${traces?.length ? `<div class="traces">${chips(traces)}</div>` : ''}`
 function diffBlock(file) {
   const fs_ = findingsOf(file)
   if (!fs_.length) return ''
-  const rows = fs_.map((f) => `<tr><td class="k">${esc(f.kind === 'missing-file' ? '整个文件' : f.path)}</td><td>${esc(f.kind === 'missing-file' ? '（模型有）' : show(f.model))}</td><td>${esc(f.kind === 'missing-file' ? '（${other}无）' : show(f.code))}</td></tr>`).join('')
+  const rows = fs_.map((f) => `<tr><td class="k">${esc(f.kind === 'missing-file' ? '整个文件' : f.path)}</td><td>${esc(f.kind === 'missing-file' ? '（模型有）' : show(f.model))}</td><td>${esc(f.kind === 'missing-file' ? `（${other}无）` : show(f.code))}</td></tr>`).join('')
   return `<div class="diff"><div class="dt">与${other}的差异（${fs_.length}）</div><table><tr><th>位置</th><th>模型</th><th>${other}</th></tr>${rows}</table></div>`
 }
 const cardCls = (file) => (findingsOf(file).length ? 'card bad' : otherDir ? 'card ok' : 'card')
 function domainCard(el) {
   const d = el.data
-  const inv = (list, label) => (list?.length ? `<div class="sec"><b>${label}</b><ul>${list.map((i) => `<li>${esc(i.text)} ${chips(i.traces)}${i.throws?.length ? ` <span class="muted">抛出 ${esc(i.throws.join(', '))}</span>` : ''}</li>`).join('')}</ul></div>` : '')
+  const inv = (list, label) => (list?.length ? `<div class="sec"><div class="sec-title">${label}</div><ul class="inv">${list.map((i) => `<li><div class="txt">${esc(i.text)}</div><div class="meta">${chips(i.traces)}${i.throws?.length ? `<span class="throws">抛出 ${esc(i.throws.join(', '))}</span>` : ''}</div></li>`).join('')}</ul></div>` : '')
   const behaviors = d.behaviors?.length
-    ? `<div class="sec"><b>行为</b><ul>${d.behaviors
+    ? `<div class="sec"><div class="sec-title">行为</div><ul>${d.behaviors
         .map((b) => `<li><code>${esc(b.name)}(${params(b.input)})${b.output ? ` → ${esc(b.output)}` : ''}</code> ${chips(b.traces)}${b.rules?.length ? `<div class="sub">规则：${b.rules.map(ruleText).map(esc).join('；')}</div>` : ''}${b.raises?.length ? `<div class="sub">发出：${b.raises.map(raiseText).map(esc).join('，')}</div>` : ''}${b.throws?.length ? `<div class="sub">抛出：${esc(b.throws.join('，'))}</div>` : ''}</li>`)
         .join('')}</ul></div>`
     : ''
-  return `<div class="${cardCls(el.file)}" id="${esc(el.file)}"><div class="hd"><span class="kind">${KIND_LABEL[el.kind]}</span> <b>${esc(d.name)}</b> ${chips(d.traces)}</div>
+  return `<div class="${cardCls(el.file)}" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], d.name, d.traces)}
   ${d.aggregateNarrative ? `<p class="narr">${esc(d.aggregateNarrative)}</p>` : ''}
-  ${d.fields?.length ? `<div class="sec"><b>字段</b> <span class="muted">${params(d.fields)}</span></div>` : ''}
+  ${d.fields?.length ? `<div class="sec"><div class="sec-title">字段</div>${fieldsTable(d.fields)}</div>` : ''}
   ${inv(d.aggregateInvariants, '聚合不变量')}${inv(d.invariants, '不变量')}${behaviors}${diffBlock(el.file)}</div>`
 }
 function smallCard(el, body) {
-  return `<div class="${cardCls(el.file)} small" id="${esc(el.file)}"><div class="hd"><span class="kind">${KIND_LABEL[el.kind]}</span> <b>${esc(el.data.name)}</b> ${chips(el.data.traces)}</div>${body}${diffBlock(el.file)}</div>`
+  return `<div class="${cardCls(el.file)} small" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], el.data.name, el.data.traces)}${body}${diffBlock(el.file)}</div>`
 }
 function steps(list) {
   if (!list?.length) return '<span class="muted">（无步骤）</span>'
@@ -103,7 +109,7 @@ function useCaseCard(el) {
     d.raises?.length ? `发出：${d.raises.map(raiseText).map(esc).join('，')}` : '',
     d.throws?.length ? `抛出：${esc(d.throws.join('，'))}` : '',
   ].filter(Boolean)
-  return `<div class="${cardCls(el.file)}" id="${esc(el.file)}"><div class="hd"><span class="kind">${KIND_LABEL[el.kind]}</span> <b>${esc(d.name)}</b> ${chips(d.traces)}</div><div class="sec">${head}</div>${steps(d.steps)}${tail.length ? `<div class="sec muted2">${tail.join('　')}</div>` : ''}${diffBlock(el.file)}</div>`
+  return `<div class="${cardCls(el.file)}" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], d.name, d.traces)}<div class="sec">${head}</div>${steps(d.steps)}${tail.length ? `<div class="sec muted2">${tail.join('　')}</div>` : ''}${diffBlock(el.file)}</div>`
 }
 function serviceCard(el) {
   const d = el.data
@@ -263,7 +269,7 @@ const traced = (id) => els.filter((e) => JSON.stringify(e.data).includes(`"${id}
 const coverage = business.map((s) => `<tr><td><code>${esc(s.id)}</code></td><td>${esc(labelOf(s) ? `(${labelOf(s)}) ` : '')}${esc(s.text)}</td><td>${traced(s.id).join('，') || '<span class="bad-text">无落点</span>'}</td></tr>`)
 const extraFiles = [...decodedFiles].filter((f) => !model.byFile.has('model/' + f))
 const diffSection = otherDir
-  ? `<section id="view-diff" class="view"><h2>差异汇总</h2>${findings.length ? `<ul>${findings.map((f) => `<li><a href="#model/${esc(f.file)}" class="jump">${esc(f.file)}</a> <span class="muted">${esc(f.path || '整个文件')}</span> — ${esc({ 'missing-file': '模型有、${other}无', 'extra-file': '${other}有、模型无', missing: '模型有、${other}无', extra: '${other}有、模型无', changed: '不一致' }[f.kind])}</li>`).join('')}</ul>` : '<p class="muted">设计模型与解码模型一致。</p>'}${extraFiles.length ? `<h3>${other}有、模型无的文件</h3><ul>${extraFiles.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</section>`
+  ? `<section id="view-diff" class="view"><h2>差异汇总</h2>${findings.length ? `<ul>${findings.map((f) => `<li><a href="#model/${esc(f.file)}" class="jump">${esc(f.file)}</a> <span class="muted">${esc(f.path || '整个文件')}</span> — ${esc({ 'missing-file': `模型有、${other}无`, 'extra-file': `${other}有、模型无`, missing: `模型有、${other}无`, extra: `${other}有、模型无`, changed: '不一致' }[f.kind])}</li>`).join('')}</ul>` : '<p class="muted">设计模型与解码模型一致。</p>'}${extraFiles.length ? `<h3>${other}有、模型无的文件</h3><ul>${extraFiles.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</section>`
   : ''
 
 // ---------- 页面 ----------
@@ -287,6 +293,17 @@ ul{margin:2px 0 2px 18px;padding:0}ul.plain{list-style:none;margin-left:0}ol.ste
 code{background:#f3f4f6;padding:0 4px;border-radius:3px;font-size:12.5px}a{color:#1d4ed8;text-decoration:none}a:hover{text-decoration:underline}
 .diff{margin-top:8px;border-top:1px dashed var(--bad);padding-top:6px}.dt{color:var(--bad);font-weight:600;font-size:13px}.diff table{border-collapse:collapse;width:100%;font-size:12.5px}.diff th,.diff td{border:1px solid var(--line);padding:3px 6px;text-align:left;vertical-align:top}.diff td.k{color:var(--muted);white-space:nowrap}
 table.cov{border-collapse:collapse;width:100%;background:#fff}table.cov th,table.cov td{border:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}.bad-text{color:var(--bad)}
+/* 卡片排版：留白、分行、字段成表（2026-09-13 项目所有者要求好看一些、容易看） */
+.card{padding:14px 16px 12px;line-height:1.6}
+.hd{display:flex;align-items:center;gap:8px;margin-bottom:2px}.hd .name{font-size:16px}
+.traces{margin:0 0 6px;line-height:1.9}.traces .chip,.meta .chip{margin:0 4px 0 0}
+.narr{color:#374151;margin:8px 0 12px;font-size:13.5px;line-height:1.75;max-width:72ch}
+.sec{margin:10px 0 0}.sec-title{font-size:12px;color:var(--muted);letter-spacing:.04em;margin:0 0 4px;font-weight:600}
+table.fields{border-collapse:collapse;width:100%;font-size:13px}table.fields td{border-top:1px solid var(--line);padding:5px 8px 5px 0;vertical-align:top}table.fields tr:first-child td{border-top:none}
+table.fields .fn{white-space:nowrap;width:1%}table.fields .ft{white-space:nowrap;color:var(--muted);width:1%;padding-right:14px}table.fields .fd{color:#374151;line-height:1.55}
+ul.inv{list-style:none;margin:0;padding:0}ul.inv li{padding:7px 0;border-top:1px solid var(--line)}ul.inv li:first-child{border-top:none}ul.inv .txt{line-height:1.65}
+.meta{margin-top:3px;line-height:1.8}.meta .throws{font-size:12px;color:#b45309;margin-left:4px}
+.card ul li{margin:3px 0}ol.steps li{margin:4px 0}
 /* 图 */
 #graph-wrap{display:flex;border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden;height:calc(100vh - 150px);min-height:520px}
 #graph-area{position:relative;flex:1;min-width:0}#graph{width:100%;height:100%;cursor:grab;user-select:none;display:block}#graph.drag{cursor:grabbing}

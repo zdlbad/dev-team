@@ -482,6 +482,16 @@ function analyzeMethod(entry, method) {
   visit(method.body)
   return g
 }
+// 步骤级 throws：调工厂 / 行为的那一步，把被调节点闭包里的 throws 挂上；仓储、端口、服务的调用不挂（模型也不在那些步骤上写）
+function attachStepThrows(steps) {
+  for (const st of steps ?? []) {
+    const id = st.call?._callee
+    if (!id) continue
+    delete st.call._callee
+    const g = graph.get(id)
+    if (g?.throws?.length) st.throws = [...g.throws]
+  }
+}
 function propagate() {
   let changed = true
   while (changed) {
@@ -580,6 +590,8 @@ function stepsOf(body, currentModule, ctx) {
           else if (e.prefix === 'command-handler') kind = 'command'
           if (kind) {
             call = { kind, target, method: r.method }
+            // 记下被调节点：处理器算完 raises / throws 闭包后，把被调工厂 / 行为会抛的错挂回这一步（02 第六节步骤级 throws；2026-09-13 之前从不产出，方向 ② 永远差一条）
+            if (kind === 'factory' || kind === 'behavior') call._callee = nodeId(e, r.method)
             ctx.onCall?.(e, r, kind)
             if (output && ['behavior', 'factory', 'service'].includes(kind)) domainOutputs.add(output)
           }
@@ -795,6 +807,7 @@ for (const mod of modules.values()) {
           },
         })
         const g = graph.get(nodeId(e, m.name.getText())) ?? { raises: [], throws: [] }
+        attachStepThrows(steps)
         const op = { name: m.name.getText(), input }
         const ret = mapType(sig.getReturnType(), M).type
         if (ret) op.output = ret
@@ -863,6 +876,7 @@ for (const mod of modules.values()) {
     propagate()
     const raises = hg.raises
     const throwsList = hg.throws
+    attachStepThrows(steps)
 
     if (e.prefix === 'command-handler') {
       const cmd = mainClass(sf, `${e.modelName}Command`)

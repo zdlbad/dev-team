@@ -9,7 +9,9 @@
  *   - 待判断（judgments）：verdict = agree | disagree | pass | fail
  *   - 需人确认（confirms）：verdict = 选项序号 | accepted | dismissed
  *   - 警告（warnings）：verdict = fixed | dismissed
- * 顺序：重要度降序 → 校验角色的信心升序 → 业务 / 模块 / 聚合分组。
+ * 顺序：故事切片按故事步骤分组（每步的标题就是故事那句话，步内命令步骤 → 记什么 → 守什么，信心低的在前）；
+ *       没有故事时按重要度降序 → 信心升序 → 业务 / 模块 / 聚合分组。
+ * 页首说清这页在问什么、谁答的（校验器逐条生成、校验角色先答、人只看理由站不站得住）；「其余高信心的一并同意」一键处理。
  */
 const fs = require('node:fs')
 const path = require('node:path')
@@ -56,10 +58,13 @@ const html = `<!doctype html>
   .guide { font-size:13px; color:var(--fg); padding:6px 0 0 4px; }
   .guide dt { color:var(--muted); font-weight:500; margin-top:4px; } .guide dd { margin:0 0 0 1em; }
   .empty { color:var(--muted); }
+  .step { margin:22px 0 6px; padding:8px 12px; border-left:4px solid #1f6feb; background:#f0f6ff; border-radius:0 8px 8px 0; }
+  .step .n { font-weight:700; margin-right:8px; } .step .who { color:var(--muted); margin-right:8px; } .step .cnt { color:var(--muted); font-size:12px; margin-left:8px; }
+  .kind { font-size:12px; color:var(--muted); margin:10px 0 2px; }
   #status { color:var(--muted); font-size:12px; }
 </style></head>
 <body>
-<header><h1 id="title">审阅</h1><span id="status"></span><button id="save" class="primary">保存</button></header>
+<header><h1 id="title">审阅</h1><span id="status"></span><button id="agree-high">其余高信心的一并同意</button><button id="save" class="primary">保存</button></header>
 <main id="main"></main>
 <script>
 const $ = (s, p=document) => p.querySelector(s)
@@ -96,21 +101,28 @@ function render() {
   $('#title').textContent = '审阅 · 方向 ' + data.direction + ' · ' + (data.project||'').split(/[\\\\/]/).pop()
   const main = $('#main'); main.innerHTML = ''
   const intro = document.createElement('div'); intro.className='intro'
-  intro.innerHTML = '<b>怎么用：</b>每条都先显示校验角色的判断和理由，你只需要<b>同意</b>或<b>不同意</b>；不确定时展开「怎么判断」。'
-    + '顺序是重要度从高到低、校验角色信心从低到高——最值得你看的排在最前。每次改动都会自动保存（右上角显示时间），保存按钮随时可以手动按。'
+  const js = data.judgments || []
+  const nHigh = js.filter(j => j.verdict === 'pass' && j.confidence === 'high').length, nLow = js.filter(j => j.verdict && !(j.verdict === 'pass' && j.confidence === 'high')).length, nFail = js.filter(j => j.verdict === 'fail').length
+  intro.innerHTML = '<b>这一页在问什么：</b>校验器给你在故事里确认过的每一条业务语句生成一问「模型有没有把它表达出来」，给每个命令的每一步生成一问「这一步是不是只做编排」。'
+    + '<b>谁答的：</b>校验角色先答（通过 / 不通过 + 理由）。<b>你只做一件事：</b>看他的理由站不站得住，同意或不同意。这些都是确认，不是新的业务问题——要你拍板的业务分岔在故事页的裁定卡上。<br>'
+    + '共 ' + js.length + ' 条：校验角色高信心通过 ' + nHigh + ' 条（可以点右上角「其余高信心的一并同意」一次处理），' + '值得你看的 ' + nLow + ' 条（信心中 / 低' + (nFail ? '、不通过 ' + nFail + ' 条' : '') + '），在每一步里排在前面。'
+    + (data.story ? '顺序按故事走：每一步的标题就是故事那句话，下面是这一步用到的业务在模型里对得上对不上。' : '顺序按重要度从高到低、信心从低到高。')
+    + '每次改动自动保存。'
   main.appendChild(intro)
   section(main, '需人确认', data.confirms, (it, i) => {
     const opts = (it.options||[]).map((o, k) => '<option value="'+(k+1)+'">'+ (k+1) + '. ' + esc(o) + '</option>').join('')
     return '<div class="row"><select data-k="confirms" data-i="'+i+'" data-f="verdict"><option value="">— 裁决 —</option>'+opts+'<option value="accepted">接受现状</option><option value="dismissed">驳回</option></select>'
       + '<input type="text" placeholder="备注（承认例外时必填理由）" data-k="confirms" data-i="'+i+'" data-f="note"></div>'
   }, true)
-  section(main, '待判断', data.judgments, (it, i) => {
+  const judgmentControls = (it, i) => {
     const opts = it.verdict
       ? '<option value="agree">同意</option><option value="disagree">不同意</option>'
       : '<option value="pass">通过</option><option value="fail">不通过</option>'
     return agentBlock(it) + '<div class="row"><select data-k="judgments" data-i="'+i+'" data-f="verdict"><option value="">— 你的意见 —</option>'+opts+'</select>'
       + '<input type="text" placeholder="备注（不同意时写为什么）" data-k="judgments" data-i="'+i+'" data-f="note"></div>'
-  }, true)
+  }
+  if (data.story) storySection(main, data.judgments, judgmentControls)
+  else section(main, '待判断', data.judgments, judgmentControls, true)
   section(main, '警告', data.warnings, (it, i) =>
     '<div class="row"><select data-k="warnings" data-i="'+i+'" data-f="verdict"><option value="">— 处理 —</option><option value="fixed">已修</option><option value="dismissed">驳回</option></select>'
     + '<input type="text" placeholder="驳回理由" data-k="warnings" data-i="'+i+'" data-f="note"></div>', true)
@@ -123,6 +135,55 @@ function render() {
     if (it.human?.verdict) el.closest('.item').classList.add('done')
   }
 }
+function itemNode(it, i, controls, withGuide) {
+  const d = document.createElement('div'); d.className = 'item ' + (it.importance||'')
+  const sides = it.sides ? '<div class="sides">' + Object.entries(it.sides).filter(([,v]) => v !== undefined).map(([k,v]) => '<b>'+({business:'业务',model:'模型',code:'代码'}[k]||k)+'</b><span>'+esc(typeof v==='string'?v:JSON.stringify(v))+'</span>').join('') + '</div>' : ''
+  const mc = it.model !== undefined || it.code !== undefined ? '<div class="sides"><b>模型</b><span>'+esc(typeof it.model==='string'?it.model:JSON.stringify(it.model))+'</span><b>代码</b><span>'+esc(typeof it.code==='string'?it.code:JSON.stringify(it.code))+'</span></div>' : ''
+  d.innerHTML = '<div class="target">' + esc(it.target) + '</div>' + (it.context ? '<div class="target" style="color:#555;font-family:inherit">' + esc(it.context) + '</div>' : '') + '<div class="check">' + esc(it.ask || it.check) + '</div>' + (it.ask ? '<div class="target" style="font-family:inherit">类别：' + esc(it.check) + '</div>' : '')
+    + (it.text ? '<div>' + esc(it.text) + '</div>' : '') + sides + mc + (withGuide ? guideOf(it.check) : '') + controls(it, i)
+  return d
+}
+// 一条判断牵涉哪些业务编号：目标本身是编号，或目标是模型文件（命令的某一步）→ 服务端附的该文件 traces
+function idsOf(it) {
+  const t = it.target || ''
+  if (/^[GRU]-\d+/.test(t)) return [t.split('#')[0]]
+  return (data.targetTraces || {})[t.split('#')[0]] || []
+}
+// 步内顺序：命令的步骤 → 能力 → 规则；同类里信心低的在前
+function kindOf(it) { return /#steps\./.test(it.target||'') ? 0 : /^G-/.test(it.target||'') ? 1 : 2 }
+const KIND = ['这一步在模型里怎么走（命令的步骤）', '能力', '记什么、守什么（字段、规则、错误）']
+function storySection(main, items, controls) {
+  const h = document.createElement('h2'); h.textContent = '待判断（' + (items||[]).length + '）· 按故事走'; main.appendChild(h)
+  if (!items || !items.length) { const p = document.createElement('p'); p.className='empty'; p.textContent='（无）'; main.appendChild(p); return }
+  const steps = data.story.steps || []
+  const placed = new Set()
+  const buckets = steps.map(() => [])
+  const rest = []
+  items.forEach((it, i) => {
+    const ids = idsOf(it)
+    const k = steps.findIndex(st => (st.traces||[]).some(id => ids.includes(id)))
+    if (k >= 0) buckets[k].push({ it, i }); else rest.push({ it, i })
+  })
+  const order = (a, b) => kindOf(a.it) - kindOf(b.it) || (rank(a.it.confidence)||9) - (rank(b.it.confidence)||9) || (a.it.target||'').localeCompare(b.it.target||'')
+  steps.forEach((st, k) => {
+    const list = buckets[k]
+    const hd = document.createElement('div'); hd.className = 'step'
+    hd.innerHTML = '<span class="n">第 ' + esc(st.n ?? k+1) + ' 步</span><span class="who">' + esc(st.day||'') + ' · ' + esc(st.actor||'') + '</span>' + esc(st.text||'') + '<span class="cnt">' + (list.length ? list.length + ' 条' : '这一步没有要你看的') + '</span>'
+    main.appendChild(hd)
+    list.sort(order)
+    let g = -1
+    for (const { it, i } of list) {
+      const kk = kindOf(it)
+      if (kk !== g) { g = kk; const kh = document.createElement('div'); kh.className = 'kind'; kh.textContent = KIND[kk]; main.appendChild(kh) }
+      main.appendChild(itemNode(it, i, controls, true))
+    }
+  })
+  if (rest.length) {
+    const hd = document.createElement('div'); hd.className = 'step'; hd.innerHTML = '<span class="n">不在故事步骤里的</span><span class="cnt">' + rest.length + ' 条</span>'; main.appendChild(hd)
+    rest.sort(order)
+    for (const { it, i } of rest) main.appendChild(itemNode(it, i, controls, true))
+  }
+}
 function section(main, title, items, controls, withGuide) {
   const h = document.createElement('h2'); h.textContent = title + '（' + (items||[]).length + '）'; main.appendChild(h)
   if (!items || !items.length) { const p = document.createElement('p'); p.className='empty'; p.textContent='（无）'; main.appendChild(p); return }
@@ -132,12 +193,7 @@ function section(main, title, items, controls, withGuide) {
   for (const { it, i } of idx) {
     const k = (it.importance ? '重要度 ' + IMP[it.importance] + ' · ' : '') + groupKey(it.target)
     if (k !== g) { g = k; const h3 = document.createElement('h3'); h3.textContent = k; main.appendChild(h3) }
-    const d = document.createElement('div'); d.className = 'item ' + (it.importance||'')
-    const sides = it.sides ? '<div class="sides">' + Object.entries(it.sides).filter(([,v]) => v !== undefined).map(([k,v]) => '<b>'+({business:'业务',model:'模型',code:'代码'}[k]||k)+'</b><span>'+esc(typeof v==='string'?v:JSON.stringify(v))+'</span>').join('') + '</div>' : ''
-    const mc = it.model !== undefined || it.code !== undefined ? '<div class="sides"><b>模型</b><span>'+esc(typeof it.model==='string'?it.model:JSON.stringify(it.model))+'</span><b>代码</b><span>'+esc(typeof it.code==='string'?it.code:JSON.stringify(it.code))+'</span></div>' : ''
-    d.innerHTML = '<div class="target">' + esc(it.target) + '</div>' + (it.context ? '<div class="target" style="color:#555;font-family:inherit">' + esc(it.context) + '</div>' : '') + '<div class="check">' + esc(it.check) + '</div>'
-      + (it.text ? '<div>' + esc(it.text) + '</div>' : '') + sides + mc + (withGuide ? guideOf(it.check) : '') + controls(it, i)
-    main.appendChild(d)
+    main.appendChild(itemNode(it, i, controls, withGuide))
   }
 }
 async function load() { data = await (await fetch('/data')).json(); render() }
@@ -152,6 +208,11 @@ async function save(auto) {
 let saveTimer = null
 function scheduleSave() { clearTimeout(saveTimer); $('#status').textContent = '有改动，稍后自动保存'; saveTimer = setTimeout(() => save(true), 800) }
 $('#save').addEventListener('click', () => { clearTimeout(saveTimer); save(false) })
+$('#agree-high').addEventListener('click', () => {
+  let n = 0
+  for (const it of data.judgments || []) if (it.verdict === 'pass' && it.confidence === 'high' && !it.human?.verdict) { it.human = { ...(it.human||{}), verdict: 'agree', at: new Date().toISOString().slice(0,10) }; n++ }
+  render(); scheduleSave(); $('#status').textContent = '已同意 ' + n + ' 条高信心的，稍后自动保存'
+})
 load()
 </script></body></html>`
 
@@ -162,7 +223,22 @@ const server = http.createServer((req, res) => {
   }
   if (req.method === 'GET' && req.url === '/data') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
-    return res.end(fs.readFileSync(file, 'utf8'))
+    let obj
+    try { obj = JSON.parse(fs.readFileSync(file, 'utf8')) } catch { return res.end(fs.readFileSync(file, 'utf8')) }
+    // 故事切片：附上故事步骤（页面按步骤分组），以及每个模型文件目标的 traces（命令的步骤靠它对到故事的哪一步）
+    try {
+      if (obj.project && obj.slice) {
+        const sp = path.join(obj.project, 'slices', obj.slice + '.story.json')
+        if (fs.existsSync(sp)) { const st = JSON.parse(fs.readFileSync(sp, 'utf8')); obj.story = { title: st.title, steps: (st.steps || []).map((x) => ({ n: x.n, day: x.day, actor: x.actor, text: x.text, traces: x.traces || [] })) } }
+        obj.targetTraces = {}
+        for (const it of obj.judgments || []) {
+          const f = String(it.target || '').split('#')[0]
+          if (!f.startsWith('model/') || obj.targetTraces[f]) continue
+          try { obj.targetTraces[f] = JSON.parse(fs.readFileSync(path.join(obj.project, f), 'utf8')).traces || [] } catch { obj.targetTraces[f] = [] }
+        }
+      }
+    } catch { /* 附不上就按原样给 */ }
+    return res.end(JSON.stringify(obj))
   }
   if (req.method === 'POST' && req.url === '/save') {
     let body = ''

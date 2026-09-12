@@ -12,7 +12,7 @@
 
 ```
 src/shared/building-block/
-  domain/        AggregateRoot · Entity · ValueObject · DomainEvent · DomainError · ConcurrencyError
+  domain/        AggregateRoot · Entity · ValueObject · DomainEvent · DomainError · ConcurrencyError · newId（领域层生成 id 只从这里拿，不直接 import node:crypto）
   application/   NotFoundError · assertFound · 其它技术守卫的断言
   ports/         EventPublisherInterface · 其它技术端口（如 AccessInterface）
 ```

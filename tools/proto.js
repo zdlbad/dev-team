@@ -2,10 +2,10 @@
 /**
  * 原型：把代码库编译成可跑的原型，起一个页面让人直接操作业务规则。
  *
- *   node tools/proto.js serve <项目目录> --code <代码库> [--port 4872] [--proto-port 4873]
+ *   node tools/proto.js serve <项目目录> --code <代码库> [--port 4872] [--proto-port 4875]
  *       编译（tsc → <代码库>/.proto-build）、启动 src/proto/main.ts 的原型宿主、起页面：
  *       左：故事（按故事走、逐步走）与命令 / 查询清单；中：表单与结果；右：聚合状态与事件流水
- *   node tools/proto.js check <项目目录> --code <代码库>
+ *   node tools/proto.js check <项目目录> --code <代码库> [--slice <切片id>]
  *       只编译 + 启动 + 对照模型：模型里的命令 / 查询 / 聚合有没有都登记进原型；退出码非 0 表示缺
  *
  * 依赖：代码库按 seed/03 写，原型入口 src/proto/main.ts 用 @shared/building-block/proto 的 ProtoHost。
@@ -21,10 +21,10 @@ const root = args[1] && path.resolve(args[1])
 const opt = (k) => { const i = args.indexOf(k); return i > 0 ? args[i + 1] : undefined }
 const codebase = opt('--code') && path.resolve(opt('--code'))
 const port = Number(opt('--port') ?? 4872)
-let protoPort = Number(opt('--proto-port') ?? 4873)
+let protoPort = Number(opt('--proto-port') ?? 4875) // 4873 是现场看板 scene.js 的口，别撞
 const protoPortGiven = args.includes('--proto-port')
 if (!['serve', 'check'].includes(cmd) || !root || !fs.existsSync(path.join(root, 'project.json')) || !codebase) {
-  console.error('用法：node tools/proto.js <serve|check> <项目目录> --code <代码库> [--port 4872] [--proto-port 4873]')
+  console.error('用法：node tools/proto.js <serve|check> <项目目录> --code <代码库> [--port 4872] [--proto-port 4875]')
   process.exit(2)
 }
 const { loadModel, loadBusiness, walk, walkNames, conditionText } = require('./lib/project')
@@ -108,9 +108,16 @@ async function check() {
   if (!h.ok) { console.error('原型宿主起不来：\n' + h.log); process.exit(1) }
   const m = await hostGet('/manifest')
   const d = modelData()
-  const missing = []
-  for (const op of d.ops) if (!(op.kind === 'command' ? m.commands : m.queries).includes(op.q)) missing.push(`${op.kind} ${op.q}`)
-  for (const a of d.aggregates) if (!m.repositories.includes(a.q)) missing.push(`仓储 ${a.q}`)
+  // --slice：只看切片范围内的（范围外的粗版聚合本段本来就不建）
+  const sliceId = opt('--slice')
+  let scopeMods = null, scopeAggs = null
+  if (sliceId) { try { const sc = JSON.parse(fs.readFileSync(path.join(root, 'slices', `${sliceId}.json`), 'utf8')).scope ?? {}; scopeMods = sc.modules?.length ? new Set(sc.modules) : null; scopeAggs = sc.aggregates?.length ? new Set(sc.aggregates) : null } catch { /* 没有切片记录就全看 */ } }
+  const inScopeOp = (q) => !scopeMods || scopeMods.has(q.split('.')[0])
+  const inScopeAgg = (q) => !scopeAggs || scopeAggs.has(q)
+  const missing = [], deferred = []
+  for (const op of d.ops) if (!(op.kind === 'command' ? m.commands : m.queries).includes(op.q)) (inScopeOp(op.q) ? missing : deferred).push(`${op.kind} ${op.q}`)
+  for (const a of d.aggregates) if (!m.repositories.includes(a.q)) (inScopeAgg(a.q) ? missing : deferred).push(`仓储 ${a.q}`)
+  if (deferred.length) console.log(`本段范围外未建 ${deferred.length} 项，不计`)
   const extra = [...m.commands, ...m.queries].filter((n) => !d.ops.some((o) => o.q === n))
   console.log(`原型登记：命令 ${m.commands.length}，查询 ${m.queries.length}，仓储 ${m.repositories.length}`)
   if (missing.length) console.log('模型有、原型没登记：\n  ' + missing.join('\n  '))
