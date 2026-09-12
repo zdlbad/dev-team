@@ -330,6 +330,15 @@ function computeNext(slice) {
 if (cmd === 'next') {
   const slice = loadSlice(args[2] ?? die('用法：slice next <项目目录> <切片id> [--json]'))
   const n = computeNext(slice)
+  // 换了机器还没 git pull 就动手，先提醒一句（现场看板记着上一次是哪台机器写的）
+  const sceneP = path.join(root, 'reports', '_现场.json')
+  if (!args.includes('--json') && fs.existsSync(sceneP)) {
+    try {
+      const sc = JSON.parse(fs.readFileSync(sceneP, 'utf8'))
+      const me = require('node:os').hostname()
+      if (sc.machine && sc.machine !== me) console.log(`⚠ 现场上一次是在「${sc.machine}」写的，本机是「${me}」——先确认 git pull 过了；交接看 scene 一屏或页面`)
+    } catch {}
+  }
   if (args.includes('--json')) console.log(JSON.stringify(n, null, 2))
   else {
     console.log(`切片 ${slice.id}「${slice.title}」　模型 ${slice.stages.model.status} · 编码 ${slice.stages.code.status} · 校验 ${slice.stages.validate.status}`)
