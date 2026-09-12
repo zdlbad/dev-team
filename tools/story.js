@@ -55,7 +55,7 @@ function storyState(story) {
   const notes = story.steps.filter((s) => s.review?.note && !s.review.handled).length + (story.note && !story.noteHandled ? 1 : 0)
   if (notes) return { state: 'notes', count: notes }
   if (!story.approved) return { state: 'unapproved' }
-  // 理解一致之后、建模之前：业务分析按五问（同时 / 重复 / 一次几条 / 失败处置 / 可见性）补出本段还缺的公司事实，人确认
+  // 理解一致之后、建模之前：业务分析按五问（同时 / 重复 / 一次几条 / 失败处置 / 可见性）补出本段还缺的情形，人确认
   if (!story.usage?.confirmedAt) return story.usage?.proposedAt ? { state: 'usage-proposed', count: (story.usage.proposed ?? []).length } : { state: 'usage-pending' }
   const noWalk = story.steps.filter((s) => !s.walk)
   if (noWalk.length) return { state: 'no-walk', count: noWalk.length }

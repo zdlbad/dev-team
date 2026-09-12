@@ -233,9 +233,9 @@ function computeNext(slice) {
     if (ss?.state === 'challenged') return step('路由', `核对人对故事的 ${ss.count} 处质疑：对照语句、裁定与手册逐条回应；人对了就落成裁定并派业务分析或讲解改，人误会了就解释；改完让人重看`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人质疑了故事的业务内容，先解决再认可')
     if (ss?.state === 'notes') return step('路由', `读人在故事上留下的 ${ss.count} 条想法（同意但有话说的也算）：逐条回应；成立的落成裁定或派给业务分析、讲解、模型师`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人的想法要有人看、有人回')
     if (ss?.state === 'unapproved') return step('人', `走故事「${story.title}」：逐条确认语句、同意或质疑每一步，直到业务理解一致`, `node tools/story.js approve ${rel(root)} ${slice.id}`, '认可后故事的编号并入切片 traces')
-    // 段落切片：理解一致之后、建模之前，业务分析按五问（同时 / 重复 / 一次几条 / 失败处置 / 可见性）补出本段还缺的公司事实，人确认
-    if (ss?.state === 'usage-pending') return step('业务分析', `按故事「${story.title}」过五问：故事走到的每个动作问一遍会不会同时、会不会重复、一次几条与部分失败、失败怎么处置、谁能看见。问出来的公司事实写成普通语句（业务落地-事实 / 约束，R 编号），软件该怎么回应（幂等、锁、批量语义）不写、留给模型师；raw 里没有的写进问题清单问人。产出里列出新增编号，开发指挥据此登记`, `node tools/story.js usage ${rel(root)} ${slice.id} propose <R-xxx,… | --none>`, '五问问出来的公司事实通常不在原料里，要主动问；模型师照它们定第三层')
-    if (ss?.state === 'usage-proposed') return step('人', `确认本故事按五问补出的 ${ss.count} 条语句：这是公司事实，比如「两位案例经理可能同时处理同一位参与者」；软件怎么回应由模型师定`, `node tools/story.js usage ${rel(root)} ${slice.id} confirm`, '确认后编号并入切片 traces，校验 ① 会要求模型给它们落点')
+    // 段落切片：理解一致之后、建模之前，业务分析按五问（同时 / 重复 / 一次几条 / 失败处置 / 可见性）补出本段还缺的情形，人确认
+    if (ss?.state === 'usage-pending') return step('业务分析', `按故事「${story.title}」过五问：故事走到的每个动作问一遍会不会同时、会不会重复、一次几条与部分失败、失败怎么处置、谁能看见。问出来的可能发生的情况写成普通语句（业务落地-情形，R 编号），软件该怎么回应（幂等、锁、批量语义）不写、留给模型师；raw 里没有的写进问题清单问人。产出里列出新增编号，开发指挥据此登记`, `node tools/story.js usage ${rel(root)} ${slice.id} propose <R-xxx,… | --none>`, '五问问出来的情形通常不在原料里，要主动问；模型师照它们定第三层')
+    if (ss?.state === 'usage-proposed') return step('人', `确认本故事按五问补出的 ${ss.count} 条语句：这是业务里可能碰上的情形，比如「两位案例经理可能同时处理同一位参与者」；软件怎么回应由模型师定`, `node tools/story.js usage ${rel(root)} ${slice.id} confirm`, '确认后编号并入切片 traces，校验 ① 会要求模型给它们落点')
     if (scopeEmpty) return step('人 + 模型师', '定范围：填切片记录的 scope 与 traces', null, '切片首先是对模型改动范围的定稿')
     const r1 = reportOf(1, slice.id)
     const s1 = reportState(r1)

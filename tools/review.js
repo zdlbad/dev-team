@@ -84,6 +84,7 @@ function guideOf(check) {
 function staleBlock(it) {
   const s = it.staleDecision
   if (!s) return ''
+  if (s.reordered) return '<div class="agent none">这个命令的步骤重排过：这个位置上有一条旧裁决（' + esc(s.at) + '），讲的多半是别的一步，不作参考，请按现在这一步重新判断。</div>'
   return '<div class="agent none">上次裁决（' + esc(s.at) + '）：' + (s.verdict==='dismissed'?'无需改':'接受现状') + ' — ' + esc(s.note||'') + '。此后模型文字已变，请重新判断。</div>'
 }
 function agentBlock(it) {
@@ -134,7 +135,7 @@ function section(main, title, items, controls, withGuide) {
     const d = document.createElement('div'); d.className = 'item ' + (it.importance||'')
     const sides = it.sides ? '<div class="sides">' + Object.entries(it.sides).filter(([,v]) => v !== undefined).map(([k,v]) => '<b>'+({business:'业务',model:'模型',code:'代码'}[k]||k)+'</b><span>'+esc(typeof v==='string'?v:JSON.stringify(v))+'</span>').join('') + '</div>' : ''
     const mc = it.model !== undefined || it.code !== undefined ? '<div class="sides"><b>模型</b><span>'+esc(typeof it.model==='string'?it.model:JSON.stringify(it.model))+'</span><b>代码</b><span>'+esc(typeof it.code==='string'?it.code:JSON.stringify(it.code))+'</span></div>' : ''
-    d.innerHTML = '<div class="target">' + esc(it.target) + '</div><div class="check">' + esc(it.check) + '</div>'
+    d.innerHTML = '<div class="target">' + esc(it.target) + '</div>' + (it.context ? '<div class="target" style="color:#555;font-family:inherit">' + esc(it.context) + '</div>' : '') + '<div class="check">' + esc(it.check) + '</div>'
       + (it.text ? '<div>' + esc(it.text) + '</div>' : '') + sides + mc + (withGuide ? guideOf(it.check) : '') + controls(it, i)
     main.appendChild(d)
   }
@@ -161,7 +162,22 @@ const server = http.createServer((req, res) => {
     req.on('data', (c) => (body += c))
     req.on('end', () => {
       try {
-        const obj = JSON.parse(body)
+        const posted = JSON.parse(body)
+        // 不整份覆盖：页面加载之后，校验角色可能又补了判断、校验器可能重跑过。
+        // 先读盘上现在这份，只把人填的 human 按条合进去（同一条 = 目标、检查、两侧文字都一样）。
+        const key = (x) => [x.target, x.check, x.sides?.business ?? '', x.sides?.model ?? '', x.sides?.code ?? ''].join('\u0000')
+        let obj = posted
+        try {
+          const disk = JSON.parse(fs.readFileSync(file, 'utf8'))
+          for (const arr of ['judgments', 'confirms']) {
+            const mine = new Map((posted[arr] ?? []).map((x) => [key(x), x]))
+            for (const it of disk[arr] ?? []) {
+              const p = mine.get(key(it))
+              if (p && p.human) it.human = p.human
+            }
+          }
+          obj = disk
+        } catch { /* 盘上那份读不了就按页面的存 */ }
         fs.writeFileSync(file, JSON.stringify(obj, null, 2) + '\n')
         res.writeHead(200)
         res.end('ok')

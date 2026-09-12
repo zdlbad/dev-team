@@ -19,9 +19,9 @@ function readJson(p) {
   return JSON.parse(fs.readFileSync(p, 'utf8'))
 }
 
-/** 业务语句的标签：层（业务抽象 / 业务落地）与种类（能力 / 事实 / 约束 / 公式 / 触发）。形状：- [R-001] (业务落地-约束) 文本 */
+/** 业务语句的标签：层（业务抽象 / 业务落地）与种类（能力 / 事实 / 约束 / 公式 / 触发 / 流程 / 情形）。形状：- [R-001] (业务落地-约束) 文本 */
 const LAYERS = ['业务抽象', '业务落地']
-const KINDS = { 能力: 'G', 事实: 'R', 约束: 'R', 公式: 'R', 触发: 'R' }
+const KINDS = { 能力: 'G', 事实: 'R', 约束: 'R', 公式: 'R', 触发: 'R', 流程: 'R', 情形: 'R' }
 // 旧标签自动对上新名。「使用」是已停发的 U 类：老项目里还有，整体迁移时逐条过五问——公司事实改写成 R，软件行为作废
 const LEGACY_KINDS = { 目标: '能力', 不变量: '约束', 推导: '公式', 反应: '触发', 使用: '使用' }
 const LEGACY_LAYER_FILES = { '领域.md': '业务抽象', '公司.md': '业务落地' }
@@ -47,7 +47,7 @@ function loadBusiness(root) {
       if (inFence) return // 围栏代码块里的示例不是业务语句
       const m = line.match(/^\s*-\s*\[([GRU]-\d{3,})\]\s*(?:\(([^)]*)\))?\s*(.*)$/)
       if (!m) return
-      // G = 能力（谁能做到什么）；R = 规则（事实 / 约束 / 公式 / 触发）；U = 旧的使用语句，不再新发
+      // G = 能力（谁能做到什么）；R = 规则（事实 / 约束 / 公式 / 触发 / 流程 / 情形）；U = 旧的使用语句，不再新发
       const letter = m[1][0]
       const kind = letter === 'G' ? 'goal' : letter === 'U' ? 'usage' : 'rule'
       let labelLayer = null, kindWord = null, rawKind = null, legacy = false

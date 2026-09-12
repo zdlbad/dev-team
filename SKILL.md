@@ -18,7 +18,7 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 | `new <目录> <系统名> [--codebase <代码库>]` | 新建项目（git init；可顺带拷入构建块） | `node $DEV_TEAM/tools/new-project.js …` |
 | `slice new <项目> <id> <标题> [--story --意图 <一句话> [--业务故事 <线>]] [--重构] [--implements <段落id,…>] [--modules …] [--aggregates …] [--use-cases …] [--traces …]` | 建切片记录。`--story` = **段落切片**（同时建故事骨架，`--意图` 写单一业务意图）；`--重构` = **改说法切片**（不走故事不走卡不算计划，门禁见 01 与 `rename-check`）；`--implements` = **实现切片**（给几条已在原型上走通的段落换生产外壳）。三种的周期见「段落切片」节。`--based-on` 是旧的滚雪球法，不用 | `node $DEV_TEAM/tools/slice.js new …` |
 | `story approve <项目> <id>` | 人与团队对故事的业务理解一致（每步语句已确认）；编号顺带并入切片 traces | `node $DEV_TEAM/tools/story.js approve …` |
-| `story usage <项目> <id> propose <R-001,… \| --none>` / `confirm` | 业务分析按五问补完本段的公司事实后，开发指挥登记新增编号（`--none` = 无新增）；人确认后编号并入切片 traces，模型必须回应它们 | `node $DEV_TEAM/tools/story.js usage …` |
+| `story usage <项目> <id> propose <R-001,… \| --none>` / `confirm` | 业务分析按五问补完本段的情形（可能碰上的情况）后，开发指挥登记新增编号（`--none` = 无新增）；人确认后编号并入切片 traces，模型必须回应它们 | `node $DEV_TEAM/tools/story.js usage …` |
 | `story serve <项目> [id]` | 起本地页面：`/` 框架图（模块 × 故事）；`/story?slice=<id>` 走故事（业务语句逐条打勾、同意／质疑、预测再揭晓、裁定卡挂在步骤下）；`/glossary` 名词目录；`/model` 模型图（卡片下可留意见，存 `reports/_模型意见.json`） | `node $DEV_TEAM/tools/story.js serve …` |
 | `story apply <项目> <id>` | 裁定卡写进 `raw/项目所有者的裁定.md` 与切片 log，算出回流 | `node $DEV_TEAM/tools/story.js apply …` |
 | `plan build <项目> <id> [--code <代码库>] [--force]` | **编码计划**：从模型与切片范围算出要动哪些代码文件、按什么顺序，写 `plans/<id>.json` + `.md`；写码角色补每步的关键逻辑；已确认的要 `--force` 才重算 | `node $DEV_TEAM/tools/plan.js build …` |
@@ -39,7 +39,7 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 | `slice advance <项目> <id> <model\|code\|validate> <状态> [说明]` | 推进阶段状态并写 log | `node $DEV_TEAM/tools/slice.js advance …` |
 | `slice apply <项目> <报告 json> [--slice <id>]` | 人的裁决写回：校验报告 → `decisions[]` 与切片 log；pre-pr 报告 → 只记切片 log（代码问题不进 decisions） | `node $DEV_TEAM/tools/slice.js apply …` |
 | `run <项目> <切片id>` | 跑切片周期的下一步（见下） | 开发指挥自己执行 |
-| `board <项目> [--md]` | 状态看板 | `node $DEV_TEAM/tools/board.js …` |
+| `board <项目> [--md]` | 状态看板（顶上带一节「现场」，就是 `scene set` 写的那些） | `node $DEV_TEAM/tools/board.js …` |
 | `scene <项目> set --slice <id> --step "<做什么>" --who <角色> [--phase 业务\|模型\|编码\|校验] [--note …] [--done]` | **现场看板**：把当前这一段、这一步、谁在干什么写上去。派角色前写一次，角色交稿后再写一次（`--done`） | `node $DEV_TEAM/tools/scene.js … set …` |
 | `scene handoff <项目> "<一段话>"` | **收工交接**：停在哪、等谁、有什么坑。随 `reports/_现场.json` 进 git，换台机器的人开工先看它 | `node $DEV_TEAM/tools/scene.js … handoff …` |
 | `scene serve <项目> [--port 4873]` | 起现场页面：人开着它就近似实时看得见后台角色的动向（页面每 2 秒自取一次）；换了机器没 pull 会在页顶提醒 | `node $DEV_TEAM/tools/scene.js … serve` |
@@ -56,6 +56,7 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 
 `run` 每次只推进一步，推进完停下来向人报告；人说「继续」再跑下一步。**不连跑**，因为每一步之间都可能有人要看的东西。
 
+0. **动手之前先写看板**（下面每一条都适用，不只派角色）：`scene set --slice <id> --step "<这一步在做什么>" --who <谁> --phase <业务|模型|编码|校验>`。派角色写角色名，自己跑工具写「开发指挥」，停下等人写「人」。
 1. 执行 `slice next <项目> <id> --json`，得到 `{ role, action, command, why }`。
 2. 按 `role` 分派：
    - **人**：不做任何事。把 `action`、`command`、`why` 原样告诉人，停。
@@ -71,7 +72,7 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 
 `run` 之外，开发指挥在对话里还负责**讲解的现场部分**：人在页面上或对话里答题、拍板，开发指挥判分（对照故事文件的答案）、追问、把人的原话与结论记回；人推翻语句或模型的，先分流标层，再落成裁定派给业务分析或模型师。人对五问补出的事实、契约、编码计划的拍板也一样落成裁定。可以用讲解准备的「扮演」素材在对话里演事件让人接。每次讲解坐下之后问人一句：「这一段你一次消化得了吗」。
 
-**每次派人之前先写现场，角色交稿之后再写一次**：`scene set --slice <id> --step "<这一步在做什么>" --who <角色> --phase <业务|模型|编码|校验>`，交稿那次带 `--done` 并在 `--note` 里写结果一句话。人开着 `scene serve` 的页面就看得见后台在动；不写，人就只能等。轮到人的时候也写一次（`--who 人`），页面上会显示「等你」。
+**每个动作开始之前先写现场，做完再写一次**——派角色、自己跑一条工具命令（approve、propose、apply、advance……）、停下等人，都算一个动作。开始那次 `scene set --slice <id> --step "<这一步在做什么>" --who <角色|开发指挥|人> --phase <业务|模型|编码|校验>`；做完那次带 `--done` 并在 `--note` 里写结果一句话。写完再动手，不是动完补写：人开着 `scene serve` 的页面就是靠这个看见后台在动，先动手后写，页面上就是一段空白。轮到人的时候写 `--who 人`，页面上会显示「等你」。角色自己不写看板，由开发指挥替它写。
 
 3. 任何一步失败（命令退出码非 0、子 agent 报告无法完成）：把原文给人，停。
 
@@ -95,7 +96,7 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 
 1. 讲解写本段故事：每步标 `needs`，`traces` 留空。
 2. **业务分析点亮**：按 `needs` 回 raw、写成正向陈述句、分层进 `业务抽象.md` / `业务落地.md`、标 `(层-种类)`、发编号、回填 traces。**`slice next` 还不认这一步**：讲解交稿后它直接给「人走故事」，你要自己先派业务分析、再让人走。
-3. 人走故事、理解一致（`story approve`）→ 业务分析过五问、补公司事实 → 人确认。
+3. 人走故事、理解一致（`story approve`）→ 业务分析过五问、补情形 → 人确认。
 4. 模型师建最少模型、填 `walk`、列业务逻辑的选择 → 校验 ① 机械检查 → 讲解出题、改卡 → 人预测、过卡（`story serve`）→ `story apply` 写回、分流 → 回流模型师 → 校验角色填判断 → 人审阅 → 模型确认。
 5. 编码计划（你算骨架）→ 原型补关键逻辑 → 人 `plan confirm` → 原型按计划写（先跑本线前面的段落）→ `plan check` → 校验 ②（0 差异）→ pre-pr 审查（A / B / D / S）→ 人审阅 → 人在原型上走故事、试连点 / 同时 / 成批 → 合并。
 
@@ -147,6 +148,7 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 - 任何写入都遵守 `seed/01-phases-and-slices.md` 的写入权表；开发指挥自己只写 `slices/`、`stories/`（故事线索引）、`plans/`（`plan build` 出骨架）、`reports/`、模型文件的 `decisions[]`（通过 `slice apply`）与 `raw/项目所有者的裁定.md`。
 - 人可以直接编辑任何工件；编辑后从 `slice next` 重新算下一步即可。
 - **人在对话中拍板的事要落地**：先分流标层（上节）。一层与所有者口述的二层追加到项目的 `raw/项目所有者的裁定.md`（按批次累积，每条标层，写明依据、作废项与已知缺口），并用 `slice log` 记一条；三层不进裁定文件。角色只读它、遵守它，不得自行推翻——有疑虑写进问题清单。校验报告里的裁决走 `slice apply`，那是另一条路径。
+- **每个动作之前先写看板**（`scene set`），做完再写一次 `--done`；连自己跑一条命令也算动作。项目所有者点名过一次：他看的是现场页面，没写他就不知道后台在干什么。
 - **三不做**：不替所有者裁一层和二层，问题清单原样汇总不替答；不自己扩段落范围——讲解或模型师报装不下就切段，不加模块；不因为自己看得懂就跳过讲解直接派模型师。
 - **写码前先有计划、计划先给人看**：原型与编码两个角色在 `plan confirm` 之前只补关键逻辑，不写代码；写的时候按计划顺序、每步 `plan done`。这是让人能看见 agent 在做什么的地方，不省。
 - 报告不留历史，可追溯性靠项目自己的 git：每个门禁通过后提醒人提交。**收工三件事**：审过的裁决先 `slice apply` 写回；`scene handoff` 写一段交接；提交并推送，提交说明写清停在哪、定了什么、有什么坑（不是「update」）。人在两台机器之间切换，会话带不走，文件和交接就是接力棒；开工先 `git pull`，`slice next` 与看板发现换了机器会提醒。
