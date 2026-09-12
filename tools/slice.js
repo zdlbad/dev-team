@@ -359,6 +359,8 @@ if (cmd === 'advance') {
   const from = s.status
   s.status = status
   if (stage === 'model') s.confirmedAt = status === 'done' ? today : null
+  // 模型阶段开工时记下基线提交：model-delta 拿它算「这一段改了什么」，人只确认增量
+  if (stage === 'model' && status === 'in-progress' && !s.baseline) { const g = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }); s.baseline = g.status === 0 ? g.stdout.trim() : null }
   if (stage === 'code') s.at = status === 'done' ? today : null
   if (stage === 'validate') {
     s.reportAt = status === 'done' ? today : null

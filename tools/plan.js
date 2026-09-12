@@ -511,6 +511,13 @@ function loadContracts() {
 }
 
 // ---------- 给人看的 markdown ----------
+const KEY_LOGIC_MAX = 300 // 一步关键逻辑的字数门禁（seed/05「节奏」）
+function cellKeyLogic(s) {
+  if (!s.keyLogic) return s.needsKeyLogic ? '**待补**' : '—'
+  if (!s.keyLogic.includes('\n')) return s.keyLogic.replaceAll('|', '\\|')
+  const first = s.keyLogic.split('\n').find((l) => l.trim()) ?? ''
+  return `${first.replaceAll('|', '\\|')}（详见下方「关键逻辑」第 ${s.n} 步）`
+}
 function renderMd(plan) {
   const L = [`# 编码计划 · ${plan.slice}（${{ proto: '原型：领域 + 应用 + 内存适配器', shell: '外壳：生产适配器 + 入口', full: '全部' }[plan.kind]}）`, '']
   L.push(`- 生成：${plan.builtAt.slice(0, 16).replace('T', ' ')}　代码库：\`${plan.codebase}\`　确认：${plan.confirmedAt ?? '**未确认**'}`)
@@ -518,7 +525,12 @@ function renderMd(plan) {
   L.push('', '按顺序写。每一步写完 `plan done <项目> <切片> <n>`；最后 `plan check`。', '')
   L.push('| # | 层 | 动作 | 文件 | 做什么 | 编号 | 关键逻辑 | 完成 |', '|---|---|---|---|---|---|---|---|')
   const LAYER = { 'building-block': '构建块', domain: '领域', repository: '仓储接口', service: '领域服务', application: '应用', port: '端口', adapter: '适配器', shell: '外壳', composition: '装配', proto: '原型入口', test: '测试', input: '故事输入' }
-  for (const s of plan.steps) L.push(`| ${s.n} | ${LAYER[s.layer] ?? s.layer} | ${s.action === 'create' ? '新建' : '修改'} | ${s.file ? `\`${s.file}\`` : '—'} | ${s.what.replaceAll('|', '\\|')} | ${s.traces.join(' ') || '—'} | ${s.keyLogic ? s.keyLogic.replaceAll('|', '\\|') : s.needsKeyLogic ? '**待补**' : '—'} | ${s.doneAt ? s.doneAt.slice(5, 16).replace('T', ' ') : ''} |`)
+  for (const s of plan.steps) L.push(`| ${s.n} | ${LAYER[s.layer] ?? s.layer} | ${s.action === 'create' ? '新建' : '修改'} | ${s.file ? `\`${s.file}\`` : '—'} | ${s.what.replaceAll('|', '\\|')} | ${s.traces.join(' ') || '—'} | ${cellKeyLogic(s)} | ${s.doneAt ? s.doneAt.slice(5, 16).replace('T', ' ') : ''} |`)
+  const multi = plan.steps.filter((s) => s.keyLogic && s.keyLogic.includes('\n'))
+  if (multi.length) {
+    L.push('', '## 关键逻辑', '', `守卫按执行顺序一行一条，\`→ throw\` / \`→ return\` / \`→ raise\` 是结果，行尾 \`//\` 后是编号；每步不超过 ${KEY_LOGIC_MAX} 字。`, '')
+    for (const s of multi) L.push(`### 第 ${s.n} 步 · ${LAYER[s.layer] ?? s.layer} · ${s.file ? '\`' + s.file + '\`' : s.target}${s.keyLogic.length > KEY_LOGIC_MAX ? `　**超门禁：${s.keyLogic.length} 字**` : ''}`, '', '\`\`\`text', s.keyLogic.replace(/```/g, "'''"), '\`\`\`', '')
+  }
   if (plan.already?.length) {
     L.push('', `## 已经做过的 ${plan.already.length} 项（不在上面的步骤里）`, '')
     L.push('这些文件别的切片已经写过、代码还在，而且解码回来跟现在的模型一致，所以这一次不必再动。', '模型后来改了、代码没跟上的，会自动回到上面的步骤里。', '')
@@ -536,6 +548,8 @@ function confirm() {
   const plan = loadPlan()
   const unfilled = plan.steps.filter((s) => s.needsKeyLogic && !s.keyLogic)
   if (unfilled.length) die(`还有 ${unfilled.length} 步没有关键逻辑，不能确认：${unfilled.map((s) => `#${s.n} ${s.target}`).join('、')}`)
+  const over = plan.steps.filter((s) => s.keyLogic && s.keyLogic.length > KEY_LOGIC_MAX)
+  if (over.length) die(`有 ${over.length} 步关键逻辑超过 ${KEY_LOGIC_MAX} 字（节奏门禁，seed/05「节奏」），退回写码角色缩写后再确认：${over.map((s) => `#${s.n} ${s.target}（${s.keyLogic.length} 字）`).join('、')}`)
   plan.confirmedAt = today
   plan.log.push(`${today} 人确认计划`)
   savePlan(plan)
@@ -578,6 +592,7 @@ function check() {
   }
   if (!plan.confirmedAt) issues.push('计划未经人确认')
   for (const s of plan.steps.filter((x) => x.needsKeyLogic && !x.keyLogic)) issues.push(`#${s.n} ${s.target}：关键逻辑未补`)
+  for (const s of plan.steps.filter((x) => x.keyLogic && x.keyLogic.length > KEY_LOGIC_MAX)) issues.push(`#${s.n} ${s.target}：关键逻辑 ${s.keyLogic.length} 字，超过 ${KEY_LOGIC_MAX} 字门禁`)
   // 测试步骤不强制补关键逻辑，但空着就没人知道该断言什么——单独报一行，别让它悄悄溜过去
   for (const s of plan.steps.filter((x) => !x.needsKeyLogic && !x.keyLogic && x.layer === 'test')) issues.push(`#${s.n} ${s.target}：测试步骤的关键逻辑空着（不强制，但空着就没人知道该断言什么）`)
   for (const s of plan.steps.filter((x) => x.file && !x.noFile && !exists(x.file))) issues.push(`#${s.n} ${s.target}：文件不存在 ${s.file}`)

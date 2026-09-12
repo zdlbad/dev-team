@@ -95,6 +95,13 @@
             },
             "confirmedAt": {
               "$ref": "#/$defs/dateOrNull"
+            },
+            "baseline": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "模型阶段开工（in-progress）时的 git 提交；model-delta 以它为基线算这一段的增量"
             }
           }
         },

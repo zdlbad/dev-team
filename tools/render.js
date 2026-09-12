@@ -21,10 +21,14 @@ const args = process.argv.slice(2)
 const root = args[0] && path.resolve(args[0])
 const opt = (n) => (args.indexOf(n) >= 0 ? args[args.indexOf(n) + 1] : undefined)
 if (!root || !fs.existsSync(path.join(root, 'model'))) {
-  console.error('用法：node tools/render.js <项目目录> [--decoded <解码目录>] [--out <html>]')
+  console.error('用法：node tools/render.js <项目目录> [--decoded <解码目录> | --baseline <基线模型目录>] [--out <html>]')
   process.exit(2)
 }
 const decodedDir = opt('--decoded') && path.resolve(opt('--decoded'))
+// --baseline <目录>：与切片开工时的模型（基线）比，人只看增量；机制与 --decoded 相同，只是对面不是代码而是上一版
+const baselineDir = opt('--baseline') && path.resolve(opt('--baseline'))
+const otherDir = decodedDir ?? baselineDir
+const other = baselineDir ? '上一版' : '代码'
 const out = path.resolve(opt('--out') ?? path.join(root, 'reports', 'model.html'))
 const { business, glossary, model } = loadProject(root)
 const projectName = fs.existsSync(path.join(root, 'project.json')) ? JSON.parse(fs.readFileSync(path.join(root, 'project.json'), 'utf8')).name : path.basename(root)
@@ -32,10 +36,10 @@ const projectName = fs.existsSync(path.join(root, 'project.json')) ? JSON.parse(
 // ---------- 差异（可选） ----------
 let findings = []
 let decodedFiles = new Set()
-if (decodedDir) {
+if (otherDir) {
   const tmp = path.join(root, 'reports', '_render-diff.json')
   fs.mkdirSync(path.dirname(tmp), { recursive: true })
-  spawnSync(process.execPath, [path.join(__dirname, 'diff-model.js'), path.join(root, 'model'), decodedDir, '--json', tmp], { encoding: 'utf8' })
+  spawnSync(process.execPath, [path.join(__dirname, 'diff-model.js'), path.join(root, 'model'), otherDir, '--json', tmp], { encoding: 'utf8' })
   if (fs.existsSync(tmp)) {
     findings = JSON.parse(fs.readFileSync(tmp, 'utf8')).findings.map((f) => ({ ...f, file: f.file.replace(/^model\//, '') }))
     fs.rmSync(tmp, { force: true })
@@ -44,7 +48,7 @@ if (decodedDir) {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) e.isDirectory() ? walk(path.join(d, e.name), o) : o.push(path.join(d, e.name))
     return o
   }
-  decodedFiles = new Set(walk(decodedDir).filter((p) => p.endsWith('.json') && !path.basename(p).startsWith('_')).map((p) => path.relative(decodedDir, p).replaceAll('\\', '/')))
+  decodedFiles = new Set(walk(otherDir).filter((p) => p.endsWith('.json') && !path.basename(p).startsWith('_')).map((p) => path.relative(otherDir, p).replaceAll('\\', '/')))
 }
 const findingsOf = (file) => findings.filter((f) => f.file === file.replace(/^model\//, ''))
 
@@ -61,10 +65,10 @@ const KIND_LABEL = { 'aggregate-root': '聚合根', entity: '实体', 'value-obj
 function diffBlock(file) {
   const fs_ = findingsOf(file)
   if (!fs_.length) return ''
-  const rows = fs_.map((f) => `<tr><td class="k">${esc(f.kind === 'missing-file' ? '整个文件' : f.path)}</td><td>${esc(f.kind === 'missing-file' ? '（模型有）' : show(f.model))}</td><td>${esc(f.kind === 'missing-file' ? '（代码无）' : show(f.code))}</td></tr>`).join('')
-  return `<div class="diff"><div class="dt">与代码的差异（${fs_.length}）</div><table><tr><th>位置</th><th>模型</th><th>代码</th></tr>${rows}</table></div>`
+  const rows = fs_.map((f) => `<tr><td class="k">${esc(f.kind === 'missing-file' ? '整个文件' : f.path)}</td><td>${esc(f.kind === 'missing-file' ? '（模型有）' : show(f.model))}</td><td>${esc(f.kind === 'missing-file' ? '（${other}无）' : show(f.code))}</td></tr>`).join('')
+  return `<div class="diff"><div class="dt">与${other}的差异（${fs_.length}）</div><table><tr><th>位置</th><th>模型</th><th>${other}</th></tr>${rows}</table></div>`
 }
-const cardCls = (file) => (findingsOf(file).length ? 'card bad' : decodedDir ? 'card ok' : 'card')
+const cardCls = (file) => (findingsOf(file).length ? 'card bad' : otherDir ? 'card ok' : 'card')
 function domainCard(el) {
   const d = el.data
   const inv = (list, label) => (list?.length ? `<div class="sec"><b>${label}</b><ul>${list.map((i) => `<li>${esc(i.text)} ${chips(i.traces)}${i.throws?.length ? ` <span class="muted">抛出 ${esc(i.throws.join(', '))}</span>` : ''}</li>`).join('')}</ul></div>` : '')
@@ -258,8 +262,8 @@ const cardSections = modules.map((m) => {
 const traced = (id) => els.filter((e) => JSON.stringify(e.data).includes(`"${id}"`)).map((e) => `<a href="#${esc(e.file)}" class="jump">${esc(e.data.name)}</a>`)
 const coverage = business.map((s) => `<tr><td><code>${esc(s.id)}</code></td><td>${esc(labelOf(s) ? `(${labelOf(s)}) ` : '')}${esc(s.text)}</td><td>${traced(s.id).join('，') || '<span class="bad-text">无落点</span>'}</td></tr>`)
 const extraFiles = [...decodedFiles].filter((f) => !model.byFile.has('model/' + f))
-const diffSection = decodedDir
-  ? `<section id="view-diff" class="view"><h2>差异汇总</h2>${findings.length ? `<ul>${findings.map((f) => `<li><a href="#model/${esc(f.file)}" class="jump">${esc(f.file)}</a> <span class="muted">${esc(f.path || '整个文件')}</span> — ${esc({ 'missing-file': '模型有、代码无', 'extra-file': '代码有、模型无', missing: '模型有、代码无', extra: '代码有、模型无', changed: '不一致' }[f.kind])}</li>`).join('')}</ul>` : '<p class="muted">设计模型与解码模型一致。</p>'}${extraFiles.length ? `<h3>代码有、模型无的文件</h3><ul>${extraFiles.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</section>`
+const diffSection = otherDir
+  ? `<section id="view-diff" class="view"><h2>差异汇总</h2>${findings.length ? `<ul>${findings.map((f) => `<li><a href="#model/${esc(f.file)}" class="jump">${esc(f.file)}</a> <span class="muted">${esc(f.path || '整个文件')}</span> — ${esc({ 'missing-file': '模型有、${other}无', 'extra-file': '${other}有、模型无', missing: '模型有、${other}无', extra: '${other}有、模型无', changed: '不一致' }[f.kind])}</li>`).join('')}</ul>` : '<p class="muted">设计模型与解码模型一致。</p>'}${extraFiles.length ? `<h3>${other}有、模型无的文件</h3><ul>${extraFiles.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</section>`
   : ''
 
 // ---------- 页面 ----------
@@ -295,11 +299,11 @@ table.cov{border-collapse:collapse;width:100%;background:#fff}table.cov th,table
 .node{cursor:pointer}.node rect,.node polygon,.node ellipse{stroke-width:1.5}.node text{font-size:12px;pointer-events:none}.node .sub{font-size:10px;fill:#6b7280}.node.dim{opacity:.15}.node.bad rect,.node.bad ellipse,.node.bad polygon{stroke:#dc2626;stroke-width:2.5}
 .edge{fill:none;stroke-width:1.5}.edge.dim{opacity:.06}.edge-label{font-size:10px;fill:#374151;pointer-events:none;paint-order:stroke;stroke:#fff;stroke-width:3px}
 </style></head><body>
-<header><h1>模型 · ${esc(projectName)}</h1><div class="muted">${modules.length} 个模块 · ${els.length} 个模型文件 · 业务语句 ${business.length} 条 · 词汇 ${glossary.terms.length} 个${decodedDir ? ` · 与解码模型比对：${findings.length ? `<b style="color:#fca5a5">${findings.length} 处差异</b>` : '<b style="color:#86efac">一致</b>'}` : ''}</div></header>
-<nav><button data-v="graph" class="on">关系图</button><button data-v="cards">卡片</button><button data-v="cov">业务覆盖</button>${decodedDir ? '<button data-v="diff">差异</button>' : ''}<span class="sp"></span><label id="nav-hint">拖拽节点移动 · 滚轮缩放 · 拖空白平移 · 点节点看详情 · 双击空白重排</label></nav>
+<header><h1>模型 · ${esc(projectName)}</h1><div class="muted">${modules.length} 个模块 · ${els.length} 个模型文件 · 业务语句 ${business.length} 条 · 词汇 ${glossary.terms.length} 个${otherDir ? ` · ${baselineDir ? "与上一版比对（本段增量）：" : "与解码模型比对："}${findings.length ? `<b style="color:#fca5a5">${findings.length} 处差异</b>` : '<b style="color:#86efac">一致</b>'}` : ''}</div></header>
+<nav><button data-v="graph" class="on">关系图</button><button data-v="cards">卡片</button><button data-v="cov">业务覆盖</button>${otherDir ? '<button data-v="diff">差异</button>' : ''}<span class="sp"></span><label id="nav-hint">拖拽节点移动 · 滚轮缩放 · 拖空白平移 · 点节点看详情 · 双击空白重排</label></nav>
 <main>
 <section id="view-graph" class="view on"><div id="graph-wrap"><div class="legend" id="legend"></div><div id="graph-area"><div id="focus-bar" style="display:none">只显示所选节点及其邻居 <button id="focus-clear">显示全部</button></div><svg id="graph"></svg><div id="panel"><button class="close" id="panel-close">关闭</button><div id="panel-body"></div></div></div></div></section>
-<section id="view-cards" class="view">${decodedDir ? `<p class="muted">左边绿条 = 与代码一致；红条 = 有差异，卡片底部列出「模型 ｜ 代码」。</p>` : ''}${cardSections.join('')}</section>
+<section id="view-cards" class="view">${otherDir ? `<p class="muted">${baselineDir ? "左边绿条 = 与上一版一致（本段没动）；红条 = 本段新增或改动，卡片底部列出「现在 ｜ 上一版」。" : "左边绿条 = 与代码一致；红条 = 有差异，卡片底部列出「模型 ｜ 代码」。"}</p>` : ''}${cardSections.join('')}</section>
 <section id="view-cov" class="view"><h2>业务覆盖</h2><table class="cov"><tr><th>编号</th><th>业务语句</th><th>落点</th></tr>${coverage.join('')}</table></section>
 ${diffSection}
 </main>
@@ -453,7 +457,7 @@ function draw() {
     g.appendChild(shapeOf(n))
     const t = el('text', { 'text-anchor': 'middle', y: n.sub ? -1 : 4 }); t.textContent = n.label; g.appendChild(t)
     if (n.sub) { const t2 = el('text', { class: 'sub', 'text-anchor': 'middle', y: 12 }); t2.textContent = n.sub; g.appendChild(t2) }
-    const title = el('title'); title.textContent = (NODE_STYLE[n.kind] || {}).label + ' ' + n.label + (n.bad ? '（与代码有差异）' : ''); g.appendChild(title)
+    const title = el('title'); title.textContent = (NODE_STYLE[n.kind] || {}).label + ' ' + n.label + (n.bad ? '（与${other}有差异）' : ''); g.appendChild(title)
     n.el = g; gNode.appendChild(g)
     g.addEventListener('mouseenter', () => highlight(n)); g.addEventListener('mouseleave', () => highlight(null))
     g.addEventListener('mousedown', ev => startDrag(n, ev)); g.addEventListener('click', () => { if (!n.moved) openPanel(n) })
@@ -542,7 +546,7 @@ function buildLegend() {
   h += '<b>边</b>'
   for (const k in EDGE_STYLE) if (edges.some(e => e.kind === k)) h += '<div><label><input type="checkbox" data-t="edge" data-k="' + k + '"' + (on.edge[k] ? ' checked' : '') + '><span class="sw" style="border-color:' + EDGE_STYLE[k].stroke + ';border-top-style:' + (EDGE_STYLE[k].dash ? 'dashed' : 'solid') + '"></span>' + EDGE_STYLE[k].label + '</label></div>'
   h += '<b>显示</b><div><label><input type="checkbox" id="lbl-toggle"' + (showLabels ? ' checked' : '') + '>全部边标签</label></div>'
-  h += '<div class="hint">虚线框 = 模块；点框 = 聚合' + (${JSON.stringify(!!decodedDir)} ? '；红边框 = 与代码有差异' : '') + '。悬停看相邻，点节点看详情，详情里可只看它的关系。</div>'
+  h += '<div class="hint">虚线框 = 模块；点框 = 聚合' + (${JSON.stringify(!!otherDir)} ? '；红边框 = 与${other}有差异' : '') + '。悬停看相邻，点节点看详情，详情里可只看它的关系。</div>'
   legend.innerHTML = h
   legend.querySelectorAll('input[data-t]').forEach(i => i.addEventListener('change', () => { on[i.dataset.t][i.dataset.k] = i.checked; relayout() }))
   document.getElementById('lbl-toggle').addEventListener('change', ev => { showLabels = ev.target.checked; position() })
@@ -564,4 +568,4 @@ window.addEventListener('resize', () => position())
 </body></html>`
 fs.mkdirSync(path.dirname(out), { recursive: true })
 fs.writeFileSync(out, html)
-console.log(`已写出 ${path.relative(process.cwd(), out)}（${modules.length} 个模块，${nodes.length} 个节点，${merged.length} 条边${decodedDir ? `，${findings.length} 处差异` : ''}）`)
+console.log(`已写出 ${path.relative(process.cwd(), out)}（${modules.length} 个模块，${nodes.length} 个节点，${merged.length} 条边${otherDir ? `，${findings.length} 处差异` : ''}）`)
