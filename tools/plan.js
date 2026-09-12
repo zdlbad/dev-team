@@ -181,6 +181,9 @@ function build() {
     if (reads) { useCases.add(q(h)); visitSteps(h.data.steps, h.module) }
   }
 
+  // 端口：范围模块里的端口即使没有哪一步调用它也要建（外部系统的边界本轮可能由人照抄充当适配器，端口文件仍是模型的一部分，校验 ② 解码要对得上）
+  for (const p of els.filter((e) => e.kind === 'port' && inScopeModules().has(e.module))) ports.add(q(p))
+
   // ---- 聚合顺序：被 idRef 指向的先建 ----
   const aggList = [...aggregates]
   const deps = new Map(aggList.map((a) => [a, new Set()]))
@@ -375,7 +378,7 @@ function pickOutAlreadyDone(steps, model) {
     let prev; try { prev = readJson(path.join(dir, f)) } catch { continue }
     for (const s of prev.steps ?? []) if (s.doneAt) priors.push({ slice: prev.slice, n: s.n, file: s.file ?? null, target: s.target, noFile: s.noFile ?? null })
   }
-  if (!priors.length) return { remaining: steps, already: [] }
+  if (!priors.length) return { remaining: [...steps], already: [] } // 拷一份：调用方会先清空 steps 再回填，原样返回同一个数组就把自己清空了（2026-09-13 s-001 算出 0 步）
   const clean = cleanModelFiles(model)
   // 这一步对得上模型里的哪个文件。对不上的（适配器、组合根、原型入口——模型里本来就没有它们，
   // 文件名里还带 *），返回 null：那种只看「做过 + 文件还在」，不看跟模型差不差。
@@ -511,7 +514,7 @@ function loadContracts() {
 }
 
 // ---------- 给人看的 markdown ----------
-const KEY_LOGIC_MAX = 300 // 一步关键逻辑的字数门禁（seed/05「节奏」）
+const KEY_LOGIC_MAX = 600 // 一步关键逻辑的字数提醒线（seed/05「节奏」）：超了只提示「看看有没有啰嗦」，不拒收——完整、直白的话不为凑字数压缩（2026-09-13 项目所有者）
 function cellKeyLogic(s) {
   if (!s.keyLogic) return s.needsKeyLogic ? '**待补**' : '—'
   if (!s.keyLogic.includes('\n')) return s.keyLogic.replaceAll('|', '\\|')
@@ -528,8 +531,8 @@ function renderMd(plan) {
   for (const s of plan.steps) L.push(`| ${s.n} | ${LAYER[s.layer] ?? s.layer} | ${s.action === 'create' ? '新建' : '修改'} | ${s.file ? `\`${s.file}\`` : '—'} | ${s.what.replaceAll('|', '\\|')} | ${s.traces.join(' ') || '—'} | ${cellKeyLogic(s)} | ${s.doneAt ? s.doneAt.slice(5, 16).replace('T', ' ') : ''} |`)
   const multi = plan.steps.filter((s) => s.keyLogic && s.keyLogic.includes('\n'))
   if (multi.length) {
-    L.push('', '## 关键逻辑', '', `守卫按执行顺序一行一条，\`→ throw\` / \`→ return\` / \`→ raise\` 是结果，行尾 \`//\` 后是编号；每步不超过 ${KEY_LOGIC_MAX} 字。`, '')
-    for (const s of multi) L.push(`### 第 ${s.n} 步 · ${LAYER[s.layer] ?? s.layer} · ${s.file ? '\`' + s.file + '\`' : s.target}${s.keyLogic.length > KEY_LOGIC_MAX ? `　**超门禁：${s.keyLogic.length} 字**` : ''}`, '', '\`\`\`text', s.keyLogic.replace(/```/g, "'''"), '\`\`\`', '')
+    L.push('', '## 关键逻辑', '', `守卫按执行顺序一行一条，\`→ throw\` / \`→ return\` / \`→ raise\` 是结果，行尾 \`//\` 后是编号；超过 ${KEY_LOGIC_MAX} 字会提醒看看有没有啰嗦，但完整直白优先，不为凑字数压缩。`, '')
+    for (const s of multi) L.push(`### 第 ${s.n} 步 · ${LAYER[s.layer] ?? s.layer} · ${s.file ? '\`' + s.file + '\`' : s.target}${s.keyLogic.length > KEY_LOGIC_MAX ? `　**${s.keyLogic.length} 字，看看有没有啰嗦**` : ''}`, '', '\`\`\`text', s.keyLogic.replace(/```/g, "'''"), '\`\`\`', '')
   }
   if (plan.already?.length) {
     L.push('', `## 已经做过的 ${plan.already.length} 项（不在上面的步骤里）`, '')
@@ -549,7 +552,8 @@ function confirm() {
   const unfilled = plan.steps.filter((s) => s.needsKeyLogic && !s.keyLogic)
   if (unfilled.length) die(`还有 ${unfilled.length} 步没有关键逻辑，不能确认：${unfilled.map((s) => `#${s.n} ${s.target}`).join('、')}`)
   const over = plan.steps.filter((s) => s.keyLogic && s.keyLogic.length > KEY_LOGIC_MAX)
-  if (over.length) die(`有 ${over.length} 步关键逻辑超过 ${KEY_LOGIC_MAX} 字（节奏门禁，seed/05「节奏」），退回写码角色缩写后再确认：${over.map((s) => `#${s.n} ${s.target}（${s.keyLogic.length} 字）`).join('、')}`)
+  if (over.length) console.error(`提醒：有 ${over.length} 步关键逻辑超过 ${KEY_LOGIC_MAX} 字，看看有没有啰嗦（完整直白的话不必压缩）：`)
+  for (const s of over) console.error(`  #${s.n} ${s.target}（${s.keyLogic.length} 字）`)
   plan.confirmedAt = today
   plan.log.push(`${today} 人确认计划`)
   savePlan(plan)
@@ -592,7 +596,7 @@ function check() {
   }
   if (!plan.confirmedAt) issues.push('计划未经人确认')
   for (const s of plan.steps.filter((x) => x.needsKeyLogic && !x.keyLogic)) issues.push(`#${s.n} ${s.target}：关键逻辑未补`)
-  for (const s of plan.steps.filter((x) => x.keyLogic && x.keyLogic.length > KEY_LOGIC_MAX)) issues.push(`#${s.n} ${s.target}：关键逻辑 ${s.keyLogic.length} 字，超过 ${KEY_LOGIC_MAX} 字门禁`)
+  for (const s of plan.steps.filter((x) => x.keyLogic && x.keyLogic.length > KEY_LOGIC_MAX)) notes.push(`#${s.n} ${s.target}：关键逻辑 ${s.keyLogic.length} 字，超过 ${KEY_LOGIC_MAX} 字提醒线，看看有没有啰嗦（不拦）`)
   // 测试步骤不强制补关键逻辑，但空着就没人知道该断言什么——单独报一行，别让它悄悄溜过去
   for (const s of plan.steps.filter((x) => !x.needsKeyLogic && !x.keyLogic && x.layer === 'test')) issues.push(`#${s.n} ${s.target}：测试步骤的关键逻辑空着（不强制，但空着就没人知道该断言什么）`)
   for (const s of plan.steps.filter((x) => x.file && !x.noFile && !exists(x.file))) issues.push(`#${s.n} ${s.target}：文件不存在 ${s.file}`)

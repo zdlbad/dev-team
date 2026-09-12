@@ -171,6 +171,7 @@ function judge(report, check, target, sides, importance, related, extra = {}) {
   const item = { target, check, sides, verdict: null, importance, confidence: null, reason: '', on }
   if (related) item.related = related
   if (extra.context) item.context = extra.context // 这一条在哪个命令的第几步：给人读的，不参与指纹与判断键
+  if (extra.ask) item.ask = extra.ask // 针对这一条的具体问题（给人读的；check 仍是类别，作指南与裁决的键）
   if (d?.stale) item.staleDecision = extra.reordered
     ? { at: d.at, reordered: true } // 这个处理器的步骤重排过：挂在这个下标上的旧裁决多半讲的是别的一步，旧说明不摆出来把人看糊涂
     : { verdict: d.verdict, note: d.note, at: d.at }
@@ -199,7 +200,22 @@ const inScope = (id) => !scopeIds || scopeIds.has(id)
 const scopeAggs = sliceRec?.scope?.aggregates?.length ? new Set(sliceRec.scope.aggregates) : null
 const scopeMods = sliceRec?.scope?.modules?.length ? new Set(sliceRec.scope.modules) : null
 const qualify = (name, mod) => (name.includes('.') ? name : `${mod}.${name}`)
-const defer = (kind, target, text) => { (r1.deferred ??= []).push({ kind, target, text }) }
+const defer = (kind, target, text, report = r1) => { (report.deferred ??= []).push({ kind, target, text }) }
+// 方向 ②：解码比对里落在切片范围外的文件（别的模块、本段没建的聚合）不算错，记 deferred——和方向 ① 的粗版处理同一口径
+function outOfScope(file) {
+  if (!sliceRec || !file) return false
+  const parts = String(file).replaceAll('\\', '/').replace(/^model\//, '').split('/')
+  if (parts.length < 2) return false // modules.json 这类根文件
+  const mod = parts[0]
+  if (scopeMods && !scopeMods.has(mod)) return true
+  if (scopeAggs && parts[1] === 'domain' && parts.length >= 4) {
+    const folder = parts[2]
+    const rootEl = els.find((e) => e.kind === 'aggregate-root' && e.module === mod && e.aggregateFolder === folder)
+    if (rootEl && !scopeAggs.has(`${mod}.${rootEl.data.name}`)) return true
+    if (!rootEl) return true // 这个目录里没有聚合根文件：本段没建到的粗版聚合
+  }
+  return false
+}
 const goals = business.filter((s) => s.kind === 'goal' && inScope(s.id))
 const rules = business.filter((s) => s.kind === 'rule' && inScope(s.id))
 const usages = business.filter((s) => s.kind === 'usage' && inScope(s.id))
@@ -293,18 +309,18 @@ function ruleLandings(id) {
   const out = []
   for (const el of domainObjects) {
     const objLabel = { 'aggregate-root': '聚合根', entity: '实体', 'value-object': '值对象' }[el.kind]
-    for (const inv of el.data.aggregateInvariants ?? []) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, text: `聚合 ${el.data.name} 的不变量：${inv.text}${carriesOf(inv, id)}` })
-    for (const inv of el.data.invariants) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, text: `${objLabel} ${el.data.name} 的不变量：${inv.text}${carriesOf(inv, id)}${throwsText(inv.throws ?? [])}` })
-    for (const b of el.data.behaviors) if (b.traces.includes(id)) out.push({ kind: b.throws.length ? 'behavior-guard' : 'behavior', el, text: `${el.data.name}.${sig(b.name, b.input, b.output)}　${rulesText(b.rules, id)}${raisesText(b.raises)}${throwsText(b.throws)}` })
+    for (const inv of el.data.aggregateInvariants ?? []) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, label: `聚合 ${el.data.name} 的不变量`, text: `聚合 ${el.data.name} 的不变量：${inv.text}${carriesOf(inv, id)}` })
+    for (const inv of el.data.invariants) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, label: `${el.data.name} 的不变量`, text: `${objLabel} ${el.data.name} 的不变量：${inv.text}${carriesOf(inv, id)}${throwsText(inv.throws ?? [])}` })
+    for (const b of el.data.behaviors) if (b.traces.includes(id)) out.push({ kind: b.throws.length ? 'behavior-guard' : 'behavior', el, label: `${el.data.name}.${b.name}`, text: `${el.data.name}.${sig(b.name, b.input, b.output)}　${rulesText(b.rules, id)}${raisesText(b.raises)}${throwsText(b.throws)}` })
 
     // 字段也是模型的落点：聚合上记着什么、每一栏干什么用，跟不变量一样在承载业务
-    for (const f of el.data.fields ?? []) if ((f.traces ?? []).includes(id)) out.push({ kind: 'field', el, text: `${objLabel} ${el.data.name} 的字段 ${f.name}: ${f.type}${f.nullable ? '（可空）' : ''}${f.note ? `　${f.note}` : ''}` })
+    for (const f of el.data.fields ?? []) if ((f.traces ?? []).includes(id)) out.push({ kind: 'field', el, label: `${el.data.name} 的字段 ${f.name}`, text: `${objLabel} ${el.data.name} 的字段 ${f.name}: ${f.type}${f.nullable ? '（可空）' : ''}${f.note ? `　${f.note}` : ''}` })
   }
-  for (const s of services) for (const op of s.data.operations) if (op.traces.includes(id)) out.push({ kind: 'service', el: s, text: `领域服务 ${s.data.name}.${sig(op.name, op.input, op.output)}　${rulesText(op.rules, id)}${throwsText(op.throws)}` })
-  for (const h of handlers) if (h.data.traces.includes(id)) out.push({ kind: 'event-handler', el: h, text: `事件处理 ${h.data.name}（触发：${h.data.trigger}）：${h.data.steps.map((s) => s.text).join(' → ')}` })
-  for (const e of errors) if (e.data.traces.includes(id)) out.push({ kind: 'error', el: e, text: `错误 ${e.data.name}：${e.data.condition ? pickText(e.data.condition, id, '；') : '（无条件说明）'}` })
+  for (const s of services) for (const op of s.data.operations) if (op.traces.includes(id)) out.push({ kind: 'service', el: s, label: `领域服务 ${s.data.name}.${op.name}`, text: `领域服务 ${s.data.name}.${sig(op.name, op.input, op.output)}　${rulesText(op.rules, id)}${throwsText(op.throws)}` })
+  for (const h of handlers) if (h.data.traces.includes(id)) out.push({ kind: 'event-handler', el: h, label: `事件处理 ${h.data.name}`, text: `事件处理 ${h.data.name}（触发：${h.data.trigger}）：${h.data.steps.map((s) => s.text).join(' → ')}` })
+  for (const e of errors) if (e.data.traces.includes(id)) out.push({ kind: 'error', el: e, label: `错误 ${e.data.name}`, text: `错误 ${e.data.name}：${e.data.condition ? pickText(e.data.condition, id, '；') : '（无条件说明）'}` })
   // 端口也是落点：描述我方系统之外的业务流程（政府门户上收到转介）的事实落在边界上，不落聚合（seed/02；验收项目第六十八批）
-  for (const p of ports) if ((p.data.traces ?? []).includes(id)) out.push({ kind: 'port', el: p, text: `端口 ${p.data.name}（${p.data.kind === 'external-system' ? '外部系统' : '模块'} ${p.data.target}）：${(p.data.operations ?? []).map((op) => `${op.name}${op.note ? '——' + op.note : ''}`).join('；')}` })
+  for (const p of ports) if ((p.data.traces ?? []).includes(id)) out.push({ kind: 'port', el: p, label: `端口 ${p.data.name}`, text: `端口 ${p.data.name}（${p.data.kind === 'external-system' ? '外部系统' : '模块'} ${p.data.target}）：${(p.data.operations ?? []).map((op) => `${op.name}${op.note ? '——' + op.note : ''}`).join('；')}` })
   return out
 }
 // 种类 → 该落在哪种元素上（只是提醒，报警告）。消息里用文件里写的那个词（rawKind），旧标签的语句指纹才对得上以前的裁决：事实落字段或结构性的不变量；约束落不变量、守卫、错误；公式落计算；触发落事件处理
@@ -320,7 +336,9 @@ for (const r of rules) {
   }
   // 一条业务语句一条判断：模型侧列出全部落点及其完整上下文
   const importance = landings.some((l) => ['invariant', 'behavior-guard', 'error', 'behavior'].includes(l.kind)) ? 'high' : 'medium'
-  judge(r1, '模型规则是否与业务一致？', r.id, { business: `[${r.id}]${labelOf(r) ? ` (${labelOf(r)})` : ''} ${r.text}`, model: landings.map((l) => l.text).join('\n') }, importance, [...new Set(landings.map((l) => l.el.file))])
+  const where = [...new Set(landings.map((l) => l.label).filter(Boolean))]
+  const ask = `${r.id}「${r.text}」——模型把它写在 ${where.join('、') || '这几处'}。这几处合起来是不是把这句话说全了？有没有多加限制、少了条件，或方向反了？`
+  judge(r1, '模型规则是否与业务一致？', r.id, { business: `[${r.id}]${labelOf(r) ? ` (${labelOf(r)})` : ''} ${r.text}`, model: landings.map((l) => l.text).join('\n') }, importance, [...new Set(landings.map((l) => l.el.file))], { ask })
 }
 // 覆盖：旧的使用语句（U，已停发，老项目里还有）→ 落点不限种类，但必须有；一条一判。新项目按五问问出来的情形是普通的 R（种类「情形」），走上面那条路
 function usageLandings(id) {
@@ -335,7 +353,7 @@ for (const u of usages) {
     add(r1, 'error', 'coverage.usage', u.id, `旧的使用语句没有任何落点（模型必须回应系统会被怎么用）：${u.text}`)
     continue
   }
-  judge(r1, '模型对使用场景的回应是否充分？', u.id, { business: `[${u.id}] (${labelOf(u)}) ${u.text}`, model: landings.map((l) => l.text).join('\n') }, 'high', [...new Set(landings.map((l) => l.el.file))])
+  judge(r1, '模型对使用场景的回应是否充分？', u.id, { business: `[${u.id}] (${labelOf(u)}) ${u.text}`, model: landings.map((l) => l.text).join('\n') }, 'high', [...new Set(landings.map((l) => l.el.file))], { ask: `${u.id}「${u.text}」——模型在 ${[...new Set(landings.map((l) => l.label).filter(Boolean))].join('、') || '这几处'} 的回应，够不够应付这种用法？` })
 }
 // 追溯反向：每个元素 traces 非空且存在
 function checkTraces(target, traces, level = 'error') {
@@ -355,7 +373,8 @@ for (const g of goals) {
     const result = e.kind === 'query-handler' ? `　返回：${e.data.result.map((p) => p.name).join(', ')}` : ''
     return `${kind} ${e.data.name}（${e.data.actor}；输入：${e.data.input.map((p) => p.name).join(', ')}）：${steps}${result}`
   })
-  judge(r1, '用例是否按步骤完成了业务目标？', g.id, { business: `[${g.id}]${labelOf(g) ? ` (${labelOf(g)})` : ''} ${g.text}`, model: lines.join('\n') }, 'medium', ucs.map((e) => e.file))
+  const ucNames = ucs.map((e) => `${e.kind === 'query-handler' ? '查询' : '命令'} ${e.data.name}（${e.data.steps.length} 步）`).join('、')
+  judge(r1, '用例是否按步骤完成了业务目标？', g.id, { business: `[${g.id}]${labelOf(g) ? ` (${labelOf(g)})` : ''} ${g.text}`, model: lines.join('\n') }, 'medium', ucs.map((e) => e.file), { ask: `${g.id}「${g.text}」——${ucNames} 走完，这件事真的做成了吗？有没有缺一步（该通知没通知、该存没存），或者做的其实是另一件事？` })
 }
 
 // 命名：名词在词汇表
@@ -431,8 +450,8 @@ function checkUseCase(el, { allowMembers, queryOnly, hasWrites }) {
     const c = closureOf(s.call, el.module)
     for (const x of c.raises) union.raises.set(raiseKey(x), x)
     for (const x of c.throws) union.throws.add(x)
-    if (s.when) judge(r1, '分流条件是否只引用了领域调用的结果？', `${el.file}#steps.${i}`, { model: `${s.when} → ${s.text}` }, 'medium', undefined, { context: stepContext(i), reordered })
-    judge(r1, '步骤是否只是编排，没有夹带业务判断？', `${el.file}#steps.${i}`, { model: s.text }, 'medium', undefined, { context: stepContext(i), siblings: stepFps, reordered })
+    if (s.when) judge(r1, '分流条件是否只引用了领域调用的结果？', `${el.file}#steps.${i}`, { model: `${s.when} → ${s.text}` }, 'medium', undefined, { context: stepContext(i), reordered, ask: `${HANDLER[el.kind] ?? el.kind} ${el.data.name} 第 ${i + 1} 步的分流条件「${s.when}」——它只引用了上一步领域调用的结果吗？有没有直接比较输入或字段？` })
+    judge(r1, '步骤是否只是编排，没有夹带业务判断？', `${el.file}#steps.${i}`, { model: s.text }, 'medium', undefined, { context: stepContext(i), siblings: stepFps, reordered, ask: `${HANDLER[el.kind] ?? el.kind} ${el.data.name} 第 ${i + 1} 步「${s.text}」——这一步只是取、交给、存、发吗？有没有自己做「如果 / 比对 / 算数」这种业务判断？判断该住在聚合或领域服务里。` })
   })
   for (const c of cross) add(r1, 'error', 'cross-module.call', el.file, `跨模块调用只能经端口或事件：${c.kind} ${c.target}.${c.method}`)
   if (!queryOnly) {
@@ -553,6 +572,14 @@ if (codebase) {
     const TEXTUAL = /\/(rules\/\d+|text|aggregateNarrative|condition|when|note|responsibility)$/
     for (const f of JSON.parse(fs.readFileSync(diffJson, 'utf8')).findings) {
       const target = `${f.file}${f.path ? '#' + f.path : ''}`
+      if (outOfScope(f.file)) { defer(`diff.${f.kind}`, target, '本段范围外，未建', r2); continue }
+      // module.json 里粗版的成员、引用、本段没建的聚合：方向 ① 已按 --slice 不计，方向 ② 同一口径
+      if (sliceRec && /module\.json$/.test(f.file) && f.path) {
+        const mod = String(f.file).replace(/^model\//, '').split('/')[0]
+        const m1 = f.path.match(/^\/aggregates\/([^/]+)\/(members|idRefs)(\/|$)/)
+        const m2 = f.path.match(/^\/aggregates\/([^/]+)$/)
+        if ((m1 && f.kind === 'missing') || (m2 && f.kind === 'missing' && scopeAggs && !scopeAggs.has(`${mod}.${m2[1]}`))) { defer(`diff.${f.kind}`, target, '粗版，本段范围外未建', r2); continue }
+      }
       if (f.kind === 'changed' && TEXTUAL.test(f.path)) {
         judge(r2, '模型文字与代码注释是否同一个意思？', target, { model: f.model, code: f.code }, /aggregateNarrative|note|responsibility/.test(f.path) ? 'low' : /rules|condition/.test(f.path) ? 'high' : 'medium')
         continue
@@ -668,7 +695,7 @@ function renderMd(r) {
   section('错误', r.errors, (e) => `\`${e.target}\` [${e.check}] ${e.text}${e.model !== undefined || e.code !== undefined ? `（模型 ${show(e.model)} ｜ 代码 ${show(e.code)}）` : ''}`)
   section('警告', r.warnings, (e) => `\`${e.target}\` [${e.check}] ${e.text}`)
   section('需人确认', r.confirms, (e) => `\`${e.target}\` [${e.check}] ${e.text}${e.options ? `\n   - 选项：${e.options.join(' / ')}` : ''}${e.note ? `\n   - 备注：${e.note}` : ''}`)
-  section('待判断（按重要度降序）', r.judgments, (j) => `\`${j.target}\` **${j.importance}** ${j.check}\n   - 业务：${show(j.sides.business)}\n   - 模型：${show(j.sides.model)}${j.sides.code !== undefined ? `\n   - 代码：${show(j.sides.code)}` : ''}`)
+  section('待判断（按重要度降序）', r.judgments, (j) => `\`${j.target}\` **${j.importance}** ${j.ask || j.check}\n   - 业务：${show(j.sides.business)}\n   - 模型：${show(j.sides.model)}${j.sides.code !== undefined ? `\n   - 代码：${show(j.sides.code)}` : ''}`)
   section('已裁决（未变化，未重复提出）', r.decided, (d) => `\`${d.target}\` [${d.check}] ${d.verdict} — ${d.note}（${d.at}）`)
   L.push('', '## 盲区', '')
   for (const b of r.blindSpots) L.push(`- ${b}`)

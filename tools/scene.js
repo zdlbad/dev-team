@@ -212,7 +212,8 @@ table{width:100%;border-collapse:collapse;font-size:13.5px}
 th{text-align:left;color:var(--dim);font-weight:500;padding:6px 10px 6px 0;border-bottom:1px solid var(--line)}
 td{padding:7px 10px 7px 0;border-bottom:1px solid var(--line);vertical-align:top}
 tr.cur td{background:rgba(125,211,252,.07)}
-.tag{font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+.tag{font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--dim);white-space:nowrap;display:inline-block}
+td:nth-child(n+3),th:nth-child(n+3){white-space:nowrap;width:1%;padding-right:14px}td:nth-child(2){white-space:nowrap;padding-right:18px}td:first-child{min-width:260px}
 .tag.done{color:var(--ok);border-color:rgba(134,239,172,.4)}
 .tag.now{color:var(--hi);border-color:rgba(125,211,252,.5)}
 .tl{font-size:13.5px}
