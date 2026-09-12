@@ -115,21 +115,30 @@ function makeReport(direction) {
 const decisions = [] // 全部模型文件的 decisions[]
 const decFile = new Map() // 每一条裁决出自哪个文件（重新定基时要写回去）
 const staleSeen = [] // 这一趟遇到的过期裁决：{ dec, text }
-const decStats = { 问过: 0, 压根没人裁过: 0, 指纹对上: 0, 没带指纹就认了: 0, 过期: 0 }
+const decStats = { 问过: 0, 压根没人裁过: 0, 指纹对上: 0, 挪位对上: 0, 没带指纹就认了: 0, 过期: 0 }
 /** 裁决对象的指纹：文字变了裁决即过期 */
 function fingerprint(text) {
   return require('node:crypto').createHash('sha1').update(String(text ?? '')).digest('hex').slice(0, 8)
 }
-function decidedFor(target, check, text) {
+function decidedFor(target, check, text, siblingFps) {
   decStats.问过++
   // 只认人裁的。角色自己记的理由留在文件里备查，但不能替人把这一条盖过去。
-  const mine = decisions.filter((d) => d.target === target && d.check === check && d.by !== 'role')
-  if (!mine.length) { decStats.压根没人裁过++; return null }
+  let mine = decisions.filter((d) => d.target === target && d.check === check && d.by !== 'role')
+  const fp = fingerprint(text)
   // 同一个目标名下可能有好几条（一个聚合根的多条聚合级不变量 target 都一样）：
   // 先认指纹对得上自己这段文字的那一条，认不到再退回没带指纹的那条。
-  const fp = fingerprint(text)
   const byFp = mine.find((x) => x.on === fp)
   if (byFp) { decStats.指纹对上++; return byFp }
+  // 步骤类目标（…#steps.N）的裁决按下标挂着；中间插一步或重排，下标全体错位。
+  // 文字一个字没变的那一步，它的裁决在同一个处理器的别的下标上——按指纹认回来，不再问第二遍。
+  const m = /^(.*)#steps\.\d+$/.exec(target)
+  if (m) {
+    const moved = decisions.find((d) => d.check === check && d.by !== 'role' && d.on === fp && d.target !== target && d.target.startsWith(m[1] + '#steps.'))
+    if (moved) { decStats.挪位对上++; return { ...moved, target } }
+    // 挂在这个下标上、指纹却对得上别的一步现在的文字的，是别人的裁决——不拿来当这一步的「上次裁决」，那只会把人看糊涂
+    if (siblingFps) mine = mine.filter((d) => !d.on || !siblingFps.has(d.on))
+  }
+  if (!mine.length) { decStats.压根没人裁过++; return null }
   // 老裁决没带指纹：认不出它是对着哪一版文字裁的，只能照认
   const noFp = mine.find((x) => !x.on)
   if (noFp) { decStats.没带指纹就认了++; return noFp }
@@ -156,12 +165,15 @@ function add(report, level, check, target, text, extra = {}) {
   else if (level === 'warning') report.warnings.push(item)
   else report.confirms.push(item)
 }
-function judge(report, check, target, sides, importance, related) {
+function judge(report, check, target, sides, importance, related, extra = {}) {
   const on = fingerprint(sides.model)
-  const d = decidedFor(target, check, sides.model)
+  const d = decidedFor(target, check, sides.model, extra.siblings)
   const item = { target, check, sides, verdict: null, importance, confidence: null, reason: '', on }
   if (related) item.related = related
-  if (d?.stale) item.staleDecision = { verdict: d.verdict, note: d.note, at: d.at }
+  if (extra.context) item.context = extra.context // 这一条在哪个命令的第几步：给人读的，不参与指纹与判断键
+  if (d?.stale) item.staleDecision = extra.reordered
+    ? { at: d.at, reordered: true } // 这个处理器的步骤重排过：挂在这个下标上的旧裁决多半讲的是别的一步，旧说明不摆出来把人看糊涂
+    : { verdict: d.verdict, note: d.note, at: d.at }
   if (d && !d.stale) {
     report.decided.push({ check, target, text: sides.model, verdict: d.verdict, note: d.note, at: d.at })
     return
@@ -288,7 +300,7 @@ function ruleLandings(id) {
   return out
 }
 // 种类 → 该落在哪种元素上（只是提醒，报警告）。消息里用文件里写的那个词（rawKind），旧标签的语句指纹才对得上以前的裁决：事实落字段或结构性的不变量；约束落不变量、守卫、错误；公式落计算；触发落事件处理
-const EXPECTED = { 事实: ['field', 'invariant', 'behavior'], 约束: ['invariant', 'behavior-guard', 'error', 'field'], 公式: ['behavior', 'behavior-guard', 'service', 'field'], 触发: ['event-handler'] }
+const EXPECTED = { 事实: ['field', 'invariant', 'behavior'], 约束: ['invariant', 'behavior-guard', 'error', 'field'], 公式: ['behavior', 'behavior-guard', 'service', 'field'], 触发: ['event-handler'], 流程: ['behavior-guard', 'invariant', 'error', 'command'], 情形: ['behavior', 'behavior-guard', 'invariant', 'error', 'field', 'command'] }
 for (const r of rules) {
   const landings = ruleLandings(r.id)
   if (!landings.length) {
@@ -302,7 +314,7 @@ for (const r of rules) {
   const importance = landings.some((l) => ['invariant', 'behavior-guard', 'error', 'behavior'].includes(l.kind)) ? 'high' : 'medium'
   judge(r1, '模型规则是否与业务一致？', r.id, { business: `[${r.id}]${labelOf(r) ? ` (${labelOf(r)})` : ''} ${r.text}`, model: landings.map((l) => l.text).join('\n') }, importance, [...new Set(landings.map((l) => l.el.file))])
 }
-// 覆盖：旧的使用语句（U，已停发，老项目里还有）→ 落点不限种类，但必须有；一条一判。新项目按五问问出来的公司事实是普通的 R，走上面那条路
+// 覆盖：旧的使用语句（U，已停发，老项目里还有）→ 落点不限种类，但必须有；一条一判。新项目按五问问出来的情形是普通的 R（种类「情形」），走上面那条路
 function usageLandings(id) {
   const out = ruleLandings(id)
   for (const c of commands) if (c.data.traces.includes(id)) out.push({ kind: 'command', el: c, text: `命令 ${c.data.name}（输入：${(c.data.input ?? []).map((p) => p.name).join(', ') || '无'}）：${pickText(c.data.steps, id, ' → ')}` })
@@ -383,6 +395,10 @@ function checkUseCase(el, { allowMembers, queryOnly, hasWrites }) {
   const touched = new Set()
   const repoWrites = new Set()
   const cross = []
+  const stepFps = new Set(steps.map((x) => fingerprint(x.text)))
+  const reordered = steps.some((x, i) => { const fp = fingerprint(x.text); return decisions.some((d) => d.by !== 'role' && d.on === fp && d.target.startsWith(el.file + '#steps.') && d.target !== `${el.file}#steps.${i}`) })
+  const HANDLER = { 'command-handler': '命令', 'query-handler': '查询', 'event-handler': '事件处理' }
+  const stepContext = (i) => `${HANDLER[el.kind] ?? el.kind} ${el.data.name} · 第 ${i + 1} 步，共 ${steps.length} 步${i ? `（上一步：${steps[i - 1].text.slice(0, 40)}${steps[i - 1].text.length > 40 ? '…' : ''}）` : ''}`
   steps.forEach((s, i) => {
     if (s.when && s.when !== '否则' && !outputs.some((o) => s.when.includes(o))) add(r1, 'error', 'step.when', `${el.file}#steps.${i}`, `when 未引用前面某步的 output：${s.when}`)
     if (s.output) outputs.push(s.output)
@@ -407,8 +423,8 @@ function checkUseCase(el, { allowMembers, queryOnly, hasWrites }) {
     const c = closureOf(s.call, el.module)
     for (const x of c.raises) union.raises.set(raiseKey(x), x)
     for (const x of c.throws) union.throws.add(x)
-    if (s.when) judge(r1, '分流条件是否只引用了领域调用的结果？', `${el.file}#steps.${i}`, { model: `${s.when} → ${s.text}` }, 'medium')
-    judge(r1, '步骤是否只是编排，没有夹带业务判断？', `${el.file}#steps.${i}`, { model: s.text }, 'medium')
+    if (s.when) judge(r1, '分流条件是否只引用了领域调用的结果？', `${el.file}#steps.${i}`, { model: `${s.when} → ${s.text}` }, 'medium', undefined, { context: stepContext(i), reordered })
+    judge(r1, '步骤是否只是编排，没有夹带业务判断？', `${el.file}#steps.${i}`, { model: s.text }, 'medium', undefined, { context: stepContext(i), siblings: stepFps, reordered })
   })
   for (const c of cross) add(r1, 'error', 'cross-module.call', el.file, `跨模块调用只能经端口或事件：${c.kind} ${c.target}.${c.method}`)
   if (!queryOnly) {

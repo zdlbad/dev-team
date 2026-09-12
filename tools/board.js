@@ -143,6 +143,28 @@ L.push(`- 业务：目标 ${goals} 条，规则 ${rules} 条，使用 ${usages} 
 L.push(`- 模型：模块 ${modules.length}（${modules.join('、') || '无'}）；${Object.entries(kinds).map(([k, v]) => `${k} ${v}`).join('，') || '尚无元素'}；裁决 ${decisions} 条`)
 L.push(reportLine('校验 ①', r1))
 L.push(reportLine('校验 ②', r2))
+
+// ---------- 现场（scene set 写的，不是算出来的）----------
+// 状态看板算的是「走到哪」，现场写的是「此刻谁在干什么」；两块板子人只开一页，所以现场也摆在这里。
+const scenePath = path.join(root, 'reports', '_现场.json')
+const scene = fs.existsSync(scenePath) ? JSON.parse(fs.readFileSync(scenePath, 'utf8')) : null
+const hhmm = (iso) => {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+L.push('', '## 现场', '')
+if (!scene || !scene.step) L.push('（还没写过现场：开发指挥每个动作之前 `scene set`）')
+else {
+  const who = scene.who === '人' ? '**等你**' : `${scene.who} 在做`
+  L.push(`- **此刻**（${hhmm(scene.updatedAt)} 本机时间）：${scene.slice ?? ''}${scene.phase ? ` · ${scene.phase}` : ''} — ${who}：${scene.step}${scene.note ? `（${scene.note}）` : ''}`)
+  const os = require('node:os')
+  if (scene.machine && scene.machine !== os.hostname()) L.push(`- **现场上一次是在另一台机器（${scene.machine}）写的**——先 \`git pull\`，不然看到的是旧的`)
+  const tl = (scene.timeline ?? []).slice(-6).reverse()
+  if (tl.length) {
+    L.push('- 最近几步（新的在上）：')
+    for (const e of tl) L.push(`  - ${hhmm(e.ts)}　${e.who ?? '—'}${e.done ? '（完）' : ''}　${e.step}${e.note ? `（${e.note}）` : ''}`)
+  }
+}
 L.push('', '## 谁在做什么', '')
 const live = rows.filter((r) => !r.archived)
 if (!live.length) L.push('（没有在推进的切片）')
