@@ -48,6 +48,7 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 | `validate <项目> [--code <代码库>] [--slice <id>]` | 校验：方向 ① 总是执行（每条语句的落点、标签与文件和字母对得上），带 `--code` 时执行方向 ② | `node $DEV_TEAM/tools/validate.js …` |
 | `review <报告 json>` | 起本地页面，人逐条填裁决，存回同一文件（校验报告与 pre-pr 报告通用） | `node $DEV_TEAM/tools/review.js …` |
 | `render <项目> [--decoded <解码目录>] [--out <html>]` | 可视化：关系图 + 卡片 + 业务覆盖；带 `--decoded` 时标出与代码的差异 | `node $DEV_TEAM/tools/render.js …` |
+| `delta <项目> <切片> [--base <提交>] [--out <html>]` | **模型增量**：切片模型阶段开工时的提交（`advance model in-progress` 自动记）与现在的模型比，页面上红 = 本段新增或改动、绿 = 没动；**模型确认那一关只给人看这个** | `node $DEV_TEAM/tools/model-delta.js …` |
 | `decode <代码库> <输出目录>` | 从代码还原模型 | `node $DEV_TEAM/tools/decode.js …` |
 | `diff <model 目录> <解码目录>` | 设计模型与解码模型比对 | `node $DEV_TEAM/tools/diff-model.js …` |
 | `help` | 打印本表 | — |
@@ -59,7 +60,7 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 0. **动手之前先写看板**（下面每一条都适用，不只派角色）：`scene set --slice <id> --step "<这一步在做什么>" --who <谁> --phase <业务|模型|编码|校验>`。派角色写角色名，自己跑工具写「开发指挥」，停下等人写「人」。
 1. 执行 `slice next <项目> <id> --json`，得到 `{ role, action, command, why }`。
 2. 按 `role` 分派：
-   - **人**：不做任何事。把 `action`、`command`、`why` 原样告诉人，停。
+   - **人**：不做任何事。把 `action`、`command`、`why` 原样告诉人，停。 `action` 是模型确认时，先跑 `delta`，把增量页面的路径和「新增 / 改动 / 删除各几个文件」一并告诉人——人只确认增量，不重看整个模型。
    - **role 为「路由」**（工具里的旧叫法，就是开发指挥自己）：直接执行 `command`（写回裁决、标记状态、算编码计划），把输出告诉人，停。算出编码计划后把 `plans/<id>.md` 的路径告诉人。
    - **模型校验**：先执行 `command`（校验器）。报告有错误或警告 → 告诉人，停。否则读 `$DEV_TEAM/agents/validator.md`，用 Agent 工具启动一个子 agent，提示词 = 该文件全文 + 上下文块（见 `agents/README.md`）+ 任务「填写 `reports/validate-<n>.json` 里全部判断」。子 agent 完成后，起审阅页面（`review`），把它的小结与页面地址告诉人，停。
    - **pre-pr 审查**：读 `$DEV_TEAM/agents/pre-pr-reviewer.md`，同样方式启动子 agent，任务 = `action`（含模式 proto / shell）。子 agent 完成后跑 `prepr check`，起审阅页面，把发现数、必须改数、干净的角度与页面地址告诉人，停。

@@ -72,6 +72,7 @@ node tools/check-schema.js <项目>                              # 校验 glossa
 node tools/validate.js <项目> [--code <代码库>] [--slice <id>]   # 校验，产出 reports/validate-1|2
 node tools/review.js <报告 json>                               # 审阅页面（本地；校验与 pre-pr 报告通用）
 node tools/render.js <项目> [--decoded <解码目录>] [--out <html>] # 模型可视化；带 --decoded 标出差异
+node tools/model-delta.js <项目> <切片> [--base <提交>]            # 模型增量：基线提交 → 现在，人只确认增量
 node tools/decode.js <代码库> <输出目录> [--system 名]           # 代码 → 模型
 node tools/diff-model.js <model 目录> <解码目录>                 # 设计模型 vs 解码模型
 node tools/inventory.js <代码库> [--out <md>]                   # 盘点既有代码库
