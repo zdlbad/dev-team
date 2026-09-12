@@ -15,8 +15,10 @@
  * 退出码：0 正常；1 核对未过；2 用法或前置错误。
  */
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
-const { loadProject, walk, readJson } = require('./lib/project')
+const { spawnSync } = require('node:child_process')
+const { loadProject, walk, readJson, walkNames, conditionText } = require('./lib/project')
 
 const args = process.argv.slice(2)
 const cmd = args[0]
@@ -60,6 +62,50 @@ function appendSliceLog(text) {
   writeJson(slicePath, s)
 }
 
+/**
+ * 每条切片的故事各走了哪些用例、那一步的 walk.input 填的还作不作数。
+ * 命令的入参窄一档之后，早先那几条切片的故事输入就成了陈货：递进去命令不认，
+ * 那条故事在原型上跑不动——而没有任何东西会说一声。
+ * 顶层栏位对得上对不上，机器判得了（extra 就是命令上已经没有的那几个）；
+ * 窄在参数里面的（比如 expenses 里每一笔少了几样），类型只是词汇表上的一段话、没有字段清单，
+ * 机器判不了——所以只要这一趟动了这条命令，就把那条故事列出来让人看一眼。
+ * 一步走两个动作（「A + B」）的，两个动作收的是同一份输入，按两边入参的并集比。
+ */
+function storyWalks(model) {
+  const els = model.elements.filter((e) => e.kind !== "invalid")
+  const kinds = ["command-handler", "query-handler", "event-handler"]
+  const findEl = (name, hint) => {
+    const [m, n] = name.includes(".") ? name.split(".") : [null, name]
+    return els.find((e) => kinds.includes(e.kind) && e.data.name === n && (!m || e.module === m)) ??
+      (hint && !m ? els.find((e) => kinds.includes(e.kind) && e.data.name === n && e.module === hint) : null) ?? null
+  }
+  const dir = path.join(root, "slices")
+  const out = []
+  if (!fs.existsSync(dir)) return out
+  const suffix = ".story.json"
+  for (const file of fs.readdirSync(dir).filter((x) => x.endsWith(suffix)).sort()) {
+    let st; try { st = readJson(path.join(dir, file)) } catch { continue }
+    const walks = []
+    for (const s of st.steps ?? []) {
+      const w = s.walk
+      if (!w || !w.input || typeof w.input !== "object" || Array.isArray(w.input)) continue
+      const hint = w.aggregate && w.aggregate.includes(".") ? w.aggregate.split(".")[0] : null
+      const known = new Set()
+      const targets = []
+      for (const n of walkNames(w.name)) {
+        const el = findEl(n, hint)
+        if (!el) continue
+        targets.push(el.module + "." + el.data.name)
+        for (const p of el.data.input ?? []) known.add(p.name)
+      }
+      if (!targets.length) continue
+      walks.push({ n: s.n, name: w.name, targets, extra: Object.keys(w.input).filter((k) => !known.has(k)) })
+    }
+    if (walks.length) out.push({ slice: file.slice(0, -suffix.length), walks })
+  }
+  return out
+}
+
 // ========== build ==========
 function build() {
   const project = loadProject(root)
@@ -71,11 +117,21 @@ function build() {
 
   // ---- 范围：用例（命令 / 查询 / 事件处理）与聚合的限定名 ----
   const useCases = new Set(), aggregates = new Set(), modulesOnly = new Set()
+  const missingUseCases = []
   if (story) for (const s of story.steps) {
     const w = s.walk; if (!w || w.kind === 'none') continue
-    if (w.name && w.name.includes('.')) useCases.add(w.name)
     if (w.aggregate) aggregates.add(w.aggregate)
+    // 裸名靠这一步动的聚合定位模块；找不到就按名字在全模型里找唯一的一个
+    const hint = w.aggregate?.includes('.') ? w.aggregate.split('.')[0] : null
+    for (const n of walkNames(w.name)) {
+      const el =
+        byQ('command-handler', n) ?? byQ('query-handler', n) ?? byQ('event-handler', n) ??
+        (hint ? byQ('command-handler', `${hint}.${n}`) ?? byQ('query-handler', `${hint}.${n}`) ?? byQ('event-handler', `${hint}.${n}`) : null)
+      if (el) useCases.add(q(el))
+      else missingUseCases.push(`第 ${s.n} 步「${n}」`)
+    }
   }
+  if (missingUseCases.length) console.error(`[计划] 故事里这些走法在模型里找不到对应的用例，已跳过：${missingUseCases.join('、')}`)
   for (const u of slice.scope.useCases ?? []) { const el = byQ('command-handler', u) ?? byQ('query-handler', u) ?? byQ('event-handler', u); if (el) useCases.add(q(el)) }
   for (const a of slice.scope.aggregates ?? []) { const el = byQ('aggregate-root', a); if (el) aggregates.add(q(el)) }
   if (!useCases.size && !aggregates.size) for (const m of slice.scope.modules ?? []) modulesOnly.add(m)
@@ -102,11 +158,27 @@ function build() {
     for (const u of [...useCases]) { const el = byQ('command-handler', u) ?? byQ('query-handler', u) ?? byQ('event-handler', u); if (el) visitSteps(el.data.steps, el.module) }
     for (const a of [...aggregates]) { const r = els.find((e) => e.kind === 'repository' && `${e.module}.${e.data.aggregate}` === a); if (r) repos.add(q(r)) }
   }
-  // 事件处理：范围内聚合发出的事件，其处理器在范围模块里的也算进来（老式切片按模块；故事切片只认 walk 走到的）
-  if (planKind !== 'proto') for (const h of els.filter((e) => e.kind === 'event-handler')) {
+  // 事件处理与查询：范围内聚合发出的事件、读范围内聚合的查询，都要建。
+  // 从前故事切片「只认 walk 走到的」，于是模型里有、计划里没有——校验 ② 解码比对时会报「模型有、代码无」，
+  // 而故事本来不必走到每一个用例（发票状态由事件推进、待办清单没人在故事里打开）。模型是按最小建的，里面的东西就该全建。
+  const inScopeModules = () => new Set([...aggregates, ...useCases].map((x) => x.split('.')[0]))
+  for (const h of els.filter((e) => e.kind === 'event-handler')) {
     const [tm, tn] = h.data.trigger.includes('.') ? h.data.trigger.split('.') : [h.module, h.data.trigger]
     const ev = els.find((e) => e.kind === 'event' && e.module === tm && e.data.name === tn)
-    if (ev && aggregates.has(`${ev.module}.${ev.data.aggregate}`) && (modulesOnly.has(h.module) || (slice.scope.modules ?? []).includes(h.module))) { useCases.add(q(h)); visitSteps(h.data.steps, h.module) }
+    if (!ev || !aggregates.has(`${ev.module}.${ev.data.aggregate}`)) continue
+    const byModule = modulesOnly.has(h.module) || (slice.scope.modules ?? []).includes(h.module)
+    if (byModule || inScopeModules().has(h.module)) { useCases.add(q(h)); visitSteps(h.data.steps, h.module) }
+  }
+  // 查询：处理器在范围模块里、且它读的仓储属于范围内的聚合
+  for (const h of els.filter((e) => e.kind === 'query-handler')) {
+    if (useCases.has(q(h)) || !inScopeModules().has(h.module)) continue
+    const reads = (h.data.steps ?? []).some((s) => {
+      const c = s.call
+      if (!c || c.kind !== 'repository') return false
+      const r = byQ('repository', c.target.includes('.') ? c.target : `${h.module}.${c.target}`)
+      return r && aggregates.has(`${r.module}.${r.data.aggregate}`)
+    })
+    if (reads) { useCases.add(q(h)); visitSteps(h.data.steps, h.module) }
   }
 
   // ---- 聚合顺序：被 idRef 指向的先建 ----
@@ -129,6 +201,17 @@ function build() {
   const add = (layer, file, target, what, traces, needsKeyLogic, extra = {}) => steps.push({ n: steps.length + 1, layer, action: exists(file) ? 'modify' : 'create', file, target, what, traces: [...new Set(traces ?? [])], needsKeyLogic, keyLogic: null, doneAt: null, ...extra })
   const behaviorsText = (el) => el.data.behaviors.map((b) => b.name).join('、')
   const modulesInScope = [...new Set([...aggregates, ...useCases].map((x) => x.split('.')[0]))].sort()
+  // 一个段落最多两个模块（seed/01-phases-and-slices.md「开发范围怎么切」）。三个就是把两段并成了一段，算出来的单子人消化不掉。
+  // 实现切片本来就把几段并在一起上生产外壳，不受这一条限制
+  if (slice.kind !== 'implementation' && slice.kind !== 'refactor' && modulesInScope.length > 2 && !args.includes('--允许超界')) {
+    const say = [
+      "这一段碰了 " + modulesInScope.length + " 个模块（" + modulesInScope.join("、") + "），超过一个段落该有的大小。",
+      "一个故事段落是两个模块的一次交互（有时就是一个模块自己），单一业务意图；三个模块说明这里其实是两段并成了一段。",
+      "先把切片拆开；确实要一次算完的话加 --允许超界。见 seed/01-phases-and-slices.md「开发范围怎么切」",
+    ]
+    die(say.join(String.fromCharCode(10)))
+  }
+  if ((slice.kind === 'story' || story) && !slice.intent) console.error("[计划] 这条切片没写「单一业务意图」（切片记录的 intent）：写不出一句话就是不止一个意图，那要再切。见 seed/01-phases-and-slices.md「开发范围怎么切」")
 
   if (planKind !== 'shell') {
     if (!hasBuildingBlock()) add('building-block', 'src/shared/building-block/domain/AggregateRoot.ts', 'shared.building-block', '首次：把 $DEV_TEAM/building-block/ 拷入 src/shared/building-block/（domain / application / ports / proto）', [], false)
@@ -141,7 +224,7 @@ function build() {
       for (const el of members.filter((e) => e.kind === 'value-object')) add('domain', codeFile(el), q(el), `值对象 ${el.data.name}：行为 ${behaviorsText(el) || '无'}；不变量 ${el.data.invariants.length} 条`, [...el.data.traces, ...el.data.invariants.flatMap((i) => i.traces)], !!(el.data.behaviors.length || el.data.invariants.length))
       for (const el of members.filter((e) => e.kind === 'entity')) add('domain', codeFile(el), q(el), `实体 ${el.data.name}：行为 ${behaviorsText(el) || '无'}；不变量 ${el.data.invariants.length} 条`, [...el.data.traces, ...el.data.invariants.flatMap((i) => i.traces)], !!(el.data.behaviors.length || el.data.invariants.length))
       for (const el of members.filter((e) => e.kind === 'event')) add('domain', codeFile(el), q(el), `事件 ${el.data.name}（${(el.data.payload ?? []).map((p) => p.name).join(', ') || '无 payload'}）`, el.data.traces, false)
-      for (const el of members.filter((e) => e.kind === 'error')) add('domain', codeFile(el), q(el), `错误 ${el.data.name}：${el.data.condition || '（条件未写）'}`, el.data.traces, false)
+      for (const el of members.filter((e) => e.kind === 'error')) add('domain', codeFile(el), q(el), `错误 ${el.data.name}：${conditionText(el.data.condition) || '（条件未写）'}`, el.data.traces, false)
       add('domain', codeFile(rootEl), q(rootEl), `聚合根 ${n}：行为 ${behaviorsText(rootEl) || '无'}；不变量 ${(rootEl.data.aggregateInvariants ?? []).length + rootEl.data.invariants.length} 条`, [...rootEl.data.traces, ...rootEl.data.behaviors.flatMap((b) => b.traces), ...rootEl.data.invariants.flatMap((i) => i.traces), ...(rootEl.data.aggregateInvariants ?? []).flatMap((i) => i.traces)], true)
       const repo = els.find((e) => e.kind === 'repository' && e.module === m && e.data.aggregate === n)
       if (repo && repos.has(q(repo))) add('repository', codeFile(repo), q(repo), `仓储接口 ${repo.data.name}：${repo.data.methods.map((x) => `${x.name}(${x.kind === 'read' ? '读' : '写'})`).join('、')}`, [], false)
@@ -203,19 +286,208 @@ function build() {
     for (const u of [...useCases].sort()) { const el = byQ('command-handler', u) ?? byQ('query-handler', u); if (el) add('test', `tests/${el.module}/adapters/*${el.data.name}*.test.ts`, q(el), `契约测试 ${el.data.name}：按 contracts/http 的字段发请求，核对响应与错误 → 状态码`, [], false) }
   }
   if (planKind === 'proto' && story) add('input', null, `${sliceId}.story`, `给故事每一步（kind 为 command / query / time 的）walk 填 input：字段名 = 命令 input 的参数名，值来自故事的金额与日期`, [], false)
+  // 这一趟动的命令，别的切片的故事里也在走：它那份 walk.input 是照旧模型填的，
+  // 不核对一遍，那条故事就可能在原型上跑不动了而没人知道。谁也不会顺手看见，所以列成一步。
+  if (planKind === 'proto') for (const other of storyWalks(model)) {
+    if (other.slice === sliceId) continue
+    const hit = other.walks.filter((x) => x.targets.some((t) => useCases.has(t)))
+    if (!hit.length) continue
+    const proven = [...new Set(hit.flatMap((x) => x.extra))]
+    const where = hit.map((x) => `第 ${x.n} 步（${x.name}）`).join("、")
+    add('input', null, `${other.slice}.story`, `${other.slice} 的故事输入跟着核对：这一趟动的命令它也在走（${where}），那份 walk.input 是照旧模型填的${proven.length ? `——${proven.join("、")} 这几个栏位命令上已经没有了` : '，要照现在的 input 逐个字段核一遍，多出来的删掉、窄掉的改过来'}；不改它这条故事在原型上跑不动`, [], false)
+  }
+  // ---- 已经做过的挑出去，不再列成步骤 ----
+  const { remaining, already, unrecorded } = pickOutAlreadyDone(steps, model)
+  steps.length = 0
+  steps.push(...remaining)
+
+  // ---- 测试就位：哪一块写完就配哪一块的测试 ----
+  interleaveTests(steps)
 
   // ---- 合并旧计划的关键逻辑；写出 ----
   const old = fs.existsSync(planPath) ? readJson(planPath) : null
   if (old?.confirmedAt && !args.includes('--force')) die(`计划已于 ${old.confirmedAt} 确认；要重算请加 --force（关键逻辑会尽量保留，确认与完成记录清零）`)
   if (old) for (const s of steps) { const o = old.steps.find((x) => x.target === s.target && x.layer === s.layer && (x.file ?? null) === (s.file ?? null)); if (o?.keyLogic) s.keyLogic = o.keyLogic }
-  const plan = { slice: sliceId, kind: planKind, role: roleName, builtAt: now(), codebase: posix(path.relative(root, codebase)), scope: { modules: modulesInScope, aggregates: ordered, useCases: [...useCases].sort() }, steps, confirmedAt: null, log: [...(old?.log ?? []), `${today} ${old ? '重算' : '生成'}：${steps.length} 步（${planKind}）`] }
+  const plan = { slice: sliceId, kind: planKind, role: roleName, builtAt: now(), codebase: posix(path.relative(root, codebase)), scope: { modules: modulesInScope, aggregates: ordered, useCases: [...useCases].sort() }, steps, already, modelFingerprint: modelFingerprint(), confirmedAt: null, log: [...(old?.log ?? []), `${today} ${old ? '重算' : '生成'}：${steps.length} 步（${planKind}）${already.length ? `；另有 ${already.length} 项上一条切片已经做过，没列进步骤` : ''}`] }
+  const carried = already.length ? `；另有 ${already.length} 项上一条切片已经做过、代码还在、跟模型仍然一致，没列进步骤` : ''
+  if (unrecorded?.length) {
+    const line = `这 ${unrecorded.length} 处的文件其实已经在代码库里、也跟模型一致，但没有哪张施工单记过是谁建的，所以仍然列成步骤：${unrecorded.map((s) => s.target).join('、')}`
+    console.log('[计划] ' + line)
+    plan.log.push(`${today} ${line}`)
+  }
   writeJson(planPath, plan)
   fs.writeFileSync(planMd, renderMd(plan))
-  appendSliceLog(`编码计划${old ? '重算' : '生成'}：${steps.length} 步（${planKind}），关键逻辑待补 ${steps.filter((s) => s.needsKeyLogic && !s.keyLogic).length} 步`)
-  console.log(`计划已${old ? '重算' : '生成'}：${rel(planPath)}（${steps.length} 步，${planKind}）；${roleName}角色给 ${steps.filter((s) => s.needsKeyLogic && !s.keyLogic).length} 步补关键逻辑，然后人确认（plan confirm）`)
+  appendSliceLog(`编码计划${old ? '重算' : '生成'}：${steps.length} 步（${planKind}），关键逻辑待补 ${steps.filter((s) => s.needsKeyLogic && !s.keyLogic).length} 步${carried}`)
+  const todo = steps.filter((s) => s.needsKeyLogic && !s.keyLogic).length
+  console.log(`计划已${old ? '重算' : '生成'}：${rel(planPath)}（${steps.length} 步，${planKind}）${carried}；${todo ? `${roleName}角色给 ${todo} 步补关键逻辑，然后人确认（plan confirm）` : '没有要补关键逻辑的，可以直接请人确认（plan confirm）'}`)
 }
 
 /** 构建块在不在：代码库里有 src/shared/building-block，或 tsconfig 的 paths 把 @shared/building-block/* 指到了别处 */
+/**
+ * 把测试步骤从末尾那一整块挪到它测的东西旁边。
+ * 领域测试只 import 领域层与构建块，紧跟它测的那一步；
+ * 用例与仓储测试要用内存适配器走一遍，排在最后一个适配器之后——再往前放就没东西可跑。
+ */
+function interleaveTests(steps) {
+  const tests = steps.filter((s) => s.layer === 'test')
+  if (!tests.length) return
+  const rest = steps.filter((s) => s.layer !== 'test')
+  const needsAdapter = new Set(['application', 'repository'])
+  const lastAdapter = rest.map((s) => s.layer).lastIndexOf('adapter')
+  const after = new Map() // 位置 → 挂在它后面的那几个测试
+  const tail = []
+  for (const test of tests) {
+    const subject = rest.findIndex((s) => s.target === test.target)
+    if (subject < 0) { tail.push(test); continue }
+    const at = needsAdapter.has(rest[subject].layer) && lastAdapter > subject ? lastAdapter : subject
+    if (!after.has(at)) after.set(at, [])
+    after.get(at).push(test)
+  }
+  const out = []
+  rest.forEach((s, i) => { out.push(s); for (const x of after.get(i) ?? []) out.push(x) })
+  out.push(...tail)
+  steps.length = 0
+  steps.push(...out)
+  steps.forEach((s, i) => { s.n = i + 1 })
+}
+/**
+ * 已经做过的挑出去。
+ *
+ * 为什么要有这一道：几条切片共用同一批聚合时，前一条切片是照整份模型写的，
+ * 后一条切片算出来的单子上会有一大半早就完工了（s-003 头一回算出来 60 步、其中 58 步已完工）。
+ * 一张大半都是打勾的单子，会教人闭着眼睛往下按。
+ *
+ * 三条判据要同时成立，缺一不可：
+ * - 别的切片的施工单上有同一个文件、同一个目标的一步，而且真的登记完成过（doneAt）；
+ * - 那个文件现在还在（或者当初就是按「用现成的、不另建文件」结掉的）；
+ * - 源码与测试对应的那个模型文件，这一次解码比对下来 0 处差异。模型后来改过、代码没跟上的，
+ *   差异不为 0，这一步就重新出现在单子上，它的测试也跟着回来。
+ *
+ * 接线的那几步（适配器、组合根、原型入口、构建块）单算：只要还剩一样要建，接线就得留着,
+ * 新建的东西要登记进去；一样都不建时，接线也就不必动。
+ */
+function pickOutAlreadyDone(steps, model) {
+  const priors = []
+  const dir = path.join(root, "plans")
+  if (fs.existsSync(dir)) for (const f of fs.readdirSync(dir)) {
+    // 本切片自己上一版计划里做过的也算：模型没再动、代码还在，就不该重新出现在单子上
+    if (!f.endsWith(".json")) continue
+    let prev; try { prev = readJson(path.join(dir, f)) } catch { continue }
+    for (const s of prev.steps ?? []) if (s.doneAt) priors.push({ slice: prev.slice, n: s.n, file: s.file ?? null, target: s.target, noFile: s.noFile ?? null })
+  }
+  if (!priors.length) return { remaining: steps, already: [] }
+  const clean = cleanModelFiles(model)
+  // 这一步对得上模型里的哪个文件。对不上的（适配器、组合根、原型入口——模型里本来就没有它们，
+  // 文件名里还带 *），返回 null：那种只看「做过 + 文件还在」，不看跟模型差不差。
+  const modelKey = (f) => {
+    if (!f) return null
+    let key = null
+    if (f.startsWith("src/") && f.endsWith(".ts")) key = f.slice(4, -3) + ".json"
+    else if (f.startsWith("tests/") && f.endsWith(".test.ts")) key = f.slice(6, -8) + ".json"
+    if (!key || key.includes("*")) return null
+    return fs.existsSync(path.join(root, "model", key)) ? key : null
+  }
+  const settle = (s) => {
+    // 故事输入不是代码文件：别的切片当初填过，不等于它按现在的模型还填得对，一律不算做过
+    if (s.layer === 'input') return null
+    const prior = priors.find((x) => x.target === s.target && (x.file ?? null) === (s.file ?? null))
+    if (!prior) return null
+    if (!prior.noFile && !exists(s.file)) return null
+    const key = modelKey(s.file)
+    if (key && (!clean || !clean.has(key))) return null
+    return { slice: prior.slice, n: prior.n, ...(prior.noFile ? { noFile: prior.noFile } : {}) }
+  }
+  const WIRING = new Set(["adapter", "composition", "proto", "building-block"])
+  const already = []
+  const note = (s, by) => already.push({ layer: s.layer, file: s.file ?? null, target: s.target, what: s.what, by })
+  const kept = []
+  for (const s of steps) {
+    if (WIRING.has(s.layer)) { kept.push(s); continue }
+    const by = settle(s)
+    if (by) note(s, by); else kept.push(s)
+  }
+  const isSettledInSubstance = (s) => s.action !== "create" && exists(s.file) && (() => { const k = modelKey(s.file); return k ? !!clean && clean.has(k) : false })()
+  // 装配（仓储与端口的适配器、组合根、原型入口）要不要重新过一遍，得按它依赖的东西判，不能「只要有新东西就全摆出来」。
+  // 在已有聚合里添一个值对象，装配一个字都不用动——那种把九步装配摆到人面前，人只会把它们当噪音划过去。
+  const kindOf = (x) => { const b = x ? String(x).split("/").pop() : ""; return b.includes(".") ? b.split(".")[0] : "" }
+  // 这几种新建出来非接不可：新聚合根要仓储与适配器，新的命令 / 查询 / 事件处理器要登记，新端口要适配器，新事件要订阅
+  const CREATES_NEED_WIRING = new Set(["aggregate-root", "command-handler", "query-handler", "event-handler", "port", "repository", "event"])
+  const moduleOf = (t) => String(t ?? "").split(".")[0]
+  const newWiringModules = new Set(kept.filter((s) => !WIRING.has(s.layer) && s.layer !== "input" && s.action === "create" && CREATES_NEED_WIRING.has(kindOf(s.file))).map((s) => moduleOf(s.target)))
+  // 命令的入参怎么从页面那一侧对接进来，住在组合根里：应用层动了，这个模块的组合根就要跟着看一遍
+  const appTouched = new Set(kept.filter((s) => s.layer === "application").map((s) => moduleOf(s.target)))
+  const wiringNeeded = (s) => {
+    const m = moduleOf(s.target)
+    if (s.layer === "composition") return newWiringModules.has(m) || appTouched.has(m)
+    if (s.layer === "proto") return newWiringModules.size > 0
+    // 仓储与端口的适配器：只有那个仓储 / 端口本身是这一趟新建的，才要跟着建
+    return kept.some((x) => x.target === s.target && !WIRING.has(x.layer) && x.action === "create")
+  }
+  const remaining = []
+  for (const s of kept) {
+    if (!WIRING.has(s.layer) || wiringNeeded(s)) { remaining.push(s); continue }
+    const by = settle(s)
+    if (by) note(s, by); else remaining.push(s)
+  }
+  const unrecorded = remaining.filter((s) => !WIRING.has(s.layer) && s.layer !== "input" && isSettledInSubstance(s))
+  return { remaining, already, unrecorded }
+}
+
+/** 解码一遍代码，跟模型比一比：哪些模型文件是 0 处差异的。比不了就返回 null，一步都不挑出去 */
+function cleanModelFiles(model) {
+  if (!fs.existsSync(codebase)) return null
+  const modelDir = path.join(root, "model")
+  if (!fs.existsSync(modelDir)) return null
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "plan-decoded-"))
+  try {
+    const out = path.join(tmp, "model")
+    const system = model.modules?.data.system ?? ""
+    const dec = spawnSync(process.execPath, [path.join(__dirname, "decode.js"), codebase, out, "--system", system], { encoding: "utf8" })
+    if (dec.status !== 0) { console.error("[计划] 解码没跑通，这一次不挑「已经做过的」：" + (dec.stderr || dec.stdout || "").trim().split(String.fromCharCode(10))[0]); return null }
+    const diffJson = path.join(tmp, "_diff.json")
+    spawnSync(process.execPath, [path.join(__dirname, "diff-model.js"), modelDir, out, "--json", diffJson], { encoding: "utf8" })
+    if (!fs.existsSync(diffJson)) return null
+    const dirty = new Set(JSON.parse(fs.readFileSync(diffJson, "utf8")).findings.map((f) => f.file))
+    const all = walk(modelDir).map((f) => posix(path.relative(modelDir, f))).filter((f) => f.endsWith(".json") && !path.basename(f).startsWith("_"))
+    return new Set(all.filter((f) => !dirty.has(f)))
+  } catch (e) {
+    console.error("[计划] 比对没跑通，这一次不挑「已经做过的」：" + e.message)
+    return null
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+}
+
+/**
+ * 模型此刻的样子，算成一个指纹。算计划时记下来，核对时再算一次——对不上就说明
+ * 模型在算完计划之后又改过，这份单子已经不作数了，别让人去确认一份过期的单子。
+ *
+ * 指纹里**不算 decisions 与 questions**：那两样是人的裁决与模型师留的问题，
+ * 变了不影响这次要动哪些文件、按什么顺序，算进去只会天天报假警。
+ * 同理不算 traces、carries、note：那是给校验与人看的注解，业务分析回填一个编号不该让整张单子作废。
+ */
+const FP_SKIP = new Set(["decisions", "questions", "traces", "carries", "note"])
+function modelFingerprint() {
+  const dir = path.join(root, "model")
+  if (!fs.existsSync(dir)) return null
+  const crypto = require("node:crypto")
+  const h = crypto.createHash("sha256")
+  for (const f of walk(dir).map((x) => posix(path.relative(dir, x))).filter((x) => x.endsWith(".json") && !path.basename(x).startsWith("_")).sort()) {
+    let d; try { d = readJson(path.join(dir, f)) } catch { continue }
+    const strip = (o) => {
+      if (Array.isArray(o)) return o.map(strip)
+      if (o && typeof o === "object") {
+        const out = {}
+        for (const k of Object.keys(o).sort()) { if (FP_SKIP.has(k)) continue; out[k] = strip(o[k]) }
+        return out
+      }
+      return o
+    }
+    h.update(f + String.fromCharCode(0) + JSON.stringify(strip(d)) + String.fromCharCode(0))
+  }
+  return h.digest("hex").slice(0, 16)
+}
+
 function hasBuildingBlock() {
   if (fs.existsSync(path.join(codebase, 'src', 'shared', 'building-block'))) return true
   const tc = path.join(codebase, 'tsconfig.json')
@@ -247,6 +519,12 @@ function renderMd(plan) {
   L.push('| # | 层 | 动作 | 文件 | 做什么 | 编号 | 关键逻辑 | 完成 |', '|---|---|---|---|---|---|---|---|')
   const LAYER = { 'building-block': '构建块', domain: '领域', repository: '仓储接口', service: '领域服务', application: '应用', port: '端口', adapter: '适配器', shell: '外壳', composition: '装配', proto: '原型入口', test: '测试', input: '故事输入' }
   for (const s of plan.steps) L.push(`| ${s.n} | ${LAYER[s.layer] ?? s.layer} | ${s.action === 'create' ? '新建' : '修改'} | ${s.file ? `\`${s.file}\`` : '—'} | ${s.what.replaceAll('|', '\\|')} | ${s.traces.join(' ') || '—'} | ${s.keyLogic ? s.keyLogic.replaceAll('|', '\\|') : s.needsKeyLogic ? '**待补**' : '—'} | ${s.doneAt ? s.doneAt.slice(5, 16).replace('T', ' ') : ''} |`)
+  if (plan.already?.length) {
+    L.push('', `## 已经做过的 ${plan.already.length} 项（不在上面的步骤里）`, '')
+    L.push('这些文件别的切片已经写过、代码还在，而且解码回来跟现在的模型一致，所以这一次不必再动。', '模型后来改了、代码没跟上的，会自动回到上面的步骤里。', '')
+    L.push('| 层 | 文件 | 目标 | 谁做的 |', '|---|---|---|---|')
+    for (const a of plan.already) L.push(`| ${LAYER[a.layer] ?? a.layer} | ${a.file ? '`' + a.file + '`' : '—'} | ${a.target} | ${a.by.slice} 第 ${a.by.n} 步${a.by.noFile ? '（用现成的，不另建文件）' : ''} |`)
+  }
   L.push('', '## 记录', '', ...plan.log.map((l) => `- ${l}`), '')
   return L.join('\n')
 }
@@ -268,7 +546,7 @@ function confirm() {
 // ========== done ==========
 function done() {
   const n = Number(args[3])
-  if (!Number.isInteger(n) || n < 1) die('用法：plan done <项目目录> <切片id> <步骤号> [说明]')
+  if (!Number.isInteger(n) || n < 1) die('用法：plan done <项目目录> <切片id> <步骤号> [--已有 说明|说明]')
   const plan = loadPlan()
   if (!plan.confirmedAt) die('计划还没被人确认，不能开写')
   const s = plan.steps.find((x) => x.n === n)
@@ -276,8 +554,15 @@ function done() {
   const earlier = plan.steps.filter((x) => x.n < n && !x.doneAt)
   if (earlier.length) console.log(`注意：第 ${earlier.map((x) => x.n).join('、')} 步还没完成——顺序与计划不一致，check 会报`)
   s.doneAt = now()
-  const note = args.slice(4).join(' ')
-  plan.log.push(`${today} 完成 #${n} ${s.target}${note ? '：' + note : ''}`)
+  // 「已有」：构建块里现成的东西够用，这一步不另建文件。理由必须写，check 照着理由放行、不再报文件不存在
+  const rest = args.slice(4)
+  const noFile = rest[0] === '--已有' || rest[0] === '--no-file'
+  const note = (noFile ? rest.slice(1) : rest).join(' ')
+  if (noFile) {
+    if (!note) die('用 --已有 结掉一步时要写清楚用的是哪个现成的东西、为什么不另建')
+    s.noFile = note
+  }
+  plan.log.push(`${today} 完成 #${n} ${s.target}${noFile ? '（已有，不另建文件）' : ''}${note ? '：' + note : ''}`)
   savePlan(plan)
   console.log(`#${n} ${s.target} 完成${note ? '：' + note : ''}（${plan.steps.filter((x) => x.doneAt).length}/${plan.steps.length}）`)
 }
@@ -286,18 +571,40 @@ function done() {
 function check() {
   const plan = loadPlan()
   const issues = []
+  const notes = []
+  if (plan.modelFingerprint) {
+    const nowFp = modelFingerprint()
+    if (nowFp && nowFp !== plan.modelFingerprint) issues.push(`算完这份计划之后模型又改过：这份单子上要动哪些文件、按什么顺序都可能不作数了，先 plan build --force 重算再往下走`)
+  }
   if (!plan.confirmedAt) issues.push('计划未经人确认')
   for (const s of plan.steps.filter((x) => x.needsKeyLogic && !x.keyLogic)) issues.push(`#${s.n} ${s.target}：关键逻辑未补`)
-  for (const s of plan.steps.filter((x) => x.file && !exists(x.file))) issues.push(`#${s.n} ${s.target}：文件不存在 ${s.file}`)
+  // 测试步骤不强制补关键逻辑，但空着就没人知道该断言什么——单独报一行，别让它悄悄溜过去
+  for (const s of plan.steps.filter((x) => !x.needsKeyLogic && !x.keyLogic && x.layer === 'test')) issues.push(`#${s.n} ${s.target}：测试步骤的关键逻辑空着（不强制，但空着就没人知道该断言什么）`)
+  for (const s of plan.steps.filter((x) => x.file && !x.noFile && !exists(x.file))) issues.push(`#${s.n} ${s.target}：文件不存在 ${s.file}`)
+  for (const s of plan.steps.filter((x) => x.noFile)) notes.push(`#${s.n} ${s.target}：用现成的，不另建文件——${s.noFile}`)
+  for (const a of plan.already ?? []) if (a.file && !a.by.noFile && !exists(a.file)) issues.push(`${a.target}：算计划时认定它已经做过（${a.by.slice} 第 ${a.by.n} 步），现在文件不见了 ${a.file}`)
+  if (plan.already?.length) notes.push(`另有 ${plan.already.length} 项是别的切片做过的，没列进步骤（见计划里「已经做过的」那一节）`)
   for (const s of plan.steps.filter((x) => !x.doneAt)) issues.push(`#${s.n} ${s.target}：未登记完成（plan done）`)
   const doneSteps = plan.steps.filter((x) => x.doneAt)
   for (let i = 1; i < doneSteps.length; i++) if (doneSteps[i].doneAt < doneSteps[i - 1].doneAt) issues.push(`顺序不一致：#${doneSteps[i].n} ${doneSteps[i].target}（${doneSteps[i].doneAt.slice(11, 19)}）在 #${doneSteps[i - 1].n}（${doneSteps[i - 1].doneAt.slice(11, 19)}）之前完成`)
   if (plan.steps.some((x) => x.layer === 'input') && story) for (const st of story.steps) if (st.walk && ['command', 'query', 'time'].includes(st.walk.kind) && !st.walk.input) issues.push(`故事第 ${st.n} 步（${st.walk.name}）walk.input 未填`)
-  const result = { slice: sliceId, kind: plan.kind, steps: plan.steps.length, done: doneSteps.length, ok: !issues.length, issues }
+  // 填了、但填的还作不作数：命令的入参窄了之后，故事输入上多出来的栏位递进去命令不认。
+  // 判得出来的只有顶层那一层，窄在参数里面的判不出来——那种由计划里那一步管（见 build）
+  for (const other of storyWalks(loadProject(root).model)) {
+    const stale = other.walks.filter((x) => x.extra.length)
+    if (!stale.length) continue
+    const where = stale.map((x) => `第 ${x.n} 步（${x.name}）多出 ${x.extra.join("、")}`).join("；")
+    const line = `${other.slice} 的故事输入已经不作数：${where}——命令上没有这几个栏位了`
+    const mine = other.slice === sliceId || plan.steps.some((x) => x.layer === "input" && x.target === `${other.slice}.story`)
+    if (mine) issues.push(line)
+    else notes.push(line + "（这一趟的单子上没有它，另找时候补）")
+  }
+  const result = { slice: sliceId, kind: plan.kind, steps: plan.steps.length, done: doneSteps.length, ok: !issues.length, issues, notes }
   if (args.includes('--json')) console.log(JSON.stringify(result, null, 2))
   else {
     console.log(`计划核对 ${sliceId}（${plan.kind}）：${plan.steps.length} 步，完成 ${doneSteps.length}，${issues.length ? `${issues.length} 个问题` : '一致'}`)
     for (const i of issues) console.log(`  ✗ ${i}`)
+    for (const n of notes) console.log(`  · ${n}`)
   }
   process.exit(issues.length ? 1 : 0)
 }

@@ -19,12 +19,24 @@ function readJson(p) {
   return JSON.parse(fs.readFileSync(p, 'utf8'))
 }
 
-/** 业务描述：[G-001] / [R-001] (种类) / [U-001] (使用) 文本 */
+/** 业务语句的标签：层（业务抽象 / 业务落地）与种类（能力 / 事实 / 约束 / 公式 / 触发）。形状：- [R-001] (业务落地-约束) 文本 */
+const LAYERS = ['业务抽象', '业务落地']
+const KINDS = { 能力: 'G', 事实: 'R', 约束: 'R', 公式: 'R', 触发: 'R' }
+// 旧标签自动对上新名。「使用」是已停发的 U 类：老项目里还有，整体迁移时逐条过五问——公司事实改写成 R，软件行为作废
+const LEGACY_KINDS = { 目标: '能力', 不变量: '约束', 推导: '公式', 反应: '触发', 使用: '使用' }
+const LEGACY_LAYER_FILES = { '领域.md': '业务抽象', '公司.md': '业务落地' }
+/** 给人看的标签：层-种类，缺哪样省哪样 */
+const labelOf = (s) => [s.layer, s.ruleKind].filter(Boolean).join('-')
+
+/** 业务描述：- [G-001] (层-种类) 文本。层与种类都可省：层省了从文件位置推（business/<Module>/<层>.md），老布局（business/<主题>.md）没有层 */
 function loadBusiness(root) {
   const dir = path.join(root, 'business')
   const statements = []
   for (const f of walk(dir).filter((p) => p.endsWith('.md'))) {
     const rel = path.relative(root, f).replaceAll('\\', '/')
+    const base = path.basename(f)
+    const stem = base.replace(/\.md$/, '')
+    const fileLayer = rel.split('/').length === 3 ? (LAYERS.includes(stem) ? stem : LEGACY_LAYER_FILES[base] ?? null) : null
     const lines = fs.readFileSync(f, 'utf8').split('\n')
     let inFence = false
     lines.forEach((line, i) => {
@@ -33,11 +45,22 @@ function loadBusiness(root) {
         return
       }
       if (inFence) return // 围栏代码块里的示例不是业务语句
-      const m = line.match(/^\s*-\s*\[([GRU]-\d{3,})\]\s*(?:\((不变量|反应|推导|使用)\))?\s*(.*)$/)
+      const m = line.match(/^\s*-\s*\[([GRU]-\d{3,})\]\s*(?:\(([^)]*)\))?\s*(.*)$/)
       if (!m) return
-      // G = 目标（谁能做到什么）；R = 规则（一次操作对不对）；U = 使用（系统会被怎么用：同时、重复、一次几条、失败处置、可见性）
-      const kind = m[1].startsWith('G') ? 'goal' : m[1].startsWith('U') ? 'usage' : 'rule'
-      statements.push({ id: m[1], kind, ruleKind: m[2] ?? (kind === 'usage' ? '使用' : null), text: m[3].trim(), file: rel, line: i + 1 })
+      // G = 能力（谁能做到什么）；R = 规则（事实 / 约束 / 公式 / 触发）；U = 旧的使用语句，不再新发
+      const letter = m[1][0]
+      const kind = letter === 'G' ? 'goal' : letter === 'U' ? 'usage' : 'rule'
+      let labelLayer = null, kindWord = null, rawKind = null, legacy = false
+      const unknown = []
+      for (const tok of (m[2] ?? '').split(/[-・·／/\s]+/).filter(Boolean)) {
+        if (LAYERS.includes(tok)) labelLayer = tok
+        else if (KINDS[tok]) { kindWord = tok; rawKind = tok }
+        else if (LEGACY_KINDS[tok]) { kindWord = LEGACY_KINDS[tok]; rawKind = tok; legacy = true }
+        else unknown.push(tok)
+      }
+      if (!kindWord && kind === 'usage') { kindWord = '使用'; legacy = true }
+      if (!kindWord && kind === 'goal' && labelLayer) kindWord = '能力'
+      statements.push({ id: m[1], kind, ruleKind: kindWord, rawKind, layer: labelLayer ?? fileLayer, labelLayer, fileLayer, legacy, unknownLabel: unknown.length ? unknown : null, text: m[3].trim(), file: rel, line: i + 1 })
     })
   }
   return statements
@@ -89,4 +112,37 @@ function loadProject(root) {
   return { root, business: loadBusiness(root), glossary: loadGlossary(root), model: loadModel(root), slices: loadSlices(root) }
 }
 
-module.exports = { loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, PREFIXES }
+/** 故事一步的走法名字里可能写了不止一个动作（「A + B」，按写的顺序做），逐个拆出来 */
+function walkNames(name) {
+  return String(name ?? '').split('+').map((x) => x.trim()).filter(Boolean)
+}
+
+/** 一条规则可以是一句话，也可以是 { text, traces, carries }（标明它管哪几个编号）；给人看的时候只要那句话 */
+function ruleText(r) {
+  return r && typeof r === 'object' ? String(r.text ?? '') : String(r ?? '')
+}
+/** 错误的 condition 可以是一句话，也可以是一句一标的数组；给人看的时候拼回一段 */
+function conditionText(c) {
+  if (Array.isArray(c)) return c.map(ruleText).filter(Boolean).join('；')
+  return ruleText(c)
+}
+
+/**
+ * 按对照换词：从左到右一次扫过，每一处只换一次，keys 要先按长的排前面。
+ * 不能用逐条 split/join——那是扫好几遍，换出来的结果会被后一条再换一次
+ * （「录入日」改名前后都叫录入日，可 split 到「录入」那一条时又被换成「登记日」）。
+ * 对照里写「录入日: 录入日」这种原地不动的，就是靠这个一次扫过才保得住。
+ */
+function applyWordMap(text, pairs, keys) {
+  const s = String(text ?? '')
+  let out = ''
+  let i = 0
+  while (i < s.length) {
+    let hit = null
+    for (const k of keys) if (k && s.startsWith(k, i)) { hit = k; break }
+    if (hit) { out += pairs[hit]; i += hit.length } else { out += s[i]; i++ }
+  }
+  return out
+}
+
+module.exports = { applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }

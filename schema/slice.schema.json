@@ -28,9 +28,10 @@
         "initial",
         "increment",
         "story",
-        "implementation"
+        "implementation",
+        "refactor"
       ],
-      "description": "initial / increment：老式按主题的切片；story：建模切片（一条故事，到模型确认为止，不编码）；implementation：实现切片（若干条已确认的故事的模型 → 代码）"
+      "description": "initial / increment：老式按主题的切片；story：建模切片（一条故事，到模型确认为止，不编码）；implementation：实现切片（若干条已确认的故事的模型 → 代码）；refactor：只改说法或结构、一个字的业务行为都不变（改名、挪位置）。refactor 没有业务意图，所以不走故事、不走裁定卡、也不算编码计划——它的门禁是「测试照旧全绿 + 把改名套在改前的解码结果上与改后逐字节一致」（tools/rename-check.js），不是跟模型 0 差异。见 seed/01-phases-and-slices.md「开发范围怎么切」"
     },
     "codebase": {
       "type": "string",
@@ -180,6 +181,34 @@
       },
       "uniqueItems": true,
       "description": "实现切片：它实现哪几条故事（建模切片）的模型"
+    },
+    "archived": {
+      "type": "object",
+      "description": "这条切片按裁定归档、不再推进：它仍是记录（战略设计、当时的裁定），但不该再出现在「下一步该谁上场」里",
+      "properties": {
+        "ts": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "ts",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "intent": {
+      "type": "string",
+      "minLength": 1,
+      "description": "这一段的**单一业务意图**，一句话。写不出一句话，就是不止一个意图——那要再切。见 seed/01-phases-and-slices.md「开发范围怎么切」"
+    },
+    "businessStory": {
+      "type": "string",
+      "minLength": 1,
+      "description": "它是哪条**业务故事**（完整故事链）里的一个段落。故事链允许多意图混合，段落不允许。衔接只写一句上下文，不在本段展开"
     }
   },
   "$defs": {

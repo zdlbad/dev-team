@@ -27,7 +27,7 @@ if (!['serve', 'check'].includes(cmd) || !root || !fs.existsSync(path.join(root,
   console.error('用法：node tools/proto.js <serve|check> <项目目录> --code <代码库> [--port 4872] [--proto-port 4873]')
   process.exit(2)
 }
-const { loadModel, loadBusiness, walk } = require('./lib/project')
+const { loadModel, loadBusiness, walk, walkNames, conditionText } = require('./lib/project')
 const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8'))
 const { compile } = require('./lib/compile')
 const tsconfig = path.join(codebase, 'tsconfig.json')
@@ -88,7 +88,7 @@ function modelData() {
   const model = loadModel(root)
   const business = {}; for (const s of loadBusiness(root)) business[s.id] = { text: s.text, kind: s.kind }
   const errors = {}
-  for (const el of model.elements) if (el.kind === 'error') errors[el.data.name] = { condition: el.data.condition ?? '', module: el.module, traces: el.data.traces ?? [] }
+  for (const el of model.elements) if (el.kind === 'error') errors[el.data.name] = { condition: conditionText(el.data.condition), module: el.module, traces: el.data.traces ?? [] }
   const ops = []
   for (const el of model.elements) {
     if (el.kind === 'command-handler') ops.push({ kind: 'command', module: el.module, name: el.data.name, q: `${el.module}.${el.data.name}`, actor: el.data.actor, input: el.data.input, steps: (el.data.steps ?? []).map((s) => s.text), throws: el.data.throws ?? [], raises: el.data.raises ?? [], traces: el.data.traces ?? [] })
@@ -124,13 +124,20 @@ async function check() {
   if (child) child.kill()
   process.exit(missing.length ? 1 : 0)
 }
-/** 故事 walk.name 可能不带模块前缀；对到原型登记名 */
+/**
+ * 故事 walk.name 可能不带模块前缀；对到原型登记名。
+ * 一步里写了不止一个动作（「A + B」）的，逐个对；有一个对不上，这一步就走不了。
+ */
 function resolveName(m, w) {
   const kind = w.kind === 'query' ? 'query' : 'command'
   const list = kind === 'query' ? m.queries : m.commands
-  if (list.includes(w.name)) return { kind, q: w.name }
-  const hit = list.filter((n) => n.endsWith('.' + w.name))
-  return { kind, q: hit.length === 1 ? hit[0] : null }
+  const ops = walkNames(w.name).map((n) => {
+    if (list.includes(n)) return n
+    const hit = list.filter((x) => x.endsWith('.' + n))
+    return hit.length === 1 ? hit[0] : null
+  })
+  const ok = ops.length > 0 && ops.every(Boolean)
+  return { kind, ops, q: ok ? ops[ops.length - 1] : null }
 }
 
 // ---------- serve ----------
@@ -145,6 +152,12 @@ const CSS = `
   @media (max-width: 1250px) { main { grid-template-columns: 280px minmax(0,1fr); } #state-box { grid-column: 1 / -1; position:static; max-height:none; } }
   .col { display:flex; flex-direction:column; gap:12px; }
   .box { background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  #story-pick { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
+  #story-pick .seg { font:inherit; font-size:12px; cursor:pointer; background:#fff; border:1px solid #d0d7de; border-radius:999px; padding:3px 11px; }
+  #story-pick .seg:hover { border-color:#1f6feb; }
+  #story-pick .seg.on { border-color:#1f6feb; background:#eef4ff; font-weight:600; }
+  #story-pick .seg .d { color:#57606a; font-weight:400; margin-left:5px; }
+  #story-pick .arrow { color:#9ca3af; font-size:12px; }
   .box h2 { font-size:14px; margin:0 0 8px; } .box h3 { font-size:13px; margin:10px 0 4px; color:var(--muted); }
   .muted { color:var(--muted); font-size:12px; }
   .ops button { display:block; width:100%; text-align:left; margin:3px 0; padding:5px 8px; } .ops button.sel { border-color:var(--blue); background:#eef4ff; } .ops .m { font-weight:600; margin-top:6px; font-size:12px; color:var(--muted); }
@@ -180,7 +193,7 @@ const PAGE = `<!doctype html>
 <header><h1 id="title">原型</h1><a href="http://127.0.0.1:4871/" target="story">框架图 ↗</a><a href="http://127.0.0.1:4871/model" target="model">模型图 ↗</a><span class="sp"></span><span class="st" id="st"></span><button id="rebuild">重新编译</button><button id="reset">重置状态</button></header>
 <main>
   <div class="col">
-    <div class="box story"><h2>按故事走</h2><select id="story-sel"></select><div><button id="run-all" class="primary">从头走到底</button> <span class="muted">每步用模型师填的输入跑一次，和故事写的事实并排</span></div><div id="steps"></div></div>
+    <div class="box story"><h2>按故事走</h2><div id="story-pick"></div><div><button id="run-all" class="primary">从头走到底</button> <span class="muted">每步用模型师填的输入跑一次，和故事写的事实并排</span></div><div id="steps"></div></div>
     <div class="box"><h2>命令与查询</h2><div class="ops" id="ops"></div></div>
   </div>
   <div class="col">
@@ -263,9 +276,14 @@ function records(rows) {
   rows = unwrap(rows)
   return rows.map(r => { const o = r && typeof r === 'object' ? r : { value: r }; return '<div class="rec"><div class="rh"><b>' + esc(o.id ?? '（无 id）') + '</b>' + (o.version !== undefined ? '<span class="v">v' + esc(o.version) + '</span>' : '') + '</div>' + kv(o, ['id', 'version']) + '</div>' }).join('')
 }
-function resolveName(w) { const kind = w.kind === 'query' ? 'query' : 'command'; const list = kind === 'query' ? M.queries : M.commands; if (list.includes(w.name)) return { kind, q: w.name }; const hit = list.filter(n => n.endsWith('.' + w.name)); return { kind, q: hit.length === 1 ? hit[0] : null } }
+function walkNames(name) { return String(name || '').split('+').map(x => x.trim()).filter(Boolean) }
+function resolveName(w) { const kind = w.kind === 'query' ? 'query' : 'command'; const list = kind === 'query' ? M.queries : M.commands; const ops = walkNames(w.name).map(n => { if (list.includes(n)) return n; const hit = list.filter(x => x.endsWith('.' + n)); return hit.length === 1 ? hit[0] : null }); const ok = ops.length > 0 && ops.every(Boolean); return { kind, ops, q: ok ? ops[ops.length - 1] : null } }
 function renderStories() {
-  $('#story-sel').innerHTML = '<option value="">（选一条故事）</option>' + D.stories.map(s => '<option value="' + esc(s.slice) + '"' + (s.slice === storyId ? ' selected' : '') + '>' + esc(s.slice) + ' ' + esc(s.title) + '</option>').join('')
+  // 按故事里最早的那一天排，没有步骤的排最后；点一下换故事，不用下拉
+  const firstDay = (s) => { const ds = s.steps.map(x => String(x.day || '')).filter(d => /^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(d)).sort(); return ds[0] || '' }
+  const order = D.stories.slice().sort((a, b) => { const x = firstDay(a), y = firstDay(b); return (x ? 0 : 1) - (y ? 0 : 1) || String(x).localeCompare(String(y)) || String(a.slice).localeCompare(String(b.slice)) })
+  $('#story-pick').innerHTML = order.map(s => { const d = firstDay(s); return '<button class="seg' + (s.slice === storyId ? ' on' : '') + '" data-pick="' + esc(s.slice) + '">' + esc(s.title) + '<span class="d">' + (d ? d.slice(5).split('-').join('/') : '待写') + '·' + s.steps.length + '步</span></button>' }).join('<span class="arrow">→</span>')
+  document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => { storyId = b.dataset.pick; stepState = {}; renderStories() }))
   const st = D.stories.find(s => s.slice === storyId)
   $('#steps').innerHTML = st ? st.steps.map(s => {
     const w = s.walk, r = w && w.kind !== 'none' && w.input ? resolveName(w) : null
@@ -277,15 +295,23 @@ function renderStories() {
 }
 async function runStep(n) {
   const st = D.stories.find(s => s.slice === storyId), s = st.steps.find(x => x.n === n), r = resolveName(s.walk)
-  const res = await api('/run', { kind: r.kind, name: r.q, input: s.walk.input })
-  const tmp = document.createElement('div'); showResult(tmp, res)
-  stepState[n] = { cls: res.ok ? 'ok' : 'bad', html: tmp.innerHTML }
-  sel = r.q; renderOps(); renderForm(s.walk.input); showResult($('#res'), res)
+  let res = null, last = r.q
+  const parts = []
+  for (const q of r.ops) {
+    last = q
+    res = await api('/run', { kind: r.kind, name: q, input: s.walk.input })
+    const tmp = document.createElement('div'); showResult(tmp, res)
+    parts.push((r.ops.length > 1 ? '<div class="muted">' + esc(q) + '</div>' : '') + tmp.innerHTML)
+    if (!res.ok) break
+  }
+  const ok = !!(res && res.ok)
+  stepState[n] = { cls: ok ? 'ok' : 'bad', html: parts.join('') }
+  sel = last; renderOps(); renderForm(s.walk.input); showResult($('#res'), res)
   renderStories(); await refresh()
-  return res.ok
+  return ok
 }
 $('#run-all').addEventListener('click', async () => { if (!storyId) return; await api('/reset', {}); stepState = {}; const st = D.stories.find(s => s.slice === storyId); for (const s of st.steps) { if (!(s.walk && s.walk.kind !== 'none' && s.walk.input && resolveName(s.walk).q)) continue; const ok = await runStep(s.n); if (!ok) break } })
-$('#story-sel').addEventListener('change', () => { storyId = $('#story-sel').value || null; stepState = {}; renderStories() })
+// 故事的切换改成上面那一排按钮（renderStories 里绑的 data-pick）
 $('#reset').addEventListener('click', async () => { await api('/reset', {}); stepState = {}; renderStories(); refresh() })
 $('#rebuild').addEventListener('click', async () => { $('#st').textContent = '编译中…'; const r = await api('/rebuild', {}); $('#st').textContent = r.ok ? '编译完成，原型已重启' : '编译失败'; if (!r.ok) alert(r.output); M = await api('/manifest'); D = await (await fetch('/data')).json(); stepState = {}; renderOps(); renderStories(); refresh() })
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); $('#state').hidden = b.dataset.t !== 'state'; $('#events').hidden = b.dataset.t !== 'events' }))

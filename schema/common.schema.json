@@ -3,103 +3,450 @@
   "$id": "urn:dev-team:common",
   "title": "公共定义",
   "$defs": {
-    "modelName": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$", "description": "模型名：大驼峰，无种类后缀" },
-    "qualifiedName": { "type": "string", "pattern": "^([A-Z][A-Za-z0-9]*\\.)?[A-Z][A-Za-z0-9]*$", "description": "可带模块前缀的模型名：Module.Name" },
-    "methodName": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*$" },
-    "factoryName": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "description": "静态工厂：全大写蛇形" },
-    "fieldName": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*$" },
-    "typeRef": { "type": "string", "pattern": "^(string|number|boolean|date|[A-Z][A-Za-z0-9]*(\\.[A-Z][A-Za-z0-9]*)?)(\\[\\])?$", "description": "标量 string|number|boolean|date，或模型名，可加 []" },
-    "traceId": { "type": "string", "pattern": "^[GRU]-[0-9]{3,}$", "description": "业务编号：G 目标、R 规则、U 使用" },
-    "traces": { "type": "array", "items": { "$ref": "#/$defs/traceId" }, "uniqueItems": true },
+    "modelName": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9]*$",
+      "description": "模型名：大驼峰，无种类后缀"
+    },
+    "qualifiedName": {
+      "type": "string",
+      "pattern": "^([A-Z][A-Za-z0-9]*\\.)?[A-Z][A-Za-z0-9]*$",
+      "description": "可带模块前缀的模型名：Module.Name"
+    },
+    "methodName": {
+      "type": "string",
+      "pattern": "^[a-z][A-Za-z0-9]*$"
+    },
+    "factoryName": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "description": "静态工厂：全大写蛇形"
+    },
+    "fieldName": {
+      "type": "string",
+      "pattern": "^[a-z][A-Za-z0-9]*$"
+    },
+    "typeRef": {
+      "type": "string",
+      "pattern": "^(string|number|boolean|date|[A-Z][A-Za-z0-9]*(\\.[A-Z][A-Za-z0-9]*)?)(\\[\\])?$",
+      "description": "标量 string|number|boolean|date，或模型名，可加 []"
+    },
+    "traceId": {
+      "type": "string",
+      "pattern": "^[GRU]-[0-9]{3,}$",
+      "description": "业务编号：G 目标、R 规则、U 使用"
+    },
+    "traces": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/traceId"
+      },
+      "uniqueItems": true
+    },
     "field": {
-      "type": "object", "additionalProperties": false,
-      "required": ["name", "type"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type"
+      ],
       "properties": {
-        "name": { "$ref": "#/$defs/fieldName" },
-        "type": { "$ref": "#/$defs/typeRef" },
-        "nullable": { "type": "boolean" },
-        "note": { "type": "string" }
+        "name": {
+          "$ref": "#/$defs/fieldName"
+        },
+        "type": {
+          "$ref": "#/$defs/typeRef"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string"
+        },
+        "traces": {
+          "$ref": "#/$defs/traces"
+        }
       }
     },
-    "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
+    "fields": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/field"
+      }
+    },
     "param": {
-      "type": "object", "additionalProperties": false,
-      "required": ["name", "type"],
-      "properties": { "name": { "$ref": "#/$defs/fieldName" }, "type": { "$ref": "#/$defs/typeRef" } }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/fieldName"
+        },
+        "type": {
+          "$ref": "#/$defs/typeRef"
+        }
+      }
     },
-    "params": { "type": "array", "items": { "$ref": "#/$defs/param" } },
+    "params": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/param"
+      }
+    },
     "invariant": {
-      "type": "object", "additionalProperties": false,
-      "required": ["text", "traces"],
-      "properties": { "text": { "type": "string", "minLength": 1 }, "traces": { "$ref": "#/$defs/traces" }, "throws": { "$ref": "#/$defs/throws", "description": "创建时违反该不变量抛出的错误" } }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "traces"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "traces": {
+          "$ref": "#/$defs/traces"
+        },
+        "throws": {
+          "$ref": "#/$defs/throws",
+          "description": "创建时违反该不变量抛出的错误"
+        },
+        "carries": {
+          "$ref": "#/$defs/carries"
+        }
+      }
     },
-    "invariants": { "type": "array", "items": { "$ref": "#/$defs/invariant" } },
+    "invariants": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/invariant"
+      }
+    },
     "raiseRef": {
       "oneOf": [
-        { "$ref": "#/$defs/qualifiedName" },
-        { "type": "object", "additionalProperties": false, "required": ["event", "when"],
-          "properties": { "event": { "$ref": "#/$defs/qualifiedName" }, "when": { "type": "string", "minLength": 1 } } }
+        {
+          "$ref": "#/$defs/qualifiedName"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "event",
+            "when"
+          ],
+          "properties": {
+            "event": {
+              "$ref": "#/$defs/qualifiedName"
+            },
+            "when": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
       ]
     },
-    "raises": { "type": "array", "items": { "$ref": "#/$defs/raiseRef" } },
-    "throws": { "type": "array", "items": { "$ref": "#/$defs/modelName" } },
-    "rules": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-    "behavior": {
-      "type": "object", "additionalProperties": false,
-      "required": ["name", "input", "rules", "raises", "throws", "traces"],
-      "properties": {
-        "name": { "$ref": "#/$defs/methodName" },
-        "input": { "$ref": "#/$defs/params" },
-        "output": { "$ref": "#/$defs/typeRef" },
-        "rules": { "$ref": "#/$defs/rules" },
-        "raises": { "$ref": "#/$defs/raises" },
-        "throws": { "$ref": "#/$defs/throws" },
-        "traces": { "$ref": "#/$defs/traces" }
+    "raises": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/raiseRef"
       }
     },
-    "behaviors": { "type": "array", "items": { "$ref": "#/$defs/behavior" } },
-    "call": {
-      "type": "object", "additionalProperties": false,
-      "required": ["kind", "target", "method"],
+    "throws": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/modelName"
+      }
+    },
+    "rules": {
+      "type": "array",
+      "description": "守的规则，一条一句。写成对象就能标明这一条管哪几个编号——校验问某一条业务语句时只摆相关的那几条，不再把整个方法端出来。不标也收，不标的每次都摆。行为与领域服务操作共用这一份定义",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "text",
+              "traces"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "traces": {
+                "$ref": "#/$defs/traces"
+              },
+              "carries": {
+                "$ref": "#/$defs/carries"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "behavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "input",
+        "rules",
+        "raises",
+        "throws",
+        "traces"
+      ],
       "properties": {
-        "kind": { "enum": ["behavior", "factory", "service", "repository", "port", "command"] },
-        "target": { "$ref": "#/$defs/qualifiedName" },
-        "method": { "anyOf": [{ "$ref": "#/$defs/methodName" }, { "$ref": "#/$defs/factoryName" }] }
+        "name": {
+          "$ref": "#/$defs/methodName"
+        },
+        "input": {
+          "$ref": "#/$defs/params"
+        },
+        "output": {
+          "$ref": "#/$defs/typeRef"
+        },
+        "rules": {
+          "$ref": "#/$defs/rules"
+        },
+        "raises": {
+          "$ref": "#/$defs/raises"
+        },
+        "throws": {
+          "$ref": "#/$defs/throws"
+        },
+        "traces": {
+          "$ref": "#/$defs/traces"
+        }
+      }
+    },
+    "behaviors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/behavior"
+      }
+    },
+    "call": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "target",
+        "method"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "behavior",
+            "factory",
+            "service",
+            "repository",
+            "port",
+            "command"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/qualifiedName"
+        },
+        "method": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/methodName"
+            },
+            {
+              "$ref": "#/$defs/factoryName"
+            }
+          ]
+        }
       }
     },
     "step": {
-      "type": "object", "additionalProperties": false,
-      "required": ["text"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ],
       "properties": {
-        "text": { "type": "string", "minLength": 1 },
-        "call": { "$ref": "#/$defs/call" },
-        "when": { "type": "string", "minLength": 1, "description": "分流条件：只能引用前面某步领域调用的 output；「否则」表示 else" },
-        "input": { "type": "string" },
-        "output": { "type": "string" },
-        "raises": { "$ref": "#/$defs/raises" },
-        "throws": { "$ref": "#/$defs/throws" }
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "call": {
+          "$ref": "#/$defs/call"
+        },
+        "when": {
+          "type": "string",
+          "minLength": 1,
+          "description": "分流条件：只能引用前面某步领域调用的 output；「否则」表示 else"
+        },
+        "input": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "raises": {
+          "$ref": "#/$defs/raises"
+        },
+        "throws": {
+          "$ref": "#/$defs/throws"
+        },
+        "each": {
+          "type": "boolean",
+          "description": "这一步对一批东西逐个做一次（代码里是循环 / map）。call 记的是循环体里的那一次调用。"
+        },
+        "traces": {
+          "$ref": "#/$defs/traces",
+          "description": "这一步管哪几个编号。标了的，校验问别的编号时不摆它；不标的每次都摆"
+        },
+        "carries": {
+          "$ref": "#/$defs/carries"
+        }
       }
     },
-    "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
     "question": {
-      "type": "object", "additionalProperties": false,
-      "required": ["question", "answer", "applied"],
-      "properties": { "question": { "type": "string" }, "answer": { "type": "string" }, "applied": { "type": "boolean" } }
-    },
-    "questions": { "type": "array", "items": { "$ref": "#/$defs/question" } },
-    "decision": {
-      "type": "object", "additionalProperties": false,
-      "required": ["target", "check", "verdict", "note", "at"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question",
+        "answer",
+        "applied"
+      ],
       "properties": {
-        "target": { "type": "string" },
-        "check": { "type": "string" },
-        "verdict": { "enum": ["accepted", "dismissed"] },
-        "note": { "type": "string" },
-        "at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
-        "on": { "type": "string", "description": "裁决时对象文字的短哈希；文字变了裁决即过期", "pattern": "^[0-9a-f]{8}$" }
+        "question": {
+          "type": "string"
+        },
+        "answer": {
+          "type": "string"
+        },
+        "applied": {
+          "type": "boolean"
+        }
       }
     },
-    "decisions": { "type": "array", "items": { "$ref": "#/$defs/decision" } },
-    "writes": { "type": "array", "items": { "$ref": "#/$defs/qualifiedName" }, "uniqueItems": true }
+    "questions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/question"
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "check",
+        "verdict",
+        "note",
+        "at"
+      ],
+      "properties": {
+        "target": {
+          "type": "string"
+        },
+        "check": {
+          "type": "string"
+        },
+        "verdict": {
+          "enum": [
+            "accepted",
+            "dismissed"
+          ]
+        },
+        "note": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "on": {
+          "type": "string",
+          "description": "裁决时对象文字的短哈希；文字变了裁决即过期",
+          "pattern": "^[0-9a-f]{8}$"
+        },
+        "by": {
+          "enum": [
+            "human",
+            "role"
+          ],
+          "description": "human＝人在校验页面上裁的（由 slice apply 写回，校验据此不再重复问）；role＝角色自己记的理由，校验不认，那一条仍要人裁"
+        },
+        "rebased": {
+          "type": "array",
+          "description": "纯改名之后重新定基的记录。裁的那几句话一个字没动，变的只是它所裁的那段文字换了说法，指纹跟着重算。只有在「把新说法反着换回旧说法、换出来的文字与当初人裁的那一段一字不差」证明得了的时候才写得进来（validate.js --重新定基）；证不出来的一律留着过期、由人重裁",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "at",
+              "why",
+              "from",
+              "to"
+            ],
+            "properties": {
+              "at": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+              },
+              "why": {
+                "type": "string",
+                "description": "哪一批改的名、换的是哪几个说法"
+              },
+              "from": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}$",
+                "description": "当初那段文字的指纹"
+              },
+              "to": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}$",
+                "description": "改名之后那段文字的指纹"
+              }
+            }
+          }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/decision"
+      }
+    },
+    "writes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/qualifiedName"
+      },
+      "uniqueItems": true
+    },
+    "carries": {
+      "type": "object",
+      "description": "一条业务语句落在好几处时，本处承担它的哪一部分——编号 → 一句话（十来个字，不是段落）。整条都由本处承担的不必写",
+      "propertyNames": {
+        "$ref": "#/$defs/traceId"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 60
+      }
+    }
   }
 }

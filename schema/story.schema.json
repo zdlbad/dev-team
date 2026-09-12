@@ -84,6 +84,11 @@
             },
             "description": "这一步之后的事实，标签 → 值，给人看"
           },
+          "needs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "这一步需要哪条业务，人话，能指到 raw 的位置就指。讲解写；业务分析据此点亮后回填 traces。traces 为空而 needs 不为空 = 待点亮"
+          },
           "traces": {
             "$ref": "urn:dev-team:common#/$defs/traces"
           },
@@ -142,7 +147,8 @@
                 "description": "none = 这一步在模型里没有动作（只是业务背景）"
               },
               "name": {
-                "type": "string"
+                "type": "string",
+                "description": "模型里那个动作的名字（命令 / 查询 / 事件处理 / 时间触发），带不带模块前缀都行。这一步要做两个动作才算完的，写成「A + B」，按先后排，原型会依次执行"
               },
               "aggregate": {
                 "$ref": "urn:dev-team:common#/$defs/qualifiedName"
@@ -237,7 +243,7 @@
               },
               "handled": {
                 "type": "boolean",
-                "description": "路由已读过并回应了这条想法或质疑"
+                "description": "开发指挥已读过并回应了这条想法或质疑"
               }
             },
             "description": "人对这一步的业务内容：同意，或质疑（note 是理由）"
@@ -339,6 +345,10 @@
             "type": "integer",
             "minimum": 1,
             "description": "这张卡挨着哪一步"
+          },
+          "note": {
+            "type": "string",
+            "description": "人在还没裁定时先写下的想法；裁定时并进 ruling.note"
           }
         }
       }
@@ -380,21 +390,65 @@
       "type": "string",
       "description": "这一版比上一版多了什么，一句话；有 basedOn 时必填"
     },
+    "previously": {
+      "type": "object",
+      "description": "前情提要：上一版结束时的状态。滚出来的故事从新增那一段起笔，不再原样重复上一版的步骤——那是给原型与校验重走的，不该让人再读一遍",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "一段话：上一版发生了什么、走到哪儿了"
+        },
+        "facts": {
+          "type": "object",
+          "description": "上一版结束时的关键数字，形状同步骤的 facts"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "leadsTo": {
+      "type": "string",
+      "description": "往下一段的衔接，一句话：这一段走完之后接着发生什么、归谁管。故事段落只讲单一业务意图，后面那几段不在本段展开——只留这一句让人知道自己站在整条故事链的哪儿（seed/01-phases-and-slices.md「开发范围怎么切」）"
+    },
     "usage": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["proposed", "proposedAt", "confirmedAt"],
+      "required": [
+        "proposed",
+        "proposedAt",
+        "confirmedAt"
+      ],
       "properties": {
         "proposed": {
-          "type": ["array", "null"],
-          "items": { "$ref": "urn:dev-team:common#/$defs/traceId" },
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "urn:dev-team:common#/$defs/traceId"
+          },
           "uniqueItems": true,
-          "description": "业务分析按这条故事细补的使用语句编号（U-xxx）；空数组 = 本故事没有新增"
+          "description": "业务分析按这条故事过五问补出的语句编号（普通的 R / G）；空数组 = 本故事没有新增"
         },
-        "proposedAt": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}" },
-        "confirmedAt": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}", "description": "人确认这些使用语句的日期；确认后编号并入故事与切片的 traces" }
+        "proposedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"
+        },
+        "confirmedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}",
+          "description": "人确认这些语句的日期；确认后编号并入故事与切片的 traces"
+        }
       },
-      "description": "理解一致之后、建模之前：业务分析按故事细补使用语句，人确认。缺省视为还没做"
+      "description": "理解一致之后、建模之前：业务分析按故事过五问补公司事实，人确认。缺省视为还没做"
     },
     "gapPicks": {
       "type": "array",

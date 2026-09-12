@@ -13,15 +13,15 @@ description: pre-pr 审查。代码写完、校验 ② 干净之后，找模型�
 
 ## 读
 
-一切。重点：范围内的 `model/`、故事的 `walk`、`plans/<id>.json`（这次动了哪些文件）、`contracts/`（外壳阶段）、代码库（含 `tests/`，以及本切片提交的 `git diff`）、`raw/项目所有者的裁定.md`（角度 B 找依据）、`business/` 里的 `U-xxx`（角度 E / F 的跳过清单）。
+一切。重点：范围内的 `model/`、故事的 `walk`、`plans/<id>.json`（这次动了哪些文件）、`contracts/`（外壳阶段）、代码库（含 `tests/`，以及本切片提交的 `git diff`）、`raw/项目所有者的裁定.md`（角度 B 找依据）、老项目 `business/` 里旧的 `U-xxx`（角度 E / F 的跳过清单；新项目没有 U，E / F 全查）。
 
 ## 写（只写这里）
 
-- `reports/pre-pr-proto.json`（故事切片，A / B / D / S）或 `reports/pre-pr-shell.json`（实现切片，C / E / F / S）里的 `judgments[]` 与 `cleanAngles[]`。其它字段不动。
+- `reports/pre-pr-proto.json`（段落切片，A / B / D / S）或 `reports/pre-pr-shell.json`（实现切片，C / E / F / S）里的 `judgments[]` 与 `cleanAngles[]`。其它字段不动。
 
 ## 方法
 
-1. **骨架**：`node $DEV_TEAM/tools/prepr.js new <项目目录> <切片id> --mode proto|shell --code <代码库>`。读它的 `scope.files`（要看的文件）、`scope.usage`（已被 U-xxx 覆盖、E / F 不重查的场景）、`guides`（每个角度的问法）。
+1. **骨架**：`node $DEV_TEAM/tools/prepr.js new <项目目录> <切片id> --mode proto|shell --code <代码库>`。读它的 `scope.files`（要看的文件）、`scope.usage`（老项目里已被旧 U-xxx 覆盖、E / F 不重查的场景；新项目为空）、`guides`（每个角度的问法）。
 2. **找候选**：逐个角度，每个最多六条。每条：`file:line`、一句话、**具体的失败场景**（什么输入或什么先后顺序 → 什么错）。有失败场景的候选**不自我压制**——不确定的留给复核。
 3. **复核一票**：每条候选给 **CONFIRMED / PLAUSIBLE / REFUTED**。默认 PLAUSIBLE。只有能从代码里**指出那一行**才 REFUTED：守卫在这一行、契约字段在这一行对上、测试的这条断言就是那条语句。留前两种，丢 REFUTED。
 4. **填报告**。每条发现是 `judgments[]` 的一项：
@@ -54,8 +54,8 @@ description: pre-pr 审查。代码写完、校验 ② 干净之后，找模型�
 
 ## 两条边界
 
-- **E / F 跳过 U-xxx 已覆盖的场景。** 重复提交、两人同时改、成批里一件坏了——这些是使用语句，模型必须回应，校验 ① 查落点、人在原型上按。你只查没有业务上游的纯工程项：`try/catch` 吞错、`Promise.all` 结果错位、守卫比错误消息承诺的弱、await 前后状态不一致。
-- **A / B / D 在故事切片跑，C / E / F 在实现切片跑。** 领域代码在原型阶段就写完了，等外壳才查等于攒着审。
+- **E / F 跳过旧 U-xxx 已覆盖的场景（老项目）。** 重复提交、两人同时改、成批里一件坏了——新项目里这些由业务分析按五问问成公司事实、模型师在元素规则里回应，校验 ① 查落点、人在原型上按；你查的是它们之外的纯工程项。你只查没有业务上游的纯工程项：`try/catch` 吞错、`Promise.all` 结果错位、守卫比错误消息承诺的弱、await 前后状态不一致。
+- **A / B / D 在段落切片跑，C / E / F 在实现切片跑。** 领域代码在原型阶段就写完了，等外壳才查等于攒着审。
 
 ## 不做
 

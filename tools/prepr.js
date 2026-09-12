@@ -58,12 +58,12 @@ if (cmd === 'new') {
     scope: { codebase: path.relative(root, codebase).replaceAll('\\', '/'), files, useCases: plan?.scope.useCases ?? slice.scope.useCases, aggregates: plan?.scope.aggregates ?? slice.scope.aggregates, usage, contracts: mode === 'shell' && fs.existsSync(path.join(root, 'contracts')) ? walk(path.join(root, 'contracts')).map((f) => path.relative(root, f).replaceAll('\\', '/')) : [] },
     angles: MODES[mode],
     errors: [], warnings: [], confirms: [], judgments: [], cleanAngles: [], decided: [],
-    blindSpots: mode === 'proto' ? ['C / E / F 在实现切片的外壳写完后查', '解码比对已保证结构一致，这里只看行为'] : ['A / B / D 已在故事切片的原型阶段查过', 'U-xxx 已覆盖的并发 / 重复 / 部分失败场景由校验 ① 与原型负责，E / F 不重查'],
+    blindSpots: mode === 'proto' ? ['C / E / F 在实现切片的外壳写完后查', '解码比对已保证结构一致，这里只看行为'] : ['A / B / D 已在故事切片的原型阶段查过', '老项目里旧的 U-xxx 已覆盖的并发 / 重复 / 部分失败场景由校验 ① 与原型负责，E / F 不重查；新项目没有 U，E / F 全查'],
     conclusion: null,
   }
   fs.mkdirSync(path.dirname(reportPath), { recursive: true })
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n')
-  console.log(`报告骨架：${path.relative(process.cwd(), reportPath)}（模式 ${mode}：${MODES[mode].join('、')}；范围文件 ${files.length}，可跳过的使用语句 ${usage.length}）`)
+  console.log(`报告骨架：${path.relative(process.cwd(), reportPath)}（模式 ${mode}：${MODES[mode].join('、')}；范围文件 ${files.length}，可跳过的旧使用语句 ${usage.length}）`)
 }
 
 // ========== check ==========

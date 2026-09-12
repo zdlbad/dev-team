@@ -4,12 +4,15 @@
  *
  * 用法：
  *   node tools/slice.js new <项目目录> <切片id> <标题> [--kind initial|increment] [--codebase <相对路径>] [--story] [--implements s-002,s-003]
+ *                       --意图 "<一句话>"：这一段的单一业务意图（故事段落只许一个意图）
+ *                       --业务故事 "<名字>"：它属于哪条完整故事链（链允许多意图，段落不允许）
+ *                       --重构：只改说法或结构、业务行为一个字不变（改名、挪位置）。不走故事、不走裁定卡、不算编码计划；门禁＝测试照旧全绿＋改名套在改前解码结果上与改后逐字节一致（tools/rename-check.js）
  *                       --implements：实现切片——把这几条已确认模型的故事（建模切片）实现成代码；范围从它们的 walk 推出
  *                       [--modules A,B] [--aggregates A.X,B.Y] [--use-cases X,Y] [--traces G-001,R-001]
  *                       --story：同时建故事骨架 slices/<id>.story.json（故事切片：范围由故事定，见 tools/story.js）
  *                       --based-on <id>：这条故事从上一版滚出来（骨架带上一版的人物与步骤，讲解在其上加）
  *   node tools/slice.js next <项目目录> <切片id>            算出下一步：谁上场、跑什么
- *                       故事切片：… → 理解一致 → 业务分析补使用语句 → 人确认 → 模型 → … → 模型确认 → 编码计划（plan.js）→ 人确认计划
+ *                       段落切片：… → 理解一致 → 业务分析按五问补语句 → 人确认 → 模型 → … → 模型确认 → 编码计划（plan.js）→ 人确认计划
  *                       → 原型按计划写 → plan check → 校验 ② → pre-pr 审查（A/B/D）→ 人看报告 → 人在原型上走故事
  *                       实现切片：接口角色定契约（contract.js）→ 人确认 → 编码计划 → 人确认 → 编码 → plan check → 校验 ② → pre-pr（C/E/F）→ 合并
  *   node tools/slice.js advance <项目目录> <切片id> <model|code|validate> <pending|in-progress|done> [说明]
@@ -21,7 +24,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
-const { loadProject } = require('./lib/project')
+const { loadProject, walkNames } = require('./lib/project')
 const { storyState } = require('./story')
 
 const args = process.argv.slice(2)
@@ -48,6 +51,16 @@ function writeJson(p, data) {
   fs.mkdirSync(path.dirname(p), { recursive: true })
   fs.writeFileSync(p, JSON.stringify(data, null, 2) + '\n')
 }
+/** 同项目已有切片里最后记下的代码库；一条都没有就返回 null */
+function lastCodebase() {
+  const dir = path.join(root, 'slices')
+  if (!fs.existsSync(dir)) return null
+  const ids = fs.readdirSync(dir).filter((f) => f.startsWith('s-') && f.endsWith('.json') && !f.endsWith('.story.json')).sort()
+  for (let i = ids.length - 1; i >= 0; i--) {
+    try { const c = JSON.parse(fs.readFileSync(path.join(dir, ids[i]), 'utf8')).codebase; if (c) return c } catch { /* 读不动就往前找 */ }
+  }
+  return null
+}
 function slicePath(id) {
   return path.join(root, 'slices', `${id}.json`)
 }
@@ -71,13 +84,18 @@ if (cmd === 'new') {
   if (!/^s-[0-9]{3,}$/.test(id)) die('切片 id 形如 s-001')
   if (fs.existsSync(slicePath(id))) die(`切片已存在：${id}`)
   const implementsArg = opt('--implements')
-  const kind = args.includes('--story') ? 'story' : implementsArg ? 'implementation' : (opt('--kind') ?? (fs.existsSync(path.join(root, 'slices')) && fs.readdirSync(path.join(root, 'slices')).length ? 'increment' : 'initial'))
+  const kind = args.includes('--重构') ? 'refactor' : args.includes('--story') ? 'story' : implementsArg ? 'implementation' : (opt('--kind') ?? (fs.existsSync(path.join(root, 'slices')) && fs.readdirSync(path.join(root, 'slices')).length ? 'increment' : 'initial'))
   const slice = {
     id,
     title,
     kind,
-    codebase: opt('--codebase') ?? '../' + path.basename(root) + '-code',
+    // 同一个项目的切片写的是同一个代码库：沿用上一条切片记的那个，别每次退回默认值——
+    // 默认值只在项目第一条切片时才对，后来的切片照抄它就指向了一个不存在的目录（s-003 就这么错过一次）
+    codebase: opt('--codebase') ?? lastCodebase() ?? '../' + path.basename(root) + '-code',
     scope: { modules: list('--modules'), aggregates: list('--aggregates'), useCases: list('--use-cases') },
+    // 一个故事段落只许有一个业务意图，写不出一句话就是不止一个（seed/01-phases-and-slices.md「开发范围怎么切」）
+    ...(opt('--意图') ? { intent: opt('--意图') } : {}),
+    ...(opt('--业务故事') ? { businessStory: opt('--业务故事') } : {}),
     traces: list('--traces'),
     stages: {
       model: { status: 'pending', confirmedAt: null },
@@ -98,7 +116,7 @@ if (cmd === 'new') {
       if (s.stages.model.status !== 'done') die(`故事 ${sid} 的模型还没确认（${s.stages.model.status}），不能进实现切片`)
       if (!latest || s.stages.model.confirmedAt > latest) latest = s.stages.model.confirmedAt
       for (const t of s.traces) tr.add(t)
-      for (const step of st.steps) { const w = step.walk; if (!w || w.kind === 'none') continue; if (w.aggregate) { aggs.add(w.aggregate); mods.add(w.aggregate.split('.')[0]) } if (w.name && w.name.includes('.')) { ucs.add(w.name); mods.add(w.name.split('.')[0]) } }
+      for (const step of st.steps) { const w = step.walk; if (!w || w.kind === 'none') continue; if (w.aggregate) { aggs.add(w.aggregate); mods.add(w.aggregate.split('.')[0]) } for (const n of walkNames(w.name)) if (n.includes('.')) { ucs.add(n); mods.add(n.split('.')[0]) } }
     }
     slice.scope = { modules: [...mods].sort(), aggregates: [...aggs].sort(), useCases: [...ucs].sort() }
     slice.traces = [...tr].sort()
@@ -122,19 +140,38 @@ if (cmd === 'new') {
       // 上一版没做的候选跟到这一版（做的那条不再是缺口；人勾了多条的，其余按顺序排前面）
       const rest = picks.slice(1).map((i) => base.gaps[i]).concat(base.gaps.filter((g, i) => !picks.includes(i)))
       story.gaps = rest
-      // 上一版的步骤原样带过来（只留 day / actor / text / facts / traces；走法与答题从头来），讲解在中间插新步骤后重新编号
-      story.steps = base.steps.map((s) => ({ n: s.n, day: s.day, actor: s.actor, text: s.text, ...(s.facts ? { facts: s.facts } : {}), traces: s.traces }))
-      story.log.push(`${today} 从 ${basedOn}「${base.title}」滚出${chosen ? '，这一版做：' + chosen.split(/[：:]/)[0] : ''}；带过来的候选 ${story.gaps.length} 条`)
+      // 上一版的步骤不抄过来：那条路留给原型与校验重走，不该让人再读一遍。
+      // 这一版从新增那一段起笔，上一版的结局写成前情提要（讲解按上一版最后几步补全）。
+      const last = base.steps[base.steps.length - 1]
+      story.previously = { text: `（一段话：上一版「${base.title}」发生了什么、走到哪儿了）`, ...(last?.facts ? { facts: last.facts } : {}) }
+      story.steps = []
+      story.log.push(`${today} 从 ${basedOn}「${base.title}」滚出${chosen ? '，这一版做：' + chosen.split(/[：:]/)[0] : ''}；上一版的 ${base.steps.length} 步不抄过来、写成前情提要；带过来的候选 ${story.gaps.length} 条`)
     }
     writeJson(sp, story)
-    console.log(`已建故事骨架：${path.relative(process.cwd(), sp)}（${base ? `带上一版 ${basedOn} 的 ${base.steps.length} 步；` : ''}下一步：讲解写故事）`)
+    console.log(`已建故事骨架：${path.relative(process.cwd(), sp)}（${base ? `基于 ${basedOn}，上一版 ${base.steps.length} 步写成前情提要、不重复；` : ''}下一步：讲解写故事）`)
   } else console.log('下一步：人与模型师商定范围后，把 scope 与 traces 填进切片记录，再执行 slice next。')
 }
 
 // ---------- next：路由的大脑 ----------
-function reportOf(direction) {
-  const p = path.join(root, 'reports', `validate-${direction}.json`)
-  return fs.existsSync(p) ? readJson(p) : null
+function reportOf(direction, sliceId) {
+  const dir = path.join(root, 'reports')
+  // 先找本切片自己那份存档；没有再看当前那份，且必须确实是本切片的
+  const mine = path.join(dir, `validate-${direction}.${sliceId}.json`)
+  if (sliceId && fs.existsSync(mine)) {
+    const own = readJson(mine)
+    const live = path.join(dir, `validate-${direction}.json`)
+    if (fs.existsSync(live)) {
+      const cur = readJson(live)
+      // 当前那份也是本切片的，就以新的为准（存档是被顶掉时留下的旧副本）
+      if (cur.slice === sliceId) return cur
+    }
+    return own
+  }
+  const p = path.join(dir, `validate-${direction}.json`)
+  if (!fs.existsSync(p)) return null
+  const r = readJson(p)
+  if (sliceId && r.slice && r.slice !== sliceId) return null
+  return r
 }
 /** 报告的状态：从「机械错误」到「人已审完」逐层看 */
 function reportState(r) {
@@ -177,27 +214,30 @@ function computeNext(slice) {
   const rel = (p) => path.relative(process.cwd(), p) || '.'
   const validateCmd = (withCode) => `node tools/validate.js ${rel(root)}${withCode ? ` --code ${rel(codebase)}` : ''} --slice ${slice.id}`
   const step = (role, action, command, why) => ({ slice: slice.id, role, action, command: command ?? null, why })
+  // 按裁定归档的切片只是记录，不再派活（看板也这么认）
+  if (slice.archived) return step('—', '已归档：' + slice.archived.reason, null, '这条切片按裁定归档，不再推进')
 
   // 阶段一：模型。业务描述是模型的上游：没有它就无从定范围
-  if (st.model.status !== 'done') {
+  // 只改说法或结构的那一类不动模型，模型这一关对它不适用
+  if (st.model.status !== 'done' && slice.kind !== 'refactor') {
     const { business, glossary } = loadProject(root)
     const inScope = slice.traces.length ? business.filter((s) => slice.traces.includes(s.id)) : business
-    if (!business.length) return step('业务分析', '通读 raw/，提炼业务描述（目标与规则）与词汇表', null, '本项目还没有业务描述，模型无从谈起')
+    if (!business.length && !fs.existsSync(path.join(root, 'business', '00-全景.md'))) return step('业务分析', '粗读 raw/：写全景（business/00-全景.md）、模块候选、词汇表种子；不写编号语句，语句按段落点亮', null, '本项目还没粗读过')
     if (!glossary.terms.length) return step('业务分析', '补词汇表：业务描述里的名词逐个收录', null, '模型只能使用词汇表的法定名')
     if (slice.traces.length && !inScope.length) return step('业务分析', `切片追溯的编号在业务描述里不存在：${slice.traces.join('、')}`, null, '切片的 traces 必须指向已有的业务语句')
     // 故事切片：先有故事，人在业务理解上与团队一致后才有范围
     const ss = story ? storyState(story) : null
     const storyRel = rel(storyP)
-    if (ss?.state === 'no-steps') return step('讲解', story.basedOn ? `从上一版 ${story.basedOn} 起笔写故事到 ${storyRel}：老步骤照抄不改，插进这一版新增的那段，重新编号；填 adds；整条要从头走到尾` : `写故事到 ${storyRel}：一个人物、逐步的日期与金额、每步的业务编号；用不到的语句不写`, null, '故事切片的范围由故事决定')
+    if (ss?.state === 'no-steps') return step('讲解', story.basedOn ? `从上一版 ${story.basedOn} 起笔写故事到 ${storyRel}：老步骤照抄不改，插进这一版新增的那段，重新编号；填 adds；整条要从头走到尾` : `写本段故事到 ${storyRel}：一个人物、逐步的日期与金额；每步标 needs（需要哪条业务，人话），traces 留空等业务分析点亮`, null, '段落的范围由故事决定；故事写在语句之前')
     if (ss?.state === 'adds-missing') return step('讲解', `故事 ${storyRel} 基于 ${story.basedOn} 但 adds 还是占位：一句话写清这一版多了什么`, null, '谱系要能一眼看出每版加了什么')
     if (ss?.state === 'challenged') return step('路由', `核对人对故事的 ${ss.count} 处质疑：对照语句、裁定与手册逐条回应；人对了就落成裁定并派业务分析或讲解改，人误会了就解释；改完让人重看`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人质疑了故事的业务内容，先解决再认可')
     if (ss?.state === 'notes') return step('路由', `读人在故事上留下的 ${ss.count} 条想法（同意但有话说的也算）：逐条回应；成立的落成裁定或派给业务分析、讲解、模型师`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人的想法要有人看、有人回')
     if (ss?.state === 'unapproved') return step('人', `走故事「${story.title}」：逐条确认语句、同意或质疑每一步，直到业务理解一致`, `node tools/story.js approve ${rel(root)} ${slice.id}`, '认可后故事的编号并入切片 traces')
-    // 故事切片：理解一致之后、建模之前，业务分析按这条故事细补使用语句（同时 / 重复 / 一次几条 / 失败处置 / 可见性），人确认
-    if (ss?.state === 'usage-pending') return step('业务分析', `按故事「${story.title}」细补使用语句：故事走到的每个动作过一遍五问（会不会同时、会不会重复、一次几条与部分失败、失败怎么处置、谁能看见），新增的写进 business/ 为 U-xxx；不确定的写进问题清单问人。产出里列出新增编号，路由据此登记`, `node tools/story.js usage ${rel(root)} ${slice.id} propose <U-xxx,… | --none>`, '模型必须回应系统会被怎么用；这类语句不在原料里，要主动问')
-    if (ss?.state === 'usage-proposed') return step('人', `确认本故事新增的 ${ss.count} 条使用语句（business/ 里的 U-xxx）：这是业务或使用上的决定，比如「两个人同时改，后到的要被挡住」还是「都能改，各存各的」`, `node tools/story.js usage ${rel(root)} ${slice.id} confirm`, '确认后编号并入切片 traces，校验 ① 会要求模型给它们落点')
+    // 段落切片：理解一致之后、建模之前，业务分析按五问（同时 / 重复 / 一次几条 / 失败处置 / 可见性）补出本段还缺的公司事实，人确认
+    if (ss?.state === 'usage-pending') return step('业务分析', `按故事「${story.title}」过五问：故事走到的每个动作问一遍会不会同时、会不会重复、一次几条与部分失败、失败怎么处置、谁能看见。问出来的公司事实写成普通语句（业务落地-事实 / 约束，R 编号），软件该怎么回应（幂等、锁、批量语义）不写、留给模型师；raw 里没有的写进问题清单问人。产出里列出新增编号，开发指挥据此登记`, `node tools/story.js usage ${rel(root)} ${slice.id} propose <R-xxx,… | --none>`, '五问问出来的公司事实通常不在原料里，要主动问；模型师照它们定第三层')
+    if (ss?.state === 'usage-proposed') return step('人', `确认本故事按五问补出的 ${ss.count} 条语句：这是公司事实，比如「两位案例经理可能同时处理同一位参与者」；软件怎么回应由模型师定`, `node tools/story.js usage ${rel(root)} ${slice.id} confirm`, '确认后编号并入切片 traces，校验 ① 会要求模型给它们落点')
     if (scopeEmpty) return step('人 + 模型师', '定范围：填切片记录的 scope 与 traces', null, '切片首先是对模型改动范围的定稿')
-    const r1 = reportOf(1)
+    const r1 = reportOf(1, slice.id)
     const s1 = reportState(r1)
     // 人在模型图上留的意见：先有人看、有人回，再往下走
     const mnP = path.join(root, 'reports', '_模型意见.json')
@@ -220,6 +260,16 @@ function computeNext(slice) {
     return step('人', '确认模型（门禁）', `node tools/slice.js advance ${rel(root)} ${slice.id} model done`, '方向 ① 干净且人已审完；触及模块划分或聚合清单的变动需单独确认')
   }
   // 阶段二之前：编码计划。从模型算出这次要动哪些文件、按什么顺序；角色补关键逻辑；人确认；写的时候按顺序登记；写完核对。
+  // 只改说法或结构的切片：没有业务意图，所以不走故事、不走裁定卡、也不算编码计划。
+  // 它要证明的只有一件事：行为一个字没变——代码跟模型 0 差异，测试照旧全绿。
+  if (slice.kind === 'refactor') {
+    if (st.code.status !== 'done') {
+      if (st.code.status === 'pending') return step('编码', '按这条切片的范围把代码里的说法改齐：一个字的业务行为都不许变，测试的断言值一个都不许改。改完先跑测试，再把代码解回来跟模型比', `node tools/slice.js advance ${rel(root)} ${slice.id} code in-progress`, '只改说法，不改行为')
+      return step('人', '代码改齐、测试全绿（门禁）', `node tools/slice.js advance ${rel(root)} ${slice.id} code done`, '改完才比对')
+    }
+    if (st.validate.status !== 'done') return step('模型校验', '证明只有说法变了：改前的解码结果在 model-decoded/<改前版本>/（上一次校验 ② 留下的；没有就先 git 切回改前跑一次 validate --code），改后再跑一次 validate --code 得到新版本；然后把改名对照套在改前那份上与改后逐字节比，必须一字不差。不要求跟模型 0 差异——模型常跑在代码前面，那跟改名无关', `node tools/rename-check.js ${rel(path.join(root, 'model-decoded', '<改前版本>'))} ${rel(path.join(root, 'model-decoded', '<改后版本>'))} <新旧对照.json>`, '代码已改齐')
+    return step('人', '合并（门禁）', null, '套上改名逐字节比过、一字不差，且测试照旧全绿：行为没变，说法改齐了')
+  }
   const isStory = slice.kind === 'story' || !!story
   const coderRole = isStory ? '原型' : '编码'
   const planP = path.join(root, 'plans', `${slice.id}.json`)
@@ -252,10 +302,10 @@ function computeNext(slice) {
     if (pr && !pr.ok) return step(coderRole, `计划核对未过（${pr.issues.length} 处）：${pr.issues.slice(0, 3).join('；')}${pr.issues.length > 3 ? '……' : ''}`, planCmd('check'), '编码顺序与文件要和计划一致')
   }
   // 阶段三：校验 ②
-  const r2 = reportOf(2)
+  const r2 = reportOf(2, slice.id)
   const s2 = reportState(r2)
   if (!fs.existsSync(codebase)) return step('人', `代码库不存在：${codebase}`, null, '切片记录的 codebase 指向的目录不存在')
-  if (s2.state === 'none' || (r2.slice && r2.slice !== slice.id)) return step('模型校验', '跑校验 ②（解码 + lint + 比对）', validateCmd(true), '编码完成，还没有本切片的方向 ② 报告')
+  if (s2.state === 'none') return step('模型校验', '跑校验 ②（解码 + lint + 比对）', validateCmd(true), '编码完成，还没有本切片的方向 ② 报告')
   if (s2.state === 'blocked') return step('人', `处理差异：方向 ② 有 ${s2.errors} 个错误、${s2.warnings} 个警告——代码错回编码，模型错回模型师`, `reports/validate-2.md`, '差异回流由人判定回到哪一侧')
   if (s2.state === 'unjudged') return step('模型校验', `填写 ${s2.unjudged} 条语义等价判断`, `reports/validate-2.json`, '文字差异待判断')
   if (s2.state === 'unreviewed') return step('人', `审阅 ${s2.unreviewed} 条`, `node tools/review.js ${rel(path.join(root, 'reports', 'validate-2.json'))}`, '人过目')
@@ -303,7 +353,7 @@ if (cmd === 'advance') {
   if (stage === 'code') s.at = status === 'done' ? today : null
   if (stage === 'validate') {
     s.reportAt = status === 'done' ? today : null
-    if (status === 'done') s.decodedVersion = reportOf(2)?.decodedVersion ?? null
+    if (status === 'done') s.decodedVersion = reportOf(2, id)?.decodedVersion ?? null
   }
   appendLog(slice, stage, rest.join(' ') || `${from} → ${status}`)
   writeJson(slicePath(id), slice)
@@ -334,7 +384,7 @@ if (cmd === 'apply') {
     if (!files.length) return skipped.push(`${it.target}：找不到写回的模型文件`)
     for (const f of files) {
       if (!written.has(f)) written.set(f, [])
-      written.get(f).push({ target: it.target, check: it.check, verdict, note, at: today, ...(it.on ? { on: it.on } : {}) })
+      written.get(f).push({ target: it.target, check: it.check, verdict, note, at: today, by: 'human', ...(it.on ? { on: it.on } : {}) })
     }
   }
   for (const j of report.judgments) {
@@ -368,7 +418,9 @@ if (cmd === 'apply') {
       continue
     }
     const data = readJson(p)
-    data.decisions = (data.decisions ?? []).filter((d) => !ds.some((n) => n.target === d.target && n.check === d.check))
+    // 同一目标名下可能有好几条（多条聚合级不变量的 target 相同），靠指纹分辨：
+    // 带指纹的只顶掉指纹相同的那条，不带指纹的仍按「目标+检查项」整条替换
+    data.decisions = (data.decisions ?? []).filter((d) => !ds.some((n) => n.target === d.target && n.check === d.check && (n.on && d.on ? n.on === d.on : true)))
     data.decisions.push(...ds)
     writeJson(p, data)
   }

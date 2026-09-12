@@ -117,6 +117,19 @@ export function plain(x: unknown): unknown {
     if (v instanceof Map) return Object.fromEntries(v)
     if (v instanceof Set) return [...v]
     if (typeof v === 'bigint') return v.toString()
-    return v
+    return unwrapProps(v)
   }) ?? 'null')
+}
+
+/**
+ * 值对象与实体把状态藏在一个叫 props 的私有字段里，直接序列化出来页面上是一层套一层的花括号，
+ * 人看不出里面是什么。只有一个 props、别无他物的，把这层包装摘掉，露出里面那几个值。
+ * 仓储的行是 { props, version } 两样，不止一个键，摘不到它头上。
+ */
+function unwrapProps(v: unknown): unknown {
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return v
+  const keys = Object.keys(v as object)
+  if (keys.length !== 1 || keys[0] !== 'props') return v
+  const inner = (v as { props: unknown }).props
+  return inner !== null && typeof inner === 'object' ? inner : v
 }

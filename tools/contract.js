@@ -15,7 +15,7 @@
  */
 const fs = require('node:fs')
 const path = require('node:path')
-const { loadProject, walk, readJson } = require('./lib/project')
+const { loadProject, walk, readJson, walkNames, conditionText } = require('./lib/project')
 
 const args = process.argv.slice(2)
 const cmd = args[0]
@@ -38,7 +38,7 @@ const byQ = (kind, q) => { const [m, n] = q.includes('.') ? q.split('.') : [null
 const storyP = path.join(root, 'slices', `${sliceId}.story.json`)
 const story = fs.existsSync(storyP) ? readJson(storyP) : null
 const ucSet = new Set(), aggSet = new Set()
-if (story) for (const s of story.steps) { const w = s.walk; if (!w || w.kind === 'none') continue; if (w.name?.includes('.')) ucSet.add(w.name); if (w.aggregate) aggSet.add(w.aggregate) }
+if (story) for (const s of story.steps) { const w = s.walk; if (!w || w.kind === 'none') continue; for (const n of walkNames(w.name)) if (n.includes('.')) ucSet.add(n); if (w.aggregate) aggSet.add(w.aggregate) }
 for (const u of slice.scope.useCases ?? []) { const el = byQ('command-handler', u) ?? byQ('query-handler', u); if (el) ucSet.add(`${el.module}.${el.data.name}`) }
 for (const a of slice.scope.aggregates ?? []) { const el = byQ('aggregate-root', a); if (el) aggSet.add(`${el.module}.${el.data.name}`) }
 if (!ucSet.size && !aggSet.size) for (const m of slice.scope.modules ?? []) for (const el of els.filter((e) => e.module === m)) { if (['command-handler', 'query-handler'].includes(el.kind)) ucSet.add(`${m}.${el.data.name}`); if (el.kind === 'aggregate-root') aggSet.add(`${m}.${el.data.name}`) }
@@ -94,7 +94,7 @@ if (cmd === 'scaffold') {
     const p = path.join(root, errorsFile(m))
     if (fs.existsSync(p)) continue
     const errs = els.filter((e) => e.kind === 'error' && e.module === m)
-    writeJson(p, { kind: 'error-status', module: m, map: errs.map((e) => ({ error: e.data.name, status: UNASKED, note: e.data.condition ?? '' })), technical: { NotFoundError: 404, ConcurrencyError: 409, ValidationError: 400 }, confirmedAt: null, note: '' })
+    writeJson(p, { kind: 'error-status', module: m, map: errs.map((e) => ({ error: e.data.name, status: UNASKED, note: conditionText(e.data.condition) })), technical: { NotFoundError: 404, ConcurrencyError: 409, ValidationError: 400 }, confirmedAt: null, note: '' })
     made++
   }
   console.log(`契约骨架 ${made} 份（范围：用例 ${useCases.length}，聚合 ${aggregates.length}，模块 ${modules.length}）；字段名已从模型抄入，标「（没问过）」的逐项问人`)

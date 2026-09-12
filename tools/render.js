@@ -15,7 +15,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
-const { loadProject } = require('./lib/project')
+const { loadProject, ruleText, conditionText, labelOf } = require('./lib/project')
 
 const args = process.argv.slice(2)
 const root = args[0] && path.resolve(args[0])
@@ -70,7 +70,7 @@ function domainCard(el) {
   const inv = (list, label) => (list?.length ? `<div class="sec"><b>${label}</b><ul>${list.map((i) => `<li>${esc(i.text)} ${chips(i.traces)}${i.throws?.length ? ` <span class="muted">抛出 ${esc(i.throws.join(', '))}</span>` : ''}</li>`).join('')}</ul></div>` : '')
   const behaviors = d.behaviors?.length
     ? `<div class="sec"><b>行为</b><ul>${d.behaviors
-        .map((b) => `<li><code>${esc(b.name)}(${params(b.input)})${b.output ? ` → ${esc(b.output)}` : ''}</code> ${chips(b.traces)}${b.rules?.length ? `<div class="sub">规则：${b.rules.map(esc).join('；')}</div>` : ''}${b.raises?.length ? `<div class="sub">发出：${b.raises.map(raiseText).map(esc).join('，')}</div>` : ''}${b.throws?.length ? `<div class="sub">抛出：${esc(b.throws.join('，'))}</div>` : ''}</li>`)
+        .map((b) => `<li><code>${esc(b.name)}(${params(b.input)})${b.output ? ` → ${esc(b.output)}` : ''}</code> ${chips(b.traces)}${b.rules?.length ? `<div class="sub">规则：${b.rules.map(ruleText).map(esc).join('；')}</div>` : ''}${b.raises?.length ? `<div class="sub">发出：${b.raises.map(raiseText).map(esc).join('，')}</div>` : ''}${b.throws?.length ? `<div class="sub">抛出：${esc(b.throws.join('，'))}</div>` : ''}</li>`)
         .join('')}</ul></div>`
     : ''
   return `<div class="${cardCls(el.file)}" id="${esc(el.file)}"><div class="hd"><span class="kind">${KIND_LABEL[el.kind]}</span> <b>${esc(d.name)}</b> ${chips(d.traces)}</div>
@@ -104,7 +104,7 @@ function useCaseCard(el) {
 function serviceCard(el) {
   const d = el.data
   const ops = d.operations
-    .map((op) => `<li><code>${esc(op.name)}(${params(op.input)})${op.output ? ` → ${esc(op.output)}` : ''}</code> ${chips(op.traces)}<div class="sub">读：${esc(op.reads.join('，') || '无')}　写：${esc(op.writes.join('，') || '无')}</div>${op.rules?.length ? `<div class="sub">规则：${op.rules.map(esc).join('；')}</div>` : ''}${steps(op.steps)}</li>`)
+    .map((op) => `<li><code>${esc(op.name)}(${params(op.input)})${op.output ? ` → ${esc(op.output)}` : ''}</code> ${chips(op.traces)}<div class="sub">读：${esc(op.reads.join('，') || '无')}　写：${esc(op.writes.join('，') || '无')}</div>${op.rules?.length ? `<div class="sub">规则：${op.rules.map(ruleText).map(esc).join('；')}</div>` : ''}${steps(op.steps)}</li>`)
     .join('')
   return `<div class="${cardCls(el.file)}" id="${esc(el.file)}"><div class="hd"><span class="kind">领域服务</span> <b>${esc(d.name)}</b> <span class="muted">协调：${esc(d.coordinates.join('，'))}</span></div><ul>${ops}</ul>${diffBlock(el.file)}</div>`
 }
@@ -119,7 +119,7 @@ function cardOf(el) {
     case 'event':
       return smallCard(el, `<div class="sec muted">载荷：${params(el.data.payload)}</div>${handlersOf(el.data.name).length ? `<div class="sec">处理者：${handlersOf(el.data.name).map((h) => `<a href="#${esc(h.file)}">${esc(h.data.name)}</a>`).join('，')}</div>` : '<div class="sec muted">（无处理者）</div>'}`)
     case 'error':
-      return smallCard(el, `<div class="sec muted">${esc(el.data.condition || '')}</div>`)
+      return smallCard(el, `<div class="sec muted">${esc(conditionText(el.data.condition))}</div>`)
     case 'repository':
       return smallCard(el, `<ul class="plain">${el.data.methods.map((mt) => `<li><code>${esc(mt.name)}(${params(mt.input)})${mt.output ? ` → ${esc(mt.output)}` : ''}</code> <span class="muted">${mt.kind === 'read' ? '读' : '写'}</span></li>`).join('')}</ul>`)
     case 'service':
@@ -256,7 +256,7 @@ const cardSections = modules.map((m) => {
     ${ports.length ? `<h3>端口</h3><div class="grid small-grid">${ports.join('')}</div>` : ''}</section>`
 })
 const traced = (id) => els.filter((e) => JSON.stringify(e.data).includes(`"${id}"`)).map((e) => `<a href="#${esc(e.file)}" class="jump">${esc(e.data.name)}</a>`)
-const coverage = business.map((s) => `<tr><td><code>${esc(s.id)}</code></td><td>${esc(s.ruleKind ? `(${s.ruleKind}) ` : '')}${esc(s.text)}</td><td>${traced(s.id).join('，') || '<span class="bad-text">无落点</span>'}</td></tr>`)
+const coverage = business.map((s) => `<tr><td><code>${esc(s.id)}</code></td><td>${esc(labelOf(s) ? `(${labelOf(s)}) ` : '')}${esc(s.text)}</td><td>${traced(s.id).join('，') || '<span class="bad-text">无落点</span>'}</td></tr>`)
 const extraFiles = [...decodedFiles].filter((f) => !model.byFile.has('model/' + f))
 const diffSection = decodedDir
   ? `<section id="view-diff" class="view"><h2>差异汇总</h2>${findings.length ? `<ul>${findings.map((f) => `<li><a href="#model/${esc(f.file)}" class="jump">${esc(f.file)}</a> <span class="muted">${esc(f.path || '整个文件')}</span> — ${esc({ 'missing-file': '模型有、代码无', 'extra-file': '代码有、模型无', missing: '模型有、代码无', extra: '代码有、模型无', changed: '不一致' }[f.kind])}</li>`).join('')}</ul>` : '<p class="muted">设计模型与解码模型一致。</p>'}${extraFiles.length ? `<h3>代码有、模型无的文件</h3><ul>${extraFiles.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</section>`

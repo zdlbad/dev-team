@@ -54,14 +54,76 @@ function nextOf(id) {
   }
 }
 const STATUS = { pending: '待开始', 'in-progress': '进行中', done: '完成' }
+/** 这一步该谁动手：人自己拍板，还是某个角色（团队）干活，还是路由跑个命令 */
+const WHO = {
+  人: { side: '等你', hint: '要你拍板或走一遍，别人替不了' },
+  路由: { side: '等机器', hint: '跑个命令就行，不用你动手' },
+  业务分析: { side: '等团队', hint: '' },
+  讲解: { side: '等团队', hint: '' },
+  模型师: { side: '等团队', hint: '' },
+  原型: { side: '等团队', hint: '' },
+  接口: { side: '等团队', hint: '' },
+  编码: { side: '等团队', hint: '' },
+  模型校验: { side: '等团队', hint: '' },
+  'pre-pr 审查': { side: '等团队', hint: '' },
+  解读: { side: '等团队', hint: '' },
+}
+function sideOf(role) {
+  for (const k of Object.keys(WHO)) if (String(role).startsWith(k)) return WHO[k].side
+  return '等团队'
+}
+/** 这条切片此刻有几件事在等人：没裁的卡、没答的题、没审的判断 */
+function pendingForHuman(id) {
+  const out = []
+  const sp = path.join(root, 'slices', `${id}.story.json`)
+  if (fs.existsSync(sp)) {
+    try {
+      const st = JSON.parse(fs.readFileSync(sp, 'utf8'))
+      const voided = (c) => c.ruling?.choice === '作废' || /^本卡作废/.test(c.ruling?.note ?? '')
+      const cards = (st.choices ?? []).filter((c) => !c.ruling && !voided(c)).length
+      const quiz = (st.steps ?? []).filter((s) => s.quiz && !s.human).length
+      const unreviewed = (st.steps ?? []).filter((s) => !s.review).length
+      if (cards) out.push(`${cards} 张卡没裁`)
+      if (quiz) out.push(`${quiz} 道题没答`)
+      if (unreviewed) out.push(`${unreviewed} 步没审`)
+    } catch {}
+  }
+  for (const d of [1, 2]) {
+    const rp = path.join(root, 'reports', `validate-${d}.json`)
+    if (!fs.existsSync(rp)) continue
+    try {
+      const r = JSON.parse(fs.readFileSync(rp, 'utf8'))
+      if (r.slice && r.slice !== id) continue
+      const n = [...(r.judgments ?? []).filter((x) => x.verdict), ...(r.confirms ?? [])].filter((x) => !x.human?.verdict).length
+      if (n) out.push(`校验 ${d} 有 ${n} 条没审`)
+    } catch {}
+  }
+  const pp = path.join(root, 'plans', `${id}.json`)
+  if (fs.existsSync(pp)) {
+    try {
+      const p = JSON.parse(fs.readFileSync(pp, 'utf8'))
+      if (!p.confirmedAt) out.push('编码计划没确认')
+    } catch {}
+  }
+  return out
+}
+/** 这条切片上一次有动静是哪天、距今多少天 */
+function idleDays(lastTs) {
+  if (!lastTs) return null
+  const d = Math.round((Date.now() - new Date(lastTs + 'T00:00:00').getTime()) / 86400000)
+  return Number.isFinite(d) ? Math.max(0, d) : null
+}
 const rows = (slices ?? [])
   .map((s) => s.data)
   .sort((a, b) => a.id.localeCompare(b.id))
   .map((s) => {
-    const done = Object.values(s.stages).every((st) => st.status === 'done')
-    const n = done ? { role: '—', action: '切片完成' } : nextOf(s.id)
+    // 三个阶段都 done 不等于这条切片走完了：后面还有 pre-pr 审查与人在原型上走一遍。
+    // 一律问 slice next——它自己会在真走完时说「切片完成，合并」。
+    const n = s.archived ? { role: '—', action: '已归档：' + s.archived.reason } : nextOf(s.id)
     const lastLog = s.log[s.log.length - 1]
-    return { id: s.id, title: s.title, kind: ({ initial: '大切片', increment: '小切片', story: '建模', implementation: '实现' })[s.kind] ?? s.kind, model: STATUS[s.stages.model.status], code: STATUS[s.stages.code.status], validate: STATUS[s.stages.validate.status], next: `${n.role}：${n.action}`, command: n.command, last: lastLog ? `${lastLog.ts} ${lastLog.text}` : '' }
+    const idle = idleDays(lastLog?.ts)
+    const pending = s.archived ? [] : pendingForHuman(s.id)
+    return { pending, archived: !!s.archived, id: s.id, title: s.title, kind: ({ initial: '大切片', increment: '小切片', story: '建模', implementation: '实现', refactor: '改说法' })[s.kind] ?? s.kind, model: STATUS[s.stages.model.status], code: STATUS[s.stages.code.status], validate: STATUS[s.stages.validate.status], role: n.role, side: s.archived ? '已归档' : sideOf(n.role), action: n.action, why: n.why ?? '', idle, next: `${n.role}：${n.action}`, command: n.command, last: lastLog ? `${lastLog.ts} ${lastLog.text}` : '' }
   })
 
 // ---------- 渲染 ----------
@@ -81,6 +143,24 @@ L.push(`- 业务：目标 ${goals} 条，规则 ${rules} 条，使用 ${usages} 
 L.push(`- 模型：模块 ${modules.length}（${modules.join('、') || '无'}）；${Object.entries(kinds).map(([k, v]) => `${k} ${v}`).join('，') || '尚无元素'}；裁决 ${decisions} 条`)
 L.push(reportLine('校验 ①', r1))
 L.push(reportLine('校验 ②', r2))
+L.push('', '## 谁在做什么', '')
+const live = rows.filter((r) => !r.archived)
+if (!live.length) L.push('（没有在推进的切片）')
+else {
+  const waitingYou = live.filter((r) => r.side === '等你' || r.pending.length)
+  L.push(waitingYou.length ? `**${waitingYou.length} 条在等你**：${waitingYou.map((r) => `${r.id}（${r.side === '等你' ? r.action : r.pending.join('、')}）`).join('；')}` : '**没有一条在等你**——都在团队或机器手上。')
+  L.push('')
+  L.push(...table(['切片', '在等谁', '该谁上场', '要做的事', '另外还等你', '几天没动'], live.map((r) => [
+    r.id,
+    r.side,
+    r.role,
+    r.action,
+    r.pending.length ? r.pending.join('、') : '—',
+    r.idle == null ? '—' : r.idle === 0 ? '今天动过' : `${r.idle} 天`,
+  ])))
+}
+const archived = rows.filter((r) => r.archived)
+if (archived.length) L.push('', archived.map((r) => `（${r.id} ${r.action}）`).join(' '))
 L.push('', '## 切片', '')
 if (!rows.length) L.push('（还没有切片：`slice new` 建一个）')
 else L.push(...table(['切片', '标题', '种类', '模型', '编码', '校验', '下一步'], rows.map((r) => [r.id, r.title, r.kind, r.model, r.code, r.validate, r.next])))

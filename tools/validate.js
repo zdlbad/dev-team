@@ -12,7 +12,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync, spawnSync } = require('node:child_process')
-const { loadProject } = require('./lib/project')
+const { applyWordMap, loadProject, LAYERS, KINDS, labelOf } = require('./lib/project')
 
 const args = process.argv.slice(2)
 const root = args[0] && path.resolve(args[0])
@@ -20,8 +20,26 @@ const codeIdx = args.indexOf('--code')
 const codebase = codeIdx >= 0 ? path.resolve(args[codeIdx + 1]) : null
 const sliceIdx = args.indexOf('--slice')
 const sliceId = sliceIdx >= 0 ? args[sliceIdx + 1] : null
+// 纯改名之后重新定基：给它一份「新说法 → 旧说法」的对照（JSON 文件），它反着换回去，
+// 换出来的文字与当初人裁的那一段一字不差，才把指纹重算；证不出来的一律留着过期、由人重裁。
+const rebaseIdx = args.indexOf('--重新定基')
+const rebaseFile = rebaseIdx >= 0 ? args[rebaseIdx + 1] : null
+const whyIdx = args.indexOf('--说明')
+const rebaseWhy = whyIdx >= 0 ? args[whyIdx + 1] : null
+// 正常跑那一趟也能带这份对照：上一份报告里已经填好的判断，文字只因改名而变的照样接过来
+const renameIdx = args.indexOf('--改名')
+const renameFile = renameIdx >= 0 ? args[renameIdx + 1] : (rebaseFile ?? null)
+/** 把新说法反着换回旧说法；没给对照就原样返回 */
+const unrename = (() => {
+  if (!renameFile) return null
+  let pairs
+  try { pairs = JSON.parse(fs.readFileSync(path.resolve(renameFile), 'utf8')) } catch { return null }
+  const keys = Object.keys(pairs).sort((a, b) => b.length - a.length) // 长的先换，免得「录入花费」被「录入」先切开
+  return (t) => applyWordMap(t, pairs, keys)
+})()
 if (!root || !fs.existsSync(path.join(root, 'model'))) {
   console.error('用法：node tools/validate.js <项目目录> [--code <代码库目录>] [--slice <切片id>]')
+  console.error('　　　　重新定基：node tools/validate.js <项目目录> --重新定基 <新旧对照.json> --说明 "第几批只改了名字、换的是哪几个说法"')
   process.exit(2)
 }
 const devTeam = path.resolve(__dirname, '..')
@@ -54,7 +72,7 @@ const GUIDES = {
     how: '找到 when 引用的变量，确认它是某个 behavior / service / factory 步骤的 output。',
   },
   '模型对使用场景的回应是否充分？': {
-    question: '这条使用语句（会不会同时、会不会重复、一次几条、失败怎么处置、谁能看见）在模型里有没有一个明确的回应？',
+    question: '这条旧的使用语句（会不会同时、会不会重复、一次几条、失败怎么处置、谁能看见）在模型里有没有一个明确的回应？',
     pass: '落点说清了系统怎么应对：同时改 → 版本号或状态守卫；重复触发 → 状态守卫或幂等；一次几条 → 命令的输入形状与部分失败的语义；失败处置 → 事件或错误；可见性 → 查询的范围。',
     fail: '只是挂了编号，落点的文字没有回应这条语句说的用法；或回应方式与语句矛盾（语句说两人可能同时改，模型没有任何守卫）。',
     how: '把语句拆成「谁、在什么情况下、做什么」，在落点里找对应的守卫、规则或输入；找不到就是不通过。',
@@ -95,15 +113,33 @@ function makeReport(direction) {
   return { direction, project: root, slice: sliceId, at: new Date().toISOString(), decodedVersion: null, guides: GUIDES, errors: [], warnings: [], confirms: [], judgments: [], decided: [], blindSpots: [], conclusion: null }
 }
 const decisions = [] // 全部模型文件的 decisions[]
+const decFile = new Map() // 每一条裁决出自哪个文件（重新定基时要写回去）
+const staleSeen = [] // 这一趟遇到的过期裁决：{ dec, text }
+const decStats = { 问过: 0, 压根没人裁过: 0, 指纹对上: 0, 没带指纹就认了: 0, 过期: 0 }
 /** 裁决对象的指纹：文字变了裁决即过期 */
 function fingerprint(text) {
   return require('node:crypto').createHash('sha1').update(String(text ?? '')).digest('hex').slice(0, 8)
 }
 function decidedFor(target, check, text) {
-  const d = decisions.find((d) => d.target === target && d.check === check)
-  if (!d) return null
-  if (d.on && d.on !== fingerprint(text)) return { ...d, stale: true }
-  return d
+  decStats.问过++
+  // 只认人裁的。角色自己记的理由留在文件里备查，但不能替人把这一条盖过去。
+  const mine = decisions.filter((d) => d.target === target && d.check === check && d.by !== 'role')
+  if (!mine.length) { decStats.压根没人裁过++; return null }
+  // 同一个目标名下可能有好几条（一个聚合根的多条聚合级不变量 target 都一样）：
+  // 先认指纹对得上自己这段文字的那一条，认不到再退回没带指纹的那条。
+  const fp = fingerprint(text)
+  const byFp = mine.find((x) => x.on === fp)
+  if (byFp) { decStats.指纹对上++; return byFp }
+  // 老裁决没带指纹：认不出它是对着哪一版文字裁的，只能照认
+  const noFp = mine.find((x) => !x.on)
+  if (noFp) { decStats.没带指纹就认了++; return noFp }
+  // 有人裁过，但裁的是另一版文字——这是**过期**，不是「没人裁过」。
+  // 当成没人裁过会把人拍过的板悄悄丢掉：同一件事再问一遍，而没人知道它问过。
+  // 同一个目标名下裁过好几次的，拿最近那一次当作过期的那一条。
+  decStats.过期++
+  const latest = mine.slice().sort((a, b) => String(a.at ?? "").localeCompare(String(b.at ?? ""))).pop()
+  staleSeen.push({ dec: latest, text })
+  return { ...latest, stale: true }
 }
 function add(report, level, check, target, text, extra = {}) {
   const item = { check, target, text, on: fingerprint(text), ...extra }
@@ -136,9 +172,9 @@ function judge(report, check, target, sides, importance, related) {
 // ---------- 加载 ----------
 const project = loadProject(root)
 const { business, glossary, model } = project
-for (const el of model.elements) for (const d of el.data?.decisions ?? []) decisions.push(d)
-for (const mf of model.moduleFiles) for (const d of mf.data.decisions ?? []) decisions.push(d)
-for (const d of model.modules?.data.decisions ?? []) decisions.push(d)
+for (const el of model.elements) for (const d of el.data?.decisions ?? []) { decisions.push(d); decFile.set(d, el.file) }
+for (const mf of model.moduleFiles) for (const d of mf.data.decisions ?? []) { decisions.push(d); decFile.set(d, mf.file) }
+for (const d of model.modules?.data.decisions ?? []) { decisions.push(d); decFile.set(d, model.modules.file) }
 
 const byId = new Map(business.map((s) => [s.id, s]))
 // 切片范围：切片记录里 traces 非空时，覆盖检查只针对范围内的业务语句。
@@ -190,30 +226,69 @@ if (schemaRun.status !== 0) {
 }
 for (const el of model.elements.filter((e) => e.kind === 'invalid')) add(r1, 'error', 'schema', el.file, `JSON 解析失败：${el.error}`)
 
-// 覆盖：目标 → 命令/查询
+// 标签：层与文件对得上、字母与种类对得上、分层文件里每条都标了层（07 第三节）
+let unlayered = 0
+for (const s of business) {
+  if (!inScope(s.id)) continue
+  if (s.unknownLabel) add(r1, 'error', 'label.unknown', s.id, `标签认不得：(${s.unknownLabel.join('-')})——层只有 ${LAYERS.join(' / ')}，种类只有 ${Object.keys(KINDS).join(' / ')}`)
+  if (s.labelLayer && s.fileLayer && s.labelLayer !== s.fileLayer) add(r1, 'error', 'label.layer-file', s.id, `标签写的是「${s.labelLayer}」，却放在 ${s.file}`)
+  if (s.ruleKind && KINDS[s.ruleKind] && KINDS[s.ruleKind] !== s.id[0]) add(r1, 'error', 'label.kind-letter', s.id, `种类「${s.ruleKind}」只能标在 ${KINDS[s.ruleKind]} 开头的编号上`)
+  if (s.kind === 'usage' && s.labelLayer === '业务抽象') add(r1, 'error', 'label.usage-layer', s.id, '旧的使用语句只可能是业务落地')
+  if (s.fileLayer && !s.labelLayer) add(r1, 'error', 'label.missing-layer', s.id, `${s.file} 是分层文件，每条语句都要标层：(${s.fileLayer}-种类)`)
+  if (!s.fileLayer && !s.labelLayer) unlayered++
+}
+if (unlayered) add(r1, 'warning', 'label.unlayered', 'business/', `${unlayered} 条语句还没分层（老布局；按段落点亮时补标签、搬进 business/<Module>/业务抽象.md 或 业务落地.md）`)
+
+// 覆盖：能力 → 命令/查询
 for (const g of goals) {
   const hit = [...commands, ...queries].some((e) => e.data.traces.includes(g.id))
-  if (!hit) add(r1, 'error', 'coverage.goal', g.id, `目标没有任何命令或查询追溯：${g.text}`)
+  if (!hit) add(r1, 'error', 'coverage.goal', g.id, `能力没有任何命令或查询追溯：${g.text}`)
 }
 // 覆盖：规则 → 按种类的落点
 const sig = (name, input, output) => `${name}(${(input ?? []).map((p) => `${p.name}: ${p.type}`).join(', ')})${output ? ` → ${output}` : ''}`
-const rulesText = (rules) => `规则：${rules.length ? rules.join('；') : '（无）'}`
+// 规则可以标明自己管哪几个编号。问某一条业务语句时，只摆标了这个编号的那几条，
+// 加上没标编号的（那些是这个方法的底子，摆哪条都得带上）；其余的收起来，只报个数。
+// 不这么做的话，一个挂了七八个编号的方法，问哪一条都要把整块端给人读一遍。
+const ruleText = (r) => (typeof r === 'string' ? r : r.text)
+const ruleTraces = (r) => (typeof r === 'string' ? null : r.traces)
+const rulesText = (rules, id) => {
+  const all = rules ?? []
+  const keep = id ? all.filter((r) => { const tr = ruleTraces(r); return !tr || tr.includes(id) }) : all
+  const hidden = all.length - keep.length
+  const body = keep.length ? keep.map((r) => ruleText(r) + carriesOf(r, id)).join('；') : '（无）'
+  return `规则：${body}` + (hidden ? `（这个方法另有 ${hidden} 条规则，管的是别的编号，未列出）` : '')
+}
 const throwsText = (t) => (t.length ? `　抛出：${t.join(', ')}` : '')
 const raisesText = (r) => (r.length ? `　发出：${r.map((x) => (typeof x === 'string' ? x : `${x.event}（${x.when}）`)).join(', ')}` : '')
+// 错误的条件、命令的步骤，跟规则一样：标了编号的按编号挑，没标的每次都摆，藏起来的报个数
+// 一条业务语句落在好几处时，每一处说一句自己承担哪一半（模型里的 carries）
+const carriesOf = (x, id) => { const c = x && x.carries && id ? x.carries[id] : null; return c ? `〔本处承担：${c}〕` : '' }
+const pickText = (items, id, sep) => {
+  const all = Array.isArray(items) ? items : [items]
+  const one = (x) => (typeof x === 'string' ? x : x.text)
+  const tr = (x) => (typeof x === 'string' ? null : x.traces)
+  const keep = id ? all.filter((x) => { const q = tr(x); return !q || q.includes(id) }) : all
+  const hidden = all.length - keep.length
+  return keep.map((x) => one(x) + carriesOf(x, id)).join(sep) + (hidden ? `（另有 ${hidden} 处管的是别的编号，未列出）` : '')
+}
 function ruleLandings(id) {
   const out = []
   for (const el of domainObjects) {
     const objLabel = { 'aggregate-root': '聚合根', entity: '实体', 'value-object': '值对象' }[el.kind]
-    for (const inv of el.data.aggregateInvariants ?? []) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, text: `聚合 ${el.data.name} 的不变量：${inv.text}` })
-    for (const inv of el.data.invariants) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, text: `${objLabel} ${el.data.name} 的不变量：${inv.text}${throwsText(inv.throws ?? [])}` })
-    for (const b of el.data.behaviors) if (b.traces.includes(id)) out.push({ kind: b.throws.length ? 'behavior-guard' : 'behavior', el, text: `${el.data.name}.${sig(b.name, b.input, b.output)}　${rulesText(b.rules)}${raisesText(b.raises)}${throwsText(b.throws)}` })
+    for (const inv of el.data.aggregateInvariants ?? []) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, text: `聚合 ${el.data.name} 的不变量：${inv.text}${carriesOf(inv, id)}` })
+    for (const inv of el.data.invariants) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, text: `${objLabel} ${el.data.name} 的不变量：${inv.text}${carriesOf(inv, id)}${throwsText(inv.throws ?? [])}` })
+    for (const b of el.data.behaviors) if (b.traces.includes(id)) out.push({ kind: b.throws.length ? 'behavior-guard' : 'behavior', el, text: `${el.data.name}.${sig(b.name, b.input, b.output)}　${rulesText(b.rules, id)}${raisesText(b.raises)}${throwsText(b.throws)}` })
+
+    // 字段也是模型的落点：聚合上记着什么、每一栏干什么用，跟不变量一样在承载业务
+    for (const f of el.data.fields ?? []) if ((f.traces ?? []).includes(id)) out.push({ kind: 'field', el, text: `${objLabel} ${el.data.name} 的字段 ${f.name}: ${f.type}${f.nullable ? '（可空）' : ''}${f.note ? `　${f.note}` : ''}` })
   }
-  for (const s of services) for (const op of s.data.operations) if (op.traces.includes(id)) out.push({ kind: 'service', el: s, text: `领域服务 ${s.data.name}.${sig(op.name, op.input, op.output)}　${rulesText(op.rules)}${throwsText(op.throws)}` })
+  for (const s of services) for (const op of s.data.operations) if (op.traces.includes(id)) out.push({ kind: 'service', el: s, text: `领域服务 ${s.data.name}.${sig(op.name, op.input, op.output)}　${rulesText(op.rules, id)}${throwsText(op.throws)}` })
   for (const h of handlers) if (h.data.traces.includes(id)) out.push({ kind: 'event-handler', el: h, text: `事件处理 ${h.data.name}（触发：${h.data.trigger}）：${h.data.steps.map((s) => s.text).join(' → ')}` })
-  for (const e of errors) if (e.data.traces.includes(id)) out.push({ kind: 'error', el: e, text: `错误 ${e.data.name}：${e.data.condition || '（无条件说明）'}` })
+  for (const e of errors) if (e.data.traces.includes(id)) out.push({ kind: 'error', el: e, text: `错误 ${e.data.name}：${e.data.condition ? pickText(e.data.condition, id, '；') : '（无条件说明）'}` })
   return out
 }
-const EXPECTED = { 不变量: ['invariant', 'behavior-guard', 'error'], 反应: ['event-handler'], 推导: ['behavior', 'behavior-guard', 'service'] }
+// 种类 → 该落在哪种元素上（只是提醒，报警告）。消息里用文件里写的那个词（rawKind），旧标签的语句指纹才对得上以前的裁决：事实落字段或结构性的不变量；约束落不变量、守卫、错误；公式落计算；触发落事件处理
+const EXPECTED = { 事实: ['field', 'invariant', 'behavior'], 约束: ['invariant', 'behavior-guard', 'error', 'field'], 公式: ['behavior', 'behavior-guard', 'service', 'field'], 触发: ['event-handler'] }
 for (const r of rules) {
   const landings = ruleLandings(r.id)
   if (!landings.length) {
@@ -221,26 +296,26 @@ for (const r of rules) {
     continue
   }
   if (r.ruleKind && EXPECTED[r.ruleKind] && !landings.some((l) => EXPECTED[r.ruleKind].includes(l.kind))) {
-    add(r1, 'warning', 'coverage.rule-kind', r.id, `规则种类「${r.ruleKind}」的落点应为 ${EXPECTED[r.ruleKind].join(' / ')}，实际只有 ${[...new Set(landings.map((l) => l.kind))].join(' / ')}`)
+    add(r1, 'warning', 'coverage.rule-kind', r.id, `规则种类「${r.rawKind ?? r.ruleKind}」的落点应为 ${EXPECTED[r.ruleKind].join(' / ')}，实际只有 ${[...new Set(landings.map((l) => l.kind))].join(' / ')}`)
   }
   // 一条业务语句一条判断：模型侧列出全部落点及其完整上下文
   const importance = landings.some((l) => ['invariant', 'behavior-guard', 'error', 'behavior'].includes(l.kind)) ? 'high' : 'medium'
-  judge(r1, '模型规则是否与业务一致？', r.id, { business: `[${r.id}]${r.ruleKind ? ` (${r.ruleKind})` : ''} ${r.text}`, model: landings.map((l) => l.text).join('\n') }, importance, [...new Set(landings.map((l) => l.el.file))])
+  judge(r1, '模型规则是否与业务一致？', r.id, { business: `[${r.id}]${labelOf(r) ? ` (${labelOf(r)})` : ''} ${r.text}`, model: landings.map((l) => l.text).join('\n') }, importance, [...new Set(landings.map((l) => l.el.file))])
 }
-// 覆盖：使用语句 → 落点不限种类（守卫 / 规则 / 用例 / 查询），但必须有；一条一判
+// 覆盖：旧的使用语句（U，已停发，老项目里还有）→ 落点不限种类，但必须有；一条一判。新项目按五问问出来的公司事实是普通的 R，走上面那条路
 function usageLandings(id) {
   const out = ruleLandings(id)
-  for (const c of commands) if (c.data.traces.includes(id)) out.push({ kind: 'command', el: c, text: `命令 ${c.data.name}（输入：${(c.data.input ?? []).map((p) => p.name).join(', ') || '无'}）：${c.data.steps.map((s) => s.text).join(' → ')}` })
+  for (const c of commands) if (c.data.traces.includes(id)) out.push({ kind: 'command', el: c, text: `命令 ${c.data.name}（输入：${(c.data.input ?? []).map((p) => p.name).join(', ') || '无'}）：${pickText(c.data.steps, id, ' → ')}` })
   for (const q of queries) if (q.data.traces.includes(id)) out.push({ kind: 'query', el: q, text: `查询 ${q.data.name}（输入：${(q.data.input ?? []).map((p) => p.name).join(', ') || '无'}）` })
   return out
 }
 for (const u of usages) {
   const landings = usageLandings(u.id)
   if (!landings.length) {
-    add(r1, 'error', 'coverage.usage', u.id, `使用语句没有任何落点（模型必须回应系统会被怎么用）：${u.text}`)
+    add(r1, 'error', 'coverage.usage', u.id, `旧的使用语句没有任何落点（模型必须回应系统会被怎么用）：${u.text}`)
     continue
   }
-  judge(r1, '模型对使用场景的回应是否充分？', u.id, { business: `[${u.id}] (使用) ${u.text}`, model: landings.map((l) => l.text).join('\n') }, 'high', [...new Set(landings.map((l) => l.el.file))])
+  judge(r1, '模型对使用场景的回应是否充分？', u.id, { business: `[${u.id}] (${labelOf(u)}) ${u.text}`, model: landings.map((l) => l.text).join('\n') }, 'high', [...new Set(landings.map((l) => l.el.file))])
 }
 // 追溯反向：每个元素 traces 非空且存在
 function checkTraces(target, traces, level = 'error') {
@@ -260,12 +335,12 @@ for (const g of goals) {
     const result = e.kind === 'query-handler' ? `　返回：${e.data.result.map((p) => p.name).join(', ')}` : ''
     return `${kind} ${e.data.name}（${e.data.actor}；输入：${e.data.input.map((p) => p.name).join(', ')}）：${steps}${result}`
   })
-  judge(r1, '用例是否按步骤完成了业务目标？', g.id, { business: `[${g.id}] ${g.text}`, model: lines.join('\n') }, 'medium', ucs.map((e) => e.file))
+  judge(r1, '用例是否按步骤完成了业务目标？', g.id, { business: `[${g.id}]${labelOf(g) ? ` (${labelOf(g)})` : ''} ${g.text}`, model: lines.join('\n') }, 'medium', ucs.map((e) => e.file))
 }
 
 // 命名：名词在词汇表
 const terms = new Set(glossary.terms.map((t) => t.name))
-for (const el of domainObjects) if (!terms.has(el.data.name)) add(r1, 'error', 'glossary.noun', el.file, `名字不在词汇表中：${el.data.name}`)
+for (const el of [...domainObjects, ...errors, ...events]) if (!terms.has(el.data.name)) add(r1, 'error', 'glossary.noun', el.file, `名字不在词汇表中：${el.data.name}`)
 for (const t of glossary.terms) for (const a of t.aliases) if (/^[A-Z][A-Za-z0-9]*$/.test(a) && els.some((e) => e.data.name === a)) judge(r1, '模型用的是词汇表的法定名吗？', `glossary#${t.name}`, { business: `${t.name}（别名 ${a}）`, model: a }, 'low')
 
 // 模型内部一致性
@@ -466,16 +541,84 @@ if (codebase) {
 }
 
 // ---------- 结论与写出 ----------
+/** 同一条判断项的身份：目标 + 检查项 + 双方的原文。原文变了就是新的一条，旧判断不该跟过来。 */
+function judgeKey(x) {
+  return [x.target, x.check, x.sides?.business ?? '', x.sides?.model ?? '', x.sides?.code ?? ''].join('\u0000')
+}
+/**
+ * 重跑时把上一份报告里已经填好的判断与裁决接过来。
+ * 校验角色填 verdict/confidence/reason 要花很久，人的裁决更是不可再生——
+ * 从前这里无条件覆盖，跑一次全没了（角色文件的自检恰好又要求跑它）。
+ * 只在「目标、检查项、双方原文」都一字不差时才接：任何一侧的文字变了就当作新的一条，重新判。
+ */
+/** 被顶掉的是另一条切片的报告就先存一份，别让它无声消失 */
+function archivePrevious(dir, name, slice) {
+  const p = path.join(dir, `${name}.json`)
+  if (!fs.existsSync(p)) return
+  let old
+  try { old = JSON.parse(fs.readFileSync(p, 'utf8')) } catch { return }
+  if (!old.slice || old.slice === slice) return
+  fs.copyFileSync(p, path.join(dir, `${name}.${old.slice}.json`))
+  const md = path.join(dir, `${name}.md`)
+  if (fs.existsSync(md)) fs.copyFileSync(md, path.join(dir, `${name}.${old.slice}.md`))
+  console.log(`（${old.slice} 的上一份报告已存为 ${name}.${old.slice}.json）`)
+}
+function carryOver(report, name) {
+  const dir = path.join(root, 'reports')
+  // 当前那份是本切片的就读它（它最新）；是别的切片的，才回头找自己那份存档
+  const live = path.join(dir, `${name}.json`)
+  const liveIsMine = (() => {
+    try { return JSON.parse(fs.readFileSync(live, 'utf8')).slice === report.slice } catch { return false }
+  })()
+  const p = liveIsMine ? live : path.join(dir, `${name}.${report.slice}.json`)
+  if (!fs.existsSync(p)) return 0
+  let old
+  try { old = JSON.parse(fs.readFileSync(p, 'utf8')) } catch { return 0 }
+  if (old.slice !== report.slice || old.direction !== report.direction) return 0
+  const by = new Map((old.judgments ?? []).map((x) => [judgeKey(x), x]))
+  let kept = 0
+  let renamedCarry = 0
+  for (const j of report.judgments) {
+    // 文字一个字没变的照样认得出；只因改名而变的，把新文字反着换回旧说法，
+    // 换出来的与上一份一字不差才接过来——证不出来的不接，校验角色重判一遍
+    let o = by.get(judgeKey(j))
+    if (!o && unrename) {
+      o = by.get(judgeKey({ target: j.target, check: j.check, sides: { business: unrename(j.sides?.business), model: unrename(j.sides?.model), code: j.sides?.code === undefined ? undefined : unrename(j.sides.code) } }))
+      if (o) renamedCarry++
+    }
+    if (!o) continue
+    if (o.verdict) { j.verdict = o.verdict; j.confidence = o.confidence; j.reason = o.reason; kept++ }
+    if (o.human) j.human = o.human
+  }
+  // 盲区是校验角色写的，不是机械算出来的——重跑不该把它冲回内置的那两条
+  if ((old.blindSpots ?? []).length > (report.blindSpots ?? []).length) report.blindSpots = old.blindSpots
+  const oldConfirm = new Map((old.confirms ?? []).map((c) => [[c.check, c.target, c.text].join('\u0000'), c]))
+  for (const c of report.confirms) {
+    const o = oldConfirm.get([c.check, c.target, c.text].join('\u0000'))
+    if (o?.human) c.human = o.human
+  }
+  // 这一轮没有任何待判断与需确认——能判的都已经在 decisions[] 里了，等于上一轮就写回过
+  if (old.applied && !report.judgments.length && !report.confirms.length) report.applied = old.applied
+  if (renamedCarry) console.log(`[校验] 这 ${renamedCarry} 条判断的文字只因改名而变（反着换回去一字不差），上一份填好的结论照样接过来，不重判`)
+  return kept
+}
 function finish(report, name) {
+  // 重新定基是一趟专门的活：只看哪些裁决过期了、能不能证明是纯改名，不碰报告
+  if (rebaseFile) return
   report.judgments.sort((a, b) => rank(b.importance) - rank(a.importance))
-  const open = report.errors.length + report.warnings.length + report.confirms.length
+  const kept = carryOver(report, name)
+  // 已经裁决过的「需人确认」不再算作未清项——人已经拍过板了，报告不该因此永远不干净
+  const openConfirms = report.confirms.filter((c) => !c.human?.verdict).length
+  const open = report.errors.length + report.warnings.length + openConfirms
   report.conclusion = open === 0 ? 'clean' : 'not-clean'
   const dir = path.join(root, 'reports')
   fs.mkdirSync(dir, { recursive: true })
+  archivePrevious(dir, name, report.slice)
   fs.writeFileSync(path.join(dir, `${name}.json`), JSON.stringify(report, null, 2) + '\n')
   fs.writeFileSync(path.join(dir, `${name}.md`), renderMd(report))
   const j = report.judgments.length
-  console.log(`方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 需人确认 ${report.confirms.length} · 待判断 ${j} · 已裁决 ${report.decided.length} → ${report.conclusion === 'clean' ? '干净' : '不干净'}（${path.relative(process.cwd(), path.join(dir, name + '.md'))}）`)
+  const blank = report.judgments.filter((x) => !x.verdict).length
+  console.log(`方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 需人确认 ${report.confirms.length} · 待判断 ${j}${kept ? `（沿用上一份已填的 ${kept} 条，还要填 ${blank} 条）` : ''} · 已裁决 ${report.decided.length} → ${report.conclusion === 'clean' ? '干净' : '不干净'}（${path.relative(process.cwd(), path.join(dir, name + '.md'))}）`)
   if (report.conclusion !== 'clean') process.exitCode = 1
 }
 function rank(x) {
@@ -507,3 +650,51 @@ function renderMd(r) {
   L.push('')
   return L.join('\n')
 }
+
+// ---------- 纯改名之后重新定基 ----------
+/**
+ * 改名把裁决的指纹全打掉了，但裁的那件事一个字没变——这种不该让人重裁一遍。
+ * 这里要工具自己证明「只改了名字」：拿一份「新说法 → 旧说法」的对照，把现在这段文字
+ * 反着换回去，换出来的东西与当初人裁的那一段**一字不差**（指纹对得上），才算证明了。
+ * 证不出来的一条都不动：那可能是真改了实质，必须留着过期、由人重裁。
+ * 裁决的 verdict 与 note 一个字不改，只重算 on，并在 rebased[] 里记一笔是哪一批改的名。
+ */
+const SEP = String.fromCharCode(0)
+function rebase() {
+  if (!rebaseWhy) { console.error("重新定基要用 --说明 写清楚是哪一批改的名、换的是哪几个说法"); process.exit(2) }
+  let pairs
+  try { pairs = JSON.parse(fs.readFileSync(path.resolve(rebaseFile), "utf8")) } catch (e) { console.error("读不了新旧对照：" + e.message); process.exit(2) }
+  const keys = Object.keys(pairs).sort((a, b) => b.length - a.length) // 长的先换，免得「录入花费」被「录入」先切开
+  const back = (t) => applyWordMap(t, pairs, keys)
+  const proved = new Map() // 文件 → [{ dec, to }]
+  const unproved = []
+  const seen = new Set()
+  for (const { dec, text } of staleSeen) {
+    const key = decFile.get(dec) + SEP + dec.target + SEP + dec.check + SEP + dec.on + SEP + fingerprint(text)
+    if (seen.has(key)) continue
+    seen.add(key)
+    const file = decFile.get(dec)
+    if (fingerprint(back(text)) === dec.on) {
+      if (!proved.has(file)) proved.set(file, [])
+      proved.get(file).push({ dec, to: fingerprint(text) })
+    } else unproved.push({ file, dec, to: fingerprint(text) })
+  }
+  let written = 0
+  for (const [file, list] of proved) {
+    const p = path.join(root, file)
+    const data = JSON.parse(fs.readFileSync(p, "utf8"))
+    for (const { dec, to } of list) {
+      const hit = (data.decisions ?? []).find((x) => x.target === dec.target && x.check === dec.check && x.on === dec.on && x.at === dec.at && x.note === dec.note)
+      if (!hit) { console.error(`  ! ${file} 里找不回这一条裁决（${dec.target}），跳过`); continue }
+      hit.rebased = [...(hit.rebased ?? []), { at: today, why: rebaseWhy, from: hit.on, to }]
+      hit.on = to
+      written++
+    }
+    fs.writeFileSync(p, JSON.stringify(data, null, 2) + String.fromCharCode(10))
+  }
+  console.log(`裁决对账：问过 ${decStats.问过} 处；压根没人裁过 ${decStats.压根没人裁过} 处；指纹对上 ${decStats.指纹对上} 处；裁决没带指纹、照旧认下 ${decStats.没带指纹就认了} 处；指纹对不上 ${decStats.过期} 处`)
+  console.log(`重新定基：这一趟遇到过期的裁决 ${seen.size} 条；证明得了只改名字的 ${written} 条已重算指纹（裁的内容一字未动），证不出来的 ${unproved.length} 条留着过期、要人重裁`)
+  for (const u of unproved) console.log(`  · 仍过期：${u.dec.target}（${u.dec.check}）—— ${u.file}`)
+  if (!unproved.length && written) console.log("  全部证明得了：这一趟确实只改了说法，没有一处实质变化")
+}
+if (rebaseFile) rebase()
