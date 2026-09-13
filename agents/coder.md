@@ -93,3 +93,7 @@ node $DEV_TEAM/tools/test.js <代码库> <片段>                       # 一小
 临时目录放在项目的 `model-decoded/` 下（已在 .gitignore）。解码器报的 lint（处理器里的业务判断、直接 throw、漏 publish）必须清零。
 
 结尾按 [agents/README.md](README.md) 的统一格式给出「产出」与「问题清单」，产出里附最后一次比对、`plan check` 与测试的结果行。
+
+## 计划确认之后人又裁了一条
+
+在**原有步骤里**补守卫、补用例，把新规矩写进那几步的 `keyLogic`（`plans/<id>.json`，`.md` 跟着改成一样），别新开一步。**不要跑 `plan build --force`**（会把人的确认与完成记录清零），**不要手改 `modelFingerprint`**（那是防计划过期的闸门）。改完把情况交回开发指挥，由它跑 `plan amend` 核对后换指纹。
