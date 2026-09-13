@@ -25,6 +25,8 @@ const cmd = args[0]
 const root = args[1] && path.resolve(args[1])
 const sliceId = args[2] && !args[2].startsWith('--') ? args[2] : undefined
 const opt = (k) => { const i = args.indexOf(k); return i > 0 ? args[i + 1] : undefined }
+/** 所有 --x 后面跟的值：把不带 -- 的参数当正文时要排掉它们 */
+const USED_VALUES = new Set(args.filter((a, i) => i > 0 && args[i - 1].startsWith('--')))
 const today = new Date().toISOString().slice(0, 10)
 const now = () => new Date().toISOString()
 
@@ -43,8 +45,8 @@ function moduleNamesOf(model) {
 }
 function die(msg) { console.error(msg); process.exit(2) }
 function writeJson(p, data) { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, JSON.stringify(data, null, 2) + '\n') }
-if (!['build', 'confirm', 'done', 'check'].includes(cmd) || !root || !fs.existsSync(path.join(root, 'project.json')) || !sliceId) {
-  die('用法：node tools/plan.js <build|confirm|done|check> <项目目录> <切片id> …（项目目录须含 project.json）')
+if (!['build', 'confirm', 'amend', 'done', 'check'].includes(cmd) || !root || !fs.existsSync(path.join(root, 'project.json')) || !sliceId) {
+  die('用法：node tools/plan.js <build|confirm|amend|done|check> <项目目录> <切片id> …（项目目录须含 project.json）')
 }
 const slicePath = path.join(root, 'slices', `${sliceId}.json`)
 if (!fs.existsSync(slicePath)) die(`切片不存在：${path.relative(process.cwd(), slicePath)}`)
@@ -120,7 +122,7 @@ function storyWalks(model) {
 }
 
 // ========== build ==========
-function build() {
+function build(dry = false) {
   const project = loadProject(root)
   const { model } = project
   const els = model.elements.filter((e) => e.kind !== 'invalid')
@@ -314,6 +316,11 @@ function build() {
     const where = hit.map((x) => `第 ${x.n} 步（${x.name}）`).join("、")
     add('input', null, `${other.slice}.story`, `${other.slice} 的故事输入跟着核对：这一趟动的命令它也在走（${where}），那份 walk.input 是照旧模型填的${proven.length ? `——${proven.join("、")} 这几个栏位命令上已经没有了` : '，要照现在的 input 逐个字段核一遍，多出来的删掉、窄掉的改过来'}；不改它这条故事在原型上跑不动`, [], false)
   }
+  // 只算不写（plan amend 用）：在「挑掉已经做过的」之前返回，因为那一步会把本计划自己做完的
+  // 全部挑走，剩不下东西可比。拿这份未过滤的单子跟「现有步骤 + 已经做过的」对，才知道模型这次改动
+  // 有没有多出、少掉或挪动要干的活。
+  if (dry) { const d = steps.slice(); interleaveTests(d); return { steps: d, planKind } }
+
   // ---- 已经做过的挑出去，不再列成步骤 ----
   const { remaining, already, unrecorded } = pickOutAlreadyDone(steps, model)
   steps.length = 0
@@ -562,6 +569,51 @@ function renderMd(plan) {
 function loadPlan() { if (!fs.existsSync(planPath)) die(`计划不存在：${rel(planPath)}（先 plan build）`); return readJson(planPath) }
 function savePlan(plan) { writeJson(planPath, plan); fs.writeFileSync(planMd, renderMd(plan)) }
 
+// ========== amend：确认之后模型又动了一点，核对无碍就只换指纹 ==========
+// 场景（2026-09-13 第七十三批）：计划确认、十步写完之后，项目所有者当面裁了一条新规矩，
+// 业务分析补语句、模型师给已有聚合加了一条不变量、原型在原步骤里补了守卫与用例。
+// 这时 check 会因为模型指纹对不上报「计划过期」，可两条现成的路都不对：
+//   build --force 会把人的确认与十步完成记录一起清零；手改 modelFingerprint 等于自己把闸门按掉。
+// 所以核对一遍：把现在的模型重算一份单子，跟「这份计划的步骤 + 它记下已经做过的」比。
+// 要干的活一件没多、没少，才准换指纹，并把为什么、换的是哪两个指纹记进计划与切片日志。
+function amend() {
+  const plan = loadPlan()
+  const reason = args.slice(3).filter((a) => !a.startsWith('--') && !USED_VALUES.has(a)).join(' ').trim()
+  if (!reason) die('用法：plan amend <项目目录> <切片id> "<为什么确认之后还要动：谁裁的、改了什么>" [--code <代码库>]\n（这不是重算：只在要动的文件与顺序一件没变时换掉模型指纹）')
+  if (!plan.confirmedAt) die('这份计划还没被人确认，不用 amend——直接 plan build 重算就行')
+  const nowFp = modelFingerprint()
+  if (!nowFp) die('读不到模型，算不出指纹')
+  if (nowFp === plan.modelFingerprint) { console.log('模型指纹没变，不用 amend'); return }
+  const dry = build(true)
+  if (dry.planKind !== plan.kind) die(`计划种类从 ${plan.kind} 变成了 ${dry.planKind}，这不是小修：请 plan build --force 重算并请人重新确认`)
+  const key = (x) => `${x.layer}|${x.target}|${x.file ?? ''}`
+  const had = new Map()
+  for (const x of plan.steps) had.set(key(x), `#${x.n}`)
+  for (const a of plan.already ?? []) had.set(key(a), '已经做过')
+  const nowKeys = dry.steps.map(key)
+  const added = nowKeys.filter((k) => !had.has(k))
+  const gone = [...had.keys()].filter((k) => !nowKeys.includes(k))
+  // 顺序也要对：现有步骤在新单子里的先后不能变
+  const mineNow = nowKeys.filter((k) => [...plan.steps].some((x) => key(x) === k))
+  const mineWas = plan.steps.map(key).filter((k) => nowKeys.includes(k))
+  const reordered = mineNow.join('\n') !== mineWas.join('\n')
+  if (added.length || gone.length || reordered) {
+    const L = ['模型这次的改动动到了要干的活，amend 不接（这道闸门就是防这个）：']
+    for (const k of added) L.push(`  多出来要干的：${k.split('|').slice(0, 2).join(' ')} ${k.split('|')[2]}`)
+    for (const k of gone) L.push(`  不用干了：${k.split('|').slice(0, 2).join(' ')} ${k.split('|')[2]}（原来是 ${had.get(k)}）`)
+    if (reordered) L.push('  现有步骤的先后变了')
+    L.push('请 plan build --force 重算，补关键逻辑，再请人重新确认。')
+    die(L.join('\n'))
+  }
+  const before = plan.modelFingerprint
+  plan.modelFingerprint = nowFp
+  plan.amendedAt = today
+  plan.log.push(`${today} 确认后追加：${reason}（核对过：要动的文件与顺序一件没变；模型指纹 ${String(before).slice(0, 12)}… → ${nowFp.slice(0, 12)}…）`)
+  savePlan(plan)
+  appendSliceLog(`编码计划确认后追加：${reason}（要动的文件与顺序没变，只换模型指纹）`)
+  console.log(`已核对：${dry.steps.length} 项活跟这份计划对得上，一件没多没少、先后没变。\n模型指纹已更新，人的确认与 ${plan.steps.filter((x) => x.doneAt).length}/${plan.steps.length} 步完成记录都留着。\n理由已记进计划与切片日志。`)
+}
+
 // ========== confirm ==========
 function confirm() {
   const plan = loadPlan()
@@ -608,7 +660,7 @@ function check() {
   const notes = []
   if (plan.modelFingerprint) {
     const nowFp = modelFingerprint()
-    if (nowFp && nowFp !== plan.modelFingerprint) issues.push(`算完这份计划之后模型又改过：这份单子上要动哪些文件、按什么顺序都可能不作数了，先 plan build --force 重算再往下走`)
+    if (nowFp && nowFp !== plan.modelFingerprint) issues.push(`算完这份计划之后模型又改过：这份单子上要动哪些文件、按什么顺序都可能不作数了，要动的文件与顺序若一件没变，用 plan amend "<为什么>" 核对后换指纹（确认与完成记录都留着）；真变了才 plan build --force 重算再往下走`)
   }
   if (!plan.confirmedAt) issues.push('计划未经人确认')
   for (const s of plan.steps.filter((x) => x.needsKeyLogic && !x.keyLogic)) issues.push(`#${s.n} ${s.target}：关键逻辑未补`)
@@ -648,3 +700,4 @@ if (cmd === 'build') build()
 if (cmd === 'confirm') confirm()
 if (cmd === 'done') done()
 if (cmd === 'check') check()
+if (cmd === 'amend') amend()

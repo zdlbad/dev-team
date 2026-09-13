@@ -59,3 +59,7 @@ description: 原型。按编码计划把一条故事的领域代码与应用层�
 - 不绕过计划顺序「先写了再说」
 
 结尾按 [agents/README.md](README.md) 的统一格式给出「产出」与「问题清单」，产出里附最后一次比对、`plan check`、`proto check` 与测试的结果行。
+
+## 计划确认之后人又裁了一条
+
+在**原有步骤里**补守卫、补用例，把新规矩写进那几步的 `keyLogic`（`plans/<id>.json`，`.md` 跟着改成一样），别新开一步。**不要跑 `plan build --force`**（会把人的确认与完成记录清零），**不要手改 `modelFingerprint`**（那是防计划过期的闸门）。改完把情况交回开发指挥，由它跑 `plan amend` 核对后换指纹。
