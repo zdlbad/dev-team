@@ -450,11 +450,9 @@ function render(d){
   if(d.warning)h+='<div class="warn">⚠ '+esc(d.warning)+'</div>'
   const all=(s.questions||[])
   const open=all.filter(q=>!q.answeredAt)
-  // 刚答完的（这一段里的）也摆出来，点错了能改——2026-09-13 他在页面上点错过一次
-  const justDone=all.filter(q=>q.answeredAt&&(q.slice==null||q.slice===s.slice)&&!reopened[q.id]).slice(-3).reverse()
-  const editing=all.filter(q=>q.answeredAt&&reopened[q.id])
-  if(open.length>1)h+='<div class="ask" style="padding:10px 20px"><b>攒着 '+open.length+' 个问题等你</b> <span class="dim">· 问答模式：'+esc(s.askMode||'逐个')+'</span></div>'
-  for(const q of open.concat(editing)){
+  const mode=s.askMode||'逐个'
+  if(open.length>1)h+='<div class="ask" style="padding:10px 20px"><b>攒着 '+open.length+' 个问题等你</b> <span class="dim">· 问答模式：'+esc(mode)+'</span>'+(mode==='问卷'?' <a href="/questions" target="_top" style="color:var(--ok)">去「等你答」那一页</a>':'')+'</div>'
+  for(const q of open){
     h+='<div class="ask"><h2>● '+esc(q.id)+' '+(q.answeredAt?'改一下':'等你回答') <span class="dim" style="font-weight:400;font-size:13px">'+esc(q.who||'—')+' · '+ago(q.ts)+'前</span></h2>'
     h+='<div class="meta"><div class="k">在做什么</div><div>'+esc(q.doing)+'</div></div>'
     h+='<div class="meta"><div class="k">上下文</div><div>'+esc(q.context)+'</div></div>'
@@ -463,18 +461,13 @@ function render(d){
       return '<div class="opt'+(lean?' lean':'')+'">'+esc(o)+(lean?' <span class="dim">· 它偏向这个</span>':'')+'</div>'}).join('')
     h+='<div class="meta" style="margin-top:8px"><div class="k">偏向</div><div>'+esc(q.lean)+' <span class="dim">· 信心'+esc(q.confidence)+'</span>'
       +(q.wentAhead?' <span class="dim">· 你不在，已经照这个先做下去了，你选别的就要返工</span>':'')+'</div></div>'
-    h+='<textarea id="t-'+esc(q.id)+'" placeholder="想补充什么就写在这儿（可以不写）"></textarea>'
-    h+='<div class="send"><button id="b-'+esc(q.id)+'" disabled>答这个</button>'
-      +'<span class="dim" id="m-'+esc(q.id)+'">点上面一个答案，或者只写几句话也行</span></div>'
-    h+='<div class="how">'+(q.answeredAt
-      ?'你原来答的是「'+esc(q.answer)+'」。改了原答复不会被抹掉，会留在记录里；'+esc(q.who||'那个角色')+' 要是已经照旧答复做过了，开发指挥会把它叫回来返工。'
-      :'答完它就记进现场，开发指挥把答复送回 '+esc(q.who||'那个角色')+'，它带着原来的上下文接着跑。')+'</div></div>'
+    // 现场页只把问题亮出来；答在哪儿看模式：逐个＝开发指挥在对话里问你，问卷＝去「等你答」那一页一口气答完
+    h+='<div class="how">'+(mode==='问卷'
+      ? '现在是问卷模式：这些攒着等你，<a href="/questions" target="_top" style="color:var(--ok)">去「等你答」那一页</a>一口气答完。'
+      : '现在是逐个模式：开发指挥会在 Claude Code 的对话里把这个问题端给你，你在那儿答就行，不用在这儿点。')+'</div>'
+    h+='</div>'
   }
-  for(const q of justDone){
-    h+='<div class="card" style="padding:12px 20px"><div class="row"><div class="k">'+esc(q.id)+' 已答</div><div class="v">'+esc(q.answer)
-      +' <span class="dim">· '+esc(q.who||'—')+' 问的 · '+ago(q.answeredAt)+'前</span>'
-      +' <button class="reopen" data-q="'+esc(q.id)+'" style="margin-left:10px;background:transparent;color:var(--dim);border:1px solid var(--line);border-radius:8px;padding:3px 12px;font:400 13px inherit;cursor:pointer">改一下</button></div></div></div>'
-  }
+
   if(s.handoff)h+='<div class="card"><div class="row"><div class="k">交接</div><div class="v"><div class="hand">'+esc(s.handoff.text)+'</div><span class="dim">'+esc(s.handoff.machine||'')+' · '+ago(s.handoff.at)+'前'+(s.handoff.slice?' · '+esc(s.handoff.slice):'')+'</span></div></div></div>'
   h+='<div class="card">'
   if(cur){
@@ -507,8 +500,7 @@ function render(d){
   const tl=(s.timeline||[]).slice().reverse().slice(0,14)
   h+='<div class="card"><div class="tl">'+(tl.length?tl.map(e=>e.kind==='progress'?'<div class="sub"><span class="t">'+esc(e.ts.slice(5,16).replace('T',' '))+'</span><span class="r">'+esc(e.who||'—')+'</span><span class="dim">└ '+esc(e.note)+'</span></div>':'<div><span class="t">'+esc(e.ts.slice(5,16).replace('T',' '))+'</span><span class="r">'+esc(e.who||'—')+'</span><span>'+esc(e.step)+(e.note?' <span class="dim">· '+esc(e.note)+'</span>':'')+'</span></div>').join(''):'<div class="empty">还没有动态</div>')+'</div></div>'
   $('#app').innerHTML=h
-  wireAsk(open.concat(editing))
-  for(const b of document.querySelectorAll('button.reopen'))b.addEventListener('click',function(){reopened[this.dataset.q]=true;answering=false;tick()})
+
   $('#upd').textContent=s.updatedAt?('更新于 '+ago(s.updatedAt)+'前'):'还没人写过现场'
 }
 // 正在答题时不重画，不然两秒一刷会把选的和写的字冲掉
@@ -552,6 +544,118 @@ async function tick(){if(answering)return;try{render(await (await fetch('/data')
 tick();setInterval(tick,2000)
 </script></body></html>`
 
+const QUESTIONS_PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>等你答 · ${esc(projectName)}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--fg:#e6e9ef;--dim:#8b93a7;--hi:#7dd3fc;--ok:#86efac;--warn:#fcd34d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 "PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+.wrap{max-width:820px;margin:0 auto;padding:24px 20px 80px}
+h1{font-size:19px;margin:0 0 2px;font-weight:600}
+.sub{color:var(--dim);font-size:13px;margin-bottom:20px}
+.q{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+.q.open{border-color:rgba(134,239,172,.45);background:rgba(134,239,172,.06)}
+.q .no{color:var(--ok);font-weight:600;font-size:13px}
+.q .ttl{font-size:17px;font-weight:600;margin:8px 0 10px;line-height:1.5}
+.meta{display:flex;gap:14px;padding:3px 0;font-size:13.5px}
+.meta .k{color:var(--dim);width:64px;flex:none}
+.opt{padding:7px 12px;margin:4px 0;border:1px solid var(--line);border-radius:8px;cursor:pointer}
+.opt:hover{background:rgba(134,239,172,.10)}
+.opt.picked{background:rgba(134,239,172,.18);border-color:var(--ok)}
+.lean{color:var(--dim);font-size:12.5px;margin-top:6px}
+textarea{width:100%;margin-top:10px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:14px/1.6 inherit;resize:vertical;min-height:50px}
+.act{margin-top:12px;display:flex;gap:10px;align-items:center}
+button{background:var(--ok);color:#0b1220;border:0;border-radius:8px;padding:7px 18px;font:600 14px inherit;cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);font-weight:400}
+.done{opacity:.75}
+.done .ans{color:var(--ok)}
+.empty{color:var(--dim);padding:28px 0}
+a{color:var(--hi)}
+</style></head><body><div class="wrap">
+<h1>等你答 · ${esc(projectName)}</h1>
+<div class="sub" id="sub">连接中…</div>
+<div id="app"></div>
+</div>
+<script>
+const $=(x)=>document.querySelector(x)
+function esc(x){return String(x==null?'':x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function ago(iso){if(!iso)return '';const m=Math.floor((Date.now()-new Date(iso).getTime())/60000);if(m<1)return '刚刚';if(m<60)return m+' 分钟';const h=Math.floor(m/60);return h<24?h+' 小时':Math.floor(h/24)+' 天'}
+let busy=false
+const picked={},reopened={}
+function render(d){
+  const qs=d.scene.questions||[]
+  const open=qs.filter(q=>!q.answeredAt||reopened[q.id])
+  const done=qs.filter(q=>q.answeredAt&&!reopened[q.id]).slice(-8).reverse()
+  const mode=d.scene.askMode||'逐个'
+  let h=''
+  if(!open.length)h+='<div class="empty">没有攒着的问题。'+(mode==='逐个'?'现在是逐个模式，角色问出来的问题开发指挥会在 Claude Code 的对话里端给你。':'角色一有要你裁的事就会攒到这儿。')+'</div>'
+  open.forEach(function(q,i){
+    h+='<div class="q open"><div class="no">'+(i+1)+' / '+open.length+'　'+esc(q.id)+'　'+esc(q.who||'—')+' 问的 · '+ago(q.ts)+'前'+(q.answeredAt?'　（在改）':'')+'</div>'
+    h+='<div class="meta"><div class="k">在做什么</div><div>'+esc(q.doing)+'</div></div>'
+    h+='<div class="meta"><div class="k">上下文</div><div>'+esc(q.context)+'</div></div>'
+    h+='<div class="ttl">'+esc(q.question)+'</div>'
+    h+=q.options.map(function(o,j){return '<div class="opt" data-q="'+esc(q.id)+'" data-i="'+j+'">'+esc(o)+'</div>'}).join('')
+    h+='<div class="lean">它偏向：'+esc(q.lean)+'（信心'+esc(q.confidence)+'）'+(q.wentAhead?'　——你不在，已经照这个先做下去了，你选别的就要返工':'')+'</div>'
+    if(q.answeredAt)h+='<div class="lean">你原来答的是「'+esc(q.answer)+'」，改了原答复不会被抹掉。</div>'
+    h+='<textarea id="t-'+esc(q.id)+'" placeholder="想补充什么就写在这儿（可以不写）"></textarea>'
+    h+='<div class="act"><button data-send="'+esc(q.id)+'" disabled>答这个</button><span class="lean" id="m-'+esc(q.id)+'">点一个答案，或者只写几句话也行</span></div></div>'
+  })
+  if(done.length){
+    h+='<div class="sub" style="margin:26px 0 8px">答过的</div>'
+    for(const q of done)h+='<div class="q done"><div class="no">'+esc(q.id)+'　'+esc(q.who||'—')+' 问的 · '+ago(q.answeredAt)+'前'+((q.answerHistory||[]).length?'　改过 '+q.answerHistory.length+' 次':'')+'</div><div class="ttl" style="font-size:15px">'+esc(q.question)+'</div><div class="ans">'+esc(q.answer)+'</div><div class="act"><button class="ghost" data-redo="'+esc(q.id)+'">改一下</button></div></div>'
+  }
+  $('#app').innerHTML=h
+  $('#sub').textContent='问答模式：'+mode+(mode==='逐个'?'（你在电脑前或手机上，开发指挥在对话里一个个问；这一页备着）':'（你没在专注，问题攒在这儿，回来一口气答完）')
+  wire()
+}
+function wire(){
+  document.querySelectorAll('.opt').forEach(function(el){
+    const id=el.dataset.q,i=Number(el.dataset.i)
+    if(picked[id]===i)el.classList.add('picked')
+    el.addEventListener('click',function(){
+      picked[id]=i;busy=true
+      document.querySelectorAll('.opt[data-q="'+id+'"]').forEach(x=>x.classList.remove('picked'))
+      el.classList.add('picked')
+      refresh(id)
+    })
+  })
+  document.querySelectorAll('textarea').forEach(function(t){
+    const id=t.id.slice(2)
+    t.addEventListener('input',function(){busy=true;refresh(id)})
+    t.addEventListener('focus',function(){busy=true})
+  })
+  document.querySelectorAll('[data-send]').forEach(function(b){
+    const id=b.dataset.send
+    refresh(id)
+    b.addEventListener('click',async function(){
+      const t=document.getElementById('t-'+id),msg=document.getElementById('m-'+id)
+      const i=picked[id],extra=t.value.trim()
+      const q=(LAST.scene.questions||[]).find(x=>x.id===id)
+      const text=(i!=null?q.options[i]:'')+(i!=null&&extra?'　'+extra:extra)
+      if(!text)return
+      b.disabled=true;msg.textContent='记上…'
+      try{
+        const r=await (await fetch('/answer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:id,text:text})})).json()
+        if(!r.ok){msg.textContent='没记上：'+(r.error||'不知道为什么');b.disabled=false;return}
+        delete picked[id];delete reopened[id];busy=false;tick()
+      }catch(e){msg.textContent='没记上：'+e.message;b.disabled=false}
+    })
+  })
+  document.querySelectorAll('[data-redo]').forEach(function(b){
+    b.addEventListener('click',function(){reopened[b.dataset.redo]=true;busy=false;tick()})
+  })
+}
+function refresh(id){
+  const t=document.getElementById('t-'+id),b=document.querySelector('[data-send="'+id+'"]')
+  if(!t||!b)return
+  b.disabled=!(picked[id]!=null||t.value.trim())
+}
+let LAST=null
+async function tick(){if(busy)return;try{LAST=await (await fetch('/data')).json();render(LAST)}catch(e){$('#sub').textContent='取不到数据：'+e.message}}
+tick();setInterval(tick,3000)
+</script></body></html>`
+
 const wanted = Number(opt('--port', '4873'))
 function listen(port, tries = 12) {
   const srv = http.createServer((req, res) => {
@@ -569,6 +673,10 @@ function listen(port, tries = 12) {
         res.end(JSON.stringify(out))
       })
       return
+    }
+    if (req.url.split('?')[0] === '/questions') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      return res.end(QUESTIONS_PAGE)
     }
     if (req.url.startsWith('/data')) {
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
