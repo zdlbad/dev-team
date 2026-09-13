@@ -10,7 +10,9 @@
  *   node tools/scene.js <项目> ask "<问题>" --who <角色> --doing "<在做什么>" --context "<上下文>"
  *                                --options "甲：…|乙：…" --lean "<你偏向哪个>" --confidence 高|中|低
  *                                                 角色遇到要人裁的事，当场发问然后停下交回开发指挥（第七十三批）
- *   node tools/scene.js <项目> questions [--all]     列出等人回答的问题（开发指挥转给人时用）
+ *   node tools/scene.js <项目> mode [逐个|问卷]      问答模式：人在电脑前就逐个问、当场答（缺省）；人去跑长任务就攒成问卷，
+ *                                                 角色照自己偏向的先做下去，人回来一次性答，跟偏向不一样的再返工
+ *   node tools/scene.js <项目> questions [--all] [--问卷]   列出等人回答的问题；--问卷 排成一份编号问卷，人可以一口气答完
  *   node tools/scene.js <项目> answer <问题号> "<人怎么答的>"   把人的答复记上，问题就算答完
  *   node tools/scene.js <项目> handoff "<一段话>"    收工交接：停在哪、等谁、有什么坑。换台机器的人打开看板先看它
  *   node tools/scene.js <项目> serve [--port 4873]
@@ -29,6 +31,8 @@ const ME = os.hostname()
 
 const ROLES = ['人', '开发指挥', '业务分析', '讲解', '文职', '模型师', '原型', '接口', '编码', '模型校验', 'pre-pr 审查', '解读']
 const PHASES = ['业务', '模型', '编码', '校验']
+/** 问答模式：逐个＝人在电脑前，角色问完就停下等答；问卷＝人不在，角色照偏向先做，问题攒起来一次性答 */
+const ASK_MODES = ['逐个', '问卷']
 const die = (m) => {
   console.error(m)
   process.exit(1)
@@ -65,7 +69,7 @@ function ago(iso) {
 }
 
 function readScene() {
-  return readJson(scenePath, { slice: null, phase: null, step: null, who: null, note: null, since: null, updatedAt: null, machine: null, handoff: null, timeline: [], progress: [], questions: [] })
+  return readJson(scenePath, { slice: null, phase: null, step: null, who: null, note: null, since: null, updatedAt: null, machine: null, handoff: null, timeline: [], progress: [], questions: [], askMode: ASK_MODES[0] })
 }
 function writeScene(s) {
   fs.mkdirSync(path.dirname(scenePath), { recursive: true })
@@ -157,6 +161,28 @@ if (cmd === 'progress') {
   process.exit(0)
 }
 
+// ---------- mode：问答模式 ----------
+if (cmd === 'mode') {
+  const s0 = readScene()
+  const want = args.slice(2).find((a) => !a.startsWith('--'))
+  if (!want) {
+    const m = s0.askMode ?? ASK_MODES[0]
+    console.log(`现在是「${m}」模式：${m === '逐个' ? '角色问完就停下，开发指挥当场把问题转给人，答了再让它接着跑' : '角色照自己偏向的那个先做下去，问题攒成一份问卷；人回来一次性答，跟偏向不一样的叫回角色返工'}`)
+    const open = (s0.questions ?? []).filter((q) => !q.answeredAt)
+    if (open.length) console.log(`攒着 ${open.length} 个问题没答（scene questions --问卷 排成问卷）`)
+    process.exit(0)
+  }
+  if (!ASK_MODES.includes(want)) die(`只有两种模式：${ASK_MODES.join('、')}`)
+  const note = opt('--note', null)
+  const now = new Date().toISOString()
+  writeScene({ ...s0, askMode: want, updatedAt: now, machine: ME,
+    timeline: [...(s0.timeline ?? []), { ts: now, slice: s0.slice, phase: s0.phase, step: `问答改成「${want}」模式${note ? '：' + note : ''}`, who: '人', kind: 'mode', machine: ME }].slice(-60) })
+  console.log(want === '逐个'
+    ? '改成「逐个」模式：角色遇到要人裁的事问完就停下，开发指挥当场转给人。'
+    : '改成「问卷」模式：角色照自己偏向的那个先做下去，把问题攒起来；人回来 scene questions --问卷 一次性答，跟偏向不一样的把角色叫回来返工。')
+  process.exit(0)
+}
+
 // ---------- ask：角色当场发问 ----------
 // 第七十三批（2026-09-13 项目所有者）：要人裁的事别攒到交稿一次性列出来，遇到就问，五件事说全：
 // 在做什么、上下文是怎样、遇到了什么问题、两到四个答案、你偏向哪个、信心高低。
@@ -186,14 +212,17 @@ if (cmd === 'ask') {
   const now = new Date().toISOString()
   const qs = s0.questions ?? []
   const id = 'q-' + String(qs.length + 1).padStart(3, '0')
-  const q = { id, ts: now, who, slice: s0.slice, phase: s0.phase, step: s0.step, doing, context, question, options, lean, confidence, answer: null, answeredAt: null, machine: ME }
+  const mode = s0.askMode ?? ASK_MODES[0]
+  const q = { id, ts: now, who, slice: s0.slice, phase: s0.phase, step: s0.step, doing, context, question, options, lean, confidence, mode, wentAhead: mode === '问卷' ? lean : null, answer: null, answeredAt: null, machine: ME }
   writeScene({
     ...s0,
     updatedAt: now,
     questions: [...qs, q],
     timeline: [...(s0.timeline ?? []), { ts: now, slice: s0.slice, phase: s0.phase, step: '发问：' + question.slice(0, 50) + (question.length > 50 ? '…' : ''), who, note: null, kind: 'ask', machine: ME }].slice(-60),
   })
-  console.log(`${id} 已挂上等人回答：${question}\n（你该停下来把这个问题交回开发指挥，别自己替人拿主意）`)
+  console.log(mode === '逐个'
+    ? `${id} 已挂上等人回答：${question}\n现在是「逐个」模式：停下来把这个问题交回开发指挥，别自己替人拿主意、别一边等一边往下写。`
+    : `${id} 已攒进问卷：${question}\n现在是「问卷」模式：人不在，照你偏向的「${lean}」先做下去，别停。\n写一句细步说明这一处是按偏向做的（scene progress），交稿里也列出来——人回来答了，跟偏向不一样的那几处要返工。`)
   process.exit(0)
 }
 
@@ -203,8 +232,23 @@ if (cmd === 'questions') {
   const all = args.includes('--all')
   const list = (s0.questions ?? []).filter((q) => all || !q.answeredAt)
   if (!list.length) { console.log(all ? '一个问题都没提过' : '没有等人回答的问题'); process.exit(0) }
+  const asForm = args.includes('--问卷') || args.includes('--form')
+  if (asForm) {
+    console.log(`一共 ${list.length} 个问题。挨个答就行，可以只写号码加你选的那个。\n`)
+    list.forEach((q, i) => {
+      console.log(`${i + 1}. ${q.question}　（${q.id}，${q.who ?? '—'} 问的）`)
+      console.log(`   在做什么：${q.doing}`)
+      console.log(`   上下文：${q.context}`)
+      q.options.forEach((o, j) => console.log(`   ${j + 1}）${o}`))
+      console.log(`   它偏向：${q.lean}（信心${q.confidence}）${q.wentAhead ? `——人不在，已经照这个先做下去了，你选别的就要返工` : ''}`)
+      if (q.answeredAt) console.log(`   你答过：${q.answer}`)
+      console.log('')
+    })
+    console.log('答完用 scene answer <问题号或序号> "<你的答复>" 一条条记上。')
+    process.exit(0)
+  }
   for (const q of list) {
-    console.log(`${q.id}　${q.who ?? '—'}　${ago(q.ts)}前${q.answeredAt ? '　已答' : '　等人'}`)
+    console.log(`${q.id}　${q.who ?? '—'}　${ago(q.ts)}前${q.answeredAt ? '　已答' : '　等人'}${q.wentAhead ? `　（问卷模式：已按「${q.wentAhead}」先做）` : ''}`)
     console.log(`  在做什么　${q.doing}`)
     console.log(`  上下文　　${q.context}`)
     console.log(`  问题　　　${q.question}`)
@@ -224,16 +268,24 @@ if (cmd === 'answer') {
   const text = rest.slice(1).join(' ').trim()
   if (!id || !text) die('用法：scene answer <项目> <问题号，如 q-001> "<人怎么答的，照他的原话>"')
   const qs = s0.questions ?? []
-  const q = qs.find((x) => x.id === id)
-  if (!q) die(`没有这个问题号：${id}（scene questions 看有哪些）`)
+  // 问题号（q-003）或问卷上的序号（3，按没答的那几个数）都收
+  const open = qs.filter((x) => !x.answeredAt)
+  const q = qs.find((x) => x.id === id) ?? (/^[0-9]+$/.test(id) ? open[Number(id) - 1] : null)
+  if (!q) die(`没有这个问题号：${id}（scene questions 看有哪些；问卷上的序号也收）`)
   const now = new Date().toISOString()
-  writeScene({
+  const writeSceneAnswered = () => writeScene({
     ...s0,
     updatedAt: now,
-    questions: qs.map((x) => (x.id === id ? { ...x, answer: text, answeredAt: now } : x)),
-    timeline: [...(s0.timeline ?? []), { ts: now, slice: s0.slice, phase: s0.phase, step: `${id} 人答：` + text.slice(0, 50) + (text.length > 50 ? '…' : ''), who: '人', note: null, kind: 'answer', machine: ME }].slice(-60),
+    questions: qs.map((x) => (x.id === q.id ? { ...x, answer: text, answeredAt: now } : x)),
+    timeline: [...(s0.timeline ?? []), { ts: now, slice: s0.slice, phase: s0.phase, step: `${q.id} 人答：` + text.slice(0, 50) + (text.length > 50 ? '…' : ''), who: '人', note: null, kind: 'answer', machine: ME }].slice(-60),
   })
-  console.log(`${id} 已记下人的答复：${text}\n（把答复送回问这个问题的角色，让它接着往下跑）`)
+  const sameAsLean = q.wentAhead && (text.includes(q.wentAhead) || text.includes(String(q.wentAhead).split('：')[0]) || String(q.wentAhead).includes(text))
+  const tail = !q.wentAhead
+    ? '（把答复送回问这个问题的角色，让它接着往下跑）'
+    : sameAsLean
+      ? `（问卷模式里它已经照「${q.wentAhead}」先做了，看着跟你答的一样，多半不用返工——自己再确认一眼）`
+      : `（问卷模式里它已经照「${q.wentAhead}」先做了，跟你答的不一样：把 ${q.who ?? '那个角色'} 叫回来返工）`
+  writeSceneAnswered(); console.log(`${q.id} 已记下人的答复：${text}\n${tail}`)
   process.exit(0)
 }
 
@@ -271,13 +323,14 @@ function textView() {
   const mw = machineWarning(s)
   if (mw) { L.push('⚠ ' + mw); L.push('') }
   const open = (s.questions ?? []).filter((q) => !q.answeredAt)
+  if (open.length) L.push(`问答模式：${s.askMode ?? ASK_MODES[0]}${(s.askMode ?? ASK_MODES[0]) === '问卷' ? '（角色照自己偏向的先做着，等你一次性答）' : ''}`)
   for (const q of open) {
     L.push(`● ${q.id} 等你回答（${q.who ?? '—'}，${ago(q.ts)}前）`)
     L.push(`  在做什么　${q.doing}`)
     L.push(`  上下文　　${q.context}`)
     L.push(`  问题　　　${q.question}`)
     q.options.forEach((o, i) => L.push(`  答案 ${i + 1}　${o}`))
-    L.push(`  偏向　　　${q.lean}（信心${q.confidence}）`)
+    L.push(`  偏向　　　${q.lean}（信心${q.confidence}）${q.wentAhead ? '　——已经照这个先做下去了' : ''}`)
     L.push('')
   }
   if (s.handoff) { L.push(`交接（${s.handoff.machine}，${ago(s.handoff.at)}前）　${s.handoff.text}`); L.push('') }
@@ -305,7 +358,7 @@ if (cmd === 'show') {
 }
 
 // ---------- serve ----------
-if (cmd !== 'serve') die(`不认得的子命令：${cmd}（set | progress | ask | questions | answer | handoff | serve | 不带子命令打印一屏）`)
+if (cmd !== 'serve') die(`不认得的子命令：${cmd}（set | progress | ask | questions | answer | mode | handoff | serve | 不带子命令打印一屏）`)
 
 const esc = (x) => String(x ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 
@@ -373,6 +426,7 @@ function render(d){
   let h=''
   if(d.warning)h+='<div class="warn">⚠ '+esc(d.warning)+'</div>'
   const open=(s.questions||[]).filter(q=>!q.answeredAt)
+  if(open.length>1)h+='<div class="ask" style="padding:10px 20px"><b>攒着 '+open.length+' 个问题等你</b> <span class="dim">· 问答模式：'+esc(s.askMode||'逐个')+'</span></div>'
   for(const q of open){
     h+='<div class="ask"><h2>● '+esc(q.id)+' 等你回答 <span class="dim" style="font-weight:400;font-size:13px">'+esc(q.who||'—')+' · '+ago(q.ts)+'前</span></h2>'
     h+='<div class="meta"><div class="k">在做什么</div><div>'+esc(q.doing)+'</div></div>'
@@ -380,7 +434,8 @@ function render(d){
     h+='<div class="q">'+esc(q.question)+'</div>'
     h+=q.options.map(function(o,i){var lean=String(o).indexOf(String(q.lean))===0||String(q.lean).indexOf(String(i+1))===0
       return '<div class="opt'+(lean?' lean':'')+'">'+esc(o)+(lean?' <span class="dim">· 它偏向这个</span>':'')+'</div>'}).join('')
-    h+='<div class="meta" style="margin-top:8px"><div class="k">偏向</div><div>'+esc(q.lean)+' <span class="dim">· 信心'+esc(q.confidence)+'</span></div></div>'
+    h+='<div class="meta" style="margin-top:8px"><div class="k">偏向</div><div>'+esc(q.lean)+' <span class="dim">· 信心'+esc(q.confidence)+'</span>'
+      +(q.wentAhead?' <span class="dim">· 你不在，已经照这个先做下去了，你选别的就要返工</span>':'')+'</div></div>'
     h+='<div class="how">答完开发指挥会记上（scene answer '+esc(q.id)+'），再把角色接着往下跑。</div></div>'
   }
   if(s.handoff)h+='<div class="card"><div class="row"><div class="k">交接</div><div class="v"><div class="hand">'+esc(s.handoff.text)+'</div><span class="dim">'+esc(s.handoff.machine||'')+' · '+ago(s.handoff.at)+'前'+(s.handoff.slice?' · '+esc(s.handoff.slice):'')+'</span></div></div></div>'
