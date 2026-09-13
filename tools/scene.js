@@ -6,6 +6,7 @@
  * 用法：
  *   node tools/scene.js <项目> set --slice <id> --step "<这一步在做什么>" --who <角色>
  *                                  [--phase 业务|模型|编码|校验] [--note "<一句话>"] [--done]
+ *   node tools/scene.js <项目> progress "<一句>" [--who 角色]   细步：角色每做完一个小动作写一句（新建了什么、把什么从 xxx 改成 xxx）；挂在当前这一步下面，页面 2 秒一刷
  *   node tools/scene.js <项目> handoff "<一段话>"    收工交接：停在哪、等谁、有什么坑。换台机器的人打开看板先看它
  *   node tools/scene.js <项目> serve [--port 4873]
  *   node tools/scene.js <项目>                      打印一屏（不起页面）
@@ -49,7 +50,7 @@ const readJson = (p, d) => {
 const projectName = readJson(path.join(root, 'project.json'), {}).name ?? path.basename(root)
 
 function readScene() {
-  return readJson(scenePath, { slice: null, phase: null, step: null, who: null, note: null, since: null, updatedAt: null, machine: null, handoff: null, timeline: [] })
+  return readJson(scenePath, { slice: null, phase: null, step: null, who: null, note: null, since: null, updatedAt: null, machine: null, handoff: null, timeline: [], progress: [] })
 }
 function writeScene(s) {
   fs.mkdirSync(path.dirname(scenePath), { recursive: true })
@@ -114,8 +115,30 @@ if (cmd === 'set') {
     updatedAt: now,
     machine: ME,
     timeline: [...(s.timeline ?? []), entry].slice(-60),
+    progress: changed ? [] : (s.progress ?? []),
   })
   console.log(`现场已更新：${slice ?? '—'} · ${phase ?? '—'} · ${who ?? '—'} · ${step}`)
+  process.exit(0)
+}
+
+// ---------- progress：角色的细步 ----------
+// 角色（子 agent）每做完一个小动作写一句：新建了哪个错误、把哪条规则从什么改成什么、哪个测试绿了。
+// 大步（这一步在做什么、谁在干）仍由开发指挥 set；细步挂在当前大步下面，换一步就清空，动态里保留。
+if (cmd === 'progress') {
+  const text = args.slice(2).find((a) => !a.startsWith('--') && a !== opt('--who'))
+  if (!text) die('用法：scene progress <项目> "<一句：做了什么，具体到名字、从什么到什么>" [--who 角色]')
+  const s = readScene()
+  const who = opt('--who', s.who)
+  if (who && !ROLES.includes(who)) die(`--who 要用 seed/05 的角色名：${ROLES.join('、')}`)
+  const now = new Date().toISOString()
+  const entry = { ts: now, who, text, machine: ME }
+  writeScene({
+    ...s,
+    updatedAt: now,
+    progress: [...(s.progress ?? []), entry].slice(-40),
+    timeline: [...(s.timeline ?? []), { ts: now, slice: s.slice, phase: s.phase, step: s.step, who, note: text, kind: 'progress', machine: ME }].slice(-60),
+  })
+  console.log(`细步：${who ?? '—'} · ${text}`)
   process.exit(0)
 }
 
@@ -163,9 +186,11 @@ function textView() {
   L.push(`这一步　${s.step ?? '—'}`)
   L.push(`谁在干　${s.who ?? '—'}${s.since ? `　（${ago(s.since)}）` : ''}`)
   if (s.note) L.push(`说明　　${s.note}`)
+  const prog = (s.progress ?? []).slice(-6)
+  if (prog.length) { L.push('细步'); for (const e of prog) L.push(`  ${e.ts.slice(11, 16)}　${e.who ?? '—'}　${e.text}`) }
   L.push('')
   L.push('动态')
-  for (const e of (s.timeline ?? []).slice(-8)) L.push(`  ${e.ts.slice(5, 16).replace('T', ' ')}　${e.who ?? '—'}　${e.step}`)
+  for (const e of (s.timeline ?? []).slice(-8)) L.push(e.kind === 'progress' ? `  ${e.ts.slice(5, 16).replace('T', ' ')}　${e.who ?? '—'}　　└ ${e.note}` : `  ${e.ts.slice(5, 16).replace('T', ' ')}　${e.who ?? '—'}　${e.step}`)
   return L.join('\n')
 }
 function ago(iso) {
@@ -182,7 +207,7 @@ if (cmd === 'show') {
 }
 
 // ---------- serve ----------
-if (cmd !== 'serve') die(`不认得的子命令：${cmd}（set | handoff | serve | 不带子命令打印一屏）`)
+if (cmd !== 'serve') die(`不认得的子命令：${cmd}（set | progress | handoff | serve | 不带子命令打印一屏）`)
 
 const esc = (x) => String(x ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 
@@ -224,6 +249,7 @@ td:nth-child(n+3),th:nth-child(n+3){white-space:nowrap;width:1%;padding-right:14
 .empty{color:var(--dim);padding:8px 0}
 .warn{background:rgba(252,211,77,.12);border:1px solid rgba(252,211,77,.5);color:var(--warn);border-radius:10px;padding:10px 14px;margin-bottom:14px}
 .hand{border-left:3px solid var(--hi);padding:4px 12px;margin:4px 0 6px;white-space:pre-wrap}
+.prog div{display:flex;gap:10px;padding:2px 0;font-size:13px;border-bottom:1px dashed var(--line,#e5e7eb)}.prog .t{color:#6b7280;font-variant-numeric:tabular-nums}.prog .r{color:#6b7280;min-width:4em}.tl .sub{padding-left:18px;font-size:12px}
 </style></head><body><div class="wrap">
 <h1>现场 · ${esc(projectName)}</h1>
 <div class="sub" id="upd">连接中…</div>
@@ -257,6 +283,8 @@ function render(d){
   h+='<div class="row"><div class="k">谁在干</div><div class="v"><span class="who"><span class="dot '+cls+'"></span>'+esc(s.who||'—')+'</span>'
     +(s.since?' <span class="dim">· 已 '+ago(s.since)+'</span>':'')+(s.who==='人'?' <span class="dim">· 等你</span>':'')+'</div></div>'
   if(s.note)h+='<div class="row"><div class="k">说明</div><div class="v dim">'+esc(s.note)+'</div></div>'
+  const pg=(s.progress||[]).slice().reverse().slice(0,12)
+  if(pg.length)h+='<div class="row"><div class="k">细步</div><div class="v"><div class="prog">'+pg.map(function(e){return '<div><span class="t">'+esc(e.ts.slice(11,16))+'</span><span class="r">'+esc(e.who||'—')+'</span><span>'+esc(e.text)+'</span></div>'}).join('')+'</div></div></div>'
   h+='</div>'
 
   const line=cur&&cur.line?d.slices.filter(x=>x.line===cur.line):d.slices
@@ -268,7 +296,7 @@ function render(d){
   h+='</table></div>'
 
   const tl=(s.timeline||[]).slice().reverse().slice(0,14)
-  h+='<div class="card"><div class="tl">'+(tl.length?tl.map(e=>'<div><span class="t">'+esc(e.ts.slice(5,16).replace('T',' '))+'</span><span class="r">'+esc(e.who||'—')+'</span><span>'+esc(e.step)+(e.note?' <span class="dim">· '+esc(e.note)+'</span>':'')+'</span></div>').join(''):'<div class="empty">还没有动态</div>')+'</div></div>'
+  h+='<div class="card"><div class="tl">'+(tl.length?tl.map(e=>e.kind==='progress'?'<div class="sub"><span class="t">'+esc(e.ts.slice(5,16).replace('T',' '))+'</span><span class="r">'+esc(e.who||'—')+'</span><span class="dim">└ '+esc(e.note)+'</span></div>':'<div><span class="t">'+esc(e.ts.slice(5,16).replace('T',' '))+'</span><span class="r">'+esc(e.who||'—')+'</span><span>'+esc(e.step)+(e.note?' <span class="dim">· '+esc(e.note)+'</span>':'')+'</span></div>').join(''):'<div class="empty">还没有动态</div>')+'</div></div>'
   $('#app').innerHTML=h
   $('#upd').textContent=s.updatedAt?('更新于 '+ago(s.updatedAt)+'前'):'还没人写过现场'
 }
