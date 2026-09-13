@@ -103,6 +103,27 @@ if (cmd === 'approve') {
   console.log(`业务理解一致：${story.steps.length} 步，${ids.size} 条编号已并入 ${id} 的 traces`)
 }
 
+/** 人确认五问补出的语句：并进故事与切片的 traces，记两处日志。命令行与「走故事」页面共用 */
+function confirmUsage(sliceId, via) {
+  const sp = storyPath(sliceId)
+  if (!sp || !fs.existsSync(sp)) return { ok: false, error: `没有这条故事：${sliceId}` }
+  const st = readJson(sp)
+  if (!st.approved) return { ok: false, error: '故事还没有理解一致（approve）' }
+  if (!st.usage?.proposedAt) return { ok: false, error: '业务分析还没登记本故事按五问补出的语句（story usage … propose）' }
+  if (st.usage.confirmedAt) return { ok: false, error: `这条故事的五问语句已经在 ${st.usage.confirmedAt} 确认过了` }
+  const slice = readJson(slicePath(sliceId))
+  const ids = st.usage.proposed ?? []
+  st.usage.confirmedAt = today
+  st.usage.confirmedVia = via ?? '命令行'
+  st.traces = [...new Set([...st.traces, ...ids])].sort()
+  slice.traces = [...new Set([...slice.traces, ...ids])].sort()
+  slice.log.push({ ts: today, stage: 'slice', text: `人确认了本故事按五问补出的语句：${ids.length ? ids.join('、') : '无新增'}${ids.length ? '；已并入切片 traces，模型必须回应它们' : ''}` })
+  st.log = [...(st.log ?? []), `${today} 人确认五问补出的语句 ${ids.length} 条（${via ?? '命令行'}）`]
+  writeJson(sp, st)
+  writeJson(slicePath(sliceId), slice)
+  return { ok: true, ids, message: `五问补出的语句已确认 ${ids.length} 条；${ids.length ? '已并入 ' + sliceId + ' 的 traces；' : ''}下一步：模型师建模` }
+}
+
 // ---------- usage：五问补出的语句按故事登记（编号不限字母；U 已停发，只为老项目保留） ----------
 if (cmd === 'usage') {
   const sub = args[3]
@@ -121,17 +142,9 @@ if (cmd === 'usage') {
     writeJson(storyPath(id), story)
     console.log(`已登记本故事按五问补出的语句 ${ids.length} 条${ids.length ? '：' + ids.join('、') : '（无新增）'}；下一步：人确认（story usage ${id} confirm）`)
   } else if (sub === 'confirm') {
-    if (!story.usage?.proposedAt) die('业务分析还没登记本故事按五问补出的语句（story usage … propose）')
-    const slice = readJson(slicePath(id))
-    const ids = story.usage.proposed ?? []
-    story.usage.confirmedAt = today
-    story.traces = [...new Set([...story.traces, ...ids])].sort()
-    slice.traces = [...new Set([...slice.traces, ...ids])].sort()
-    slice.log.push({ ts: today, stage: 'slice', text: `人确认了本故事按五问补出的语句：${ids.length ? ids.join('、') : '无新增'}${ids.length ? '；已并入切片 traces，模型必须回应它们' : ''}` })
-    story.log = [...(story.log ?? []), `${today} 人确认五问补出的语句 ${ids.length} 条`]
-    writeJson(storyPath(id), story)
-    writeJson(slicePath(id), slice)
-    console.log(`五问补出的语句已确认 ${ids.length} 条；${ids.length ? '已并入 ' + id + ' 的 traces；' : ''}下一步：模型师建模`)
+    const r = confirmUsage(id, '命令行')
+    if (!r.ok) die(r.error)
+    console.log(r.message)
   } else die('用法：story usage <项目目录> <切片id> propose <R-001,… | --none> | confirm')
 }
 
@@ -246,6 +259,16 @@ if (cmd === 'serve') {
   .prev { margin-top:8px; background:#fff; border:1px solid var(--line); border-left:3px solid #1f6feb; border-radius:6px; padding:8px 11px; font-size:13px; }
   .prev .t { color:var(--muted); font-weight:600; font-size:12px; margin-bottom:3px; }
   .prev.leads { border-left-color:#8250df; margin-top:14px; }
+  .usage { margin:22px 0 10px; border:1px solid #86efac; background:#f0fdf4; border-radius:10px; padding:14px 18px; }
+  .usage.done { border-color:#d1d5db; background:#f9fafb; }
+  .usage .t { font-weight:600; margin-bottom:6px; }
+  .usage .ok { color:#15803d; font-weight:400; font-size:13px; }
+  .usage .wait { color:#b45309; font-weight:400; font-size:13px; }
+  .usage .u-item { padding:8px 0; border-top:1px dashed #d1d5db; }
+  .usage .u-item b { color:#065f46; }
+  .usage .u-act { margin-top:12px; display:flex; gap:12px; align-items:center; }
+  .usage button { background:#16a34a; color:#fff; border:0; border-radius:8px; padding:7px 18px; font:600 14px inherit; cursor:pointer; }
+  .usage button:disabled { opacity:.45; cursor:default; }
   .badge { font-size:11px; border-radius:6px; padding:1px 6px; margin-left:auto; } .badge.new { background:#dcfce7; color:#166534; } .badge.old { background:#f3f4f6; color:#6b7280; }
   .step.old-step { opacity:.82; }
   h2 { font-size:15px; margin:18px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
@@ -396,6 +419,37 @@ function jump(sel) {
   el.classList.add('flash')
   setTimeout(() => el.classList.remove('flash'), 1600)
 }
+/** 五问补出的语句：业务分析登记了、等人确认的那几条。原来只能在命令行确认，人在页面上找不到（2026-09-13 他点名） */
+function usageBlock() {
+  const u = data.usage
+  if (!u || !u.proposedAt) return ''
+  const ids = u.proposed || []
+  const done = !!u.confirmedAt
+  let h = '<div class="usage' + (done ? ' done' : '') + '"><div class="t">五问补出的语句' + (done ? '　<span class="ok">已确认 ' + esc(u.confirmedAt) + '</span>' : '　<span class="wait">等你确认</span>') + '</div>'
+  h += '<p class="summary">走完故事之后，业务分析把这一段还会碰上的情形补成了语句：会不会同时、会不会重复、一次几条与半路没做完、失败了怎么处置、谁能看见。这里只说业务上可能碰上什么，软件怎么回应由模型师定。确认之后这些编号并进本段，模型必须一一回应。</p>'
+  if (!ids.length) h += '<p class="summary">这一段没有新增。</p>'
+  for (const id of ids) {
+    const b = (typeof biz !== 'undefined' ? biz : {})[id] || {}
+    h += '<div class="u-item"><b>' + esc(id) + '</b>' + (b.label ? ' <span class="tag">' + esc(b.label) + '</span>' : '') + '<div>' + linkTerms(b.text || '（这条语句在 business/ 里找不到）') + '</div></div>'
+  }
+  if (!done) h += '<div class="u-act"><button id="u-ok">这几条我确认</button><span class="hint" id="u-msg">确认之后编号并进本段，校验会要求模型给它们落点</span></div>'
+  return h + '</div>'
+}
+function wireUsage() {
+  const b = document.getElementById('u-ok')
+  if (!b) return
+  b.addEventListener('click', async function () {
+    b.disabled = true
+    const msg = document.getElementById('u-msg')
+    msg.textContent = '记上…'
+    try {
+      const r = await (await fetch('/usage-confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slice: data.slice }) })).json()
+      if (!r.ok) { msg.textContent = '没确认上：' + (r.error || '不知道为什么'); b.disabled = false; return }
+      await load()
+    } catch (e) { msg.textContent = '没确认上：' + e.message; b.disabled = false }
+  })
+}
+
 function renderRail() {
   const st = data.steps
   let h = '<span class="lab">跳到：</span>'
@@ -524,7 +578,9 @@ function render() {
     if (s.quiz && !s.human && !revealed[i]) lock = true
   })
   if (data.leadsTo) h += '<div class="prev leads"><div class="t">往下接什么 — 不在本段展开</div>' + linkTerms(data.leadsTo) + '</div>'
+  h += usageBlock()
   $('#story').innerHTML = h
+  wireUsage()
   renderRail()
   let a = renderTodo()
   const loose = data.choices.map((c, ci) => [c, ci]).filter(([c]) => !c.step || !st.some(s => s.n === c.step))
@@ -1024,6 +1080,18 @@ load()
       }
       segs.sort((x, y) => (x.day ? 0 : 1) - (y.day ? 0 : 1) || String(x.day).localeCompare(String(y.day)) || String(x.slice).localeCompare(String(y.slice)))
       return res.end(JSON.stringify({ story, base, business, glossary: loadGlossary(root).terms, termNotes, segs }))
+    }
+    if (req.method === 'POST' && url === '/usage-confirm') {
+      let body = ''
+      req.on('data', (c) => (body += c))
+      req.on('end', () => {
+        let out
+        try { out = confirmUsage(JSON.parse(body || '{}').slice, '网页') } catch (e) { out = { ok: false, error: String(e.message) } }
+        if (out.ok) console.log(out.message)
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify(out))
+      })
+      return
     }
     if (req.method === 'POST' && (url === '/save' || url === '/term-notes')) {
       let body = ''

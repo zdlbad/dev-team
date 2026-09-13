@@ -4,7 +4,7 @@
  *
  * 用法：node tools/workbench.js <项目目录> [--code <代码库>] [--port 4870]
  *
- * 页签（2026-09-13 项目所有者要直白的名字，「审阅」「审查」太像）：谁在干什么（scene 4873）· 走故事（story 4871）· 模型图（story 的 /model）· 这段改了什么（model-delta，按当前段落现算）
+ * 页签（2026-09-13 项目所有者要直白的名字，「审阅」「审查」太像）：谁在干什么（scene 4873）· 等你答（scene 4873 的 /questions：攒着的问题列一页，问卷模式用）· 走故事（story 4871）· 模型图（story 的 /model）· 这段改了什么（model-delta，按当前段落现算）
  *      · 审模型（review 4874，读 reports/validate-1.json，校验器对模型的判断）· 审代码（review 4876，读 reports/pre-pr-*.json，pre-pr 审查的发现）· 编码计划（plans/<当前段落>.md 现渲染）· 试原型（proto 4872，给了 --code 且 src/proto/main.ts 在才起）
  * 它自己把这几个服务拉起来（端口已经有人在听就复用、不重复起），进程退出时把自己拉起来的一并关掉。
  * 当前段落读 reports/_scene.json；页签上「等你」的标记也从那里来，每 5 秒刷一次。
@@ -130,12 +130,12 @@ header .sp{flex:1}header .now{color:var(--dim);font-size:12.5px;white-space:nowr
 main{flex:1;position:relative}iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff}
 </style></head><body>
 <header><h1>工作台<span>${esc(projectName)}</span></h1>
-<button data-t="scene" class="on">谁在干什么</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="delta">这段改了什么</button><button data-t="review">审模型</button><button data-t="prepr">审代码</button><button data-t="plan">编码计划</button><button data-t="proto">试原型</button>
+<button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="delta">这段改了什么</button><button data-t="review">审模型</button><button data-t="prepr">审代码</button><button data-t="plan">编码计划</button><button data-t="proto">试原型</button>
 <span class="sp"></span><span class="now" id="now"></span><a id="open" href="#" target="_blank" title="在新窗口打开这一页">新窗口 ↗</a></header>
 <main><iframe id="f" src="http://localhost:${PORTS.scene}/"></iframe></main>
 <script>
 const P=${JSON.stringify(PORTS)};let cur='scene';let slice=null;let who=null
-const url=(t)=>({scene:'http://localhost:'+P.scene+'/',story:'http://localhost:'+P.story+'/story'+(slice?'?slice='+slice:''),model:'http://localhost:'+P.story+'/model',delta:'/delta'+(slice?'?slice='+slice:''),review:'http://localhost:'+P.review+'/',prepr:'http://localhost:'+P.prepr+'/',plan:'/plan'+(slice?'?slice='+slice:''),proto:'http://localhost:'+P.proto+'/'})[t]
+const url=(t)=>({scene:'http://localhost:'+P.scene+'/',ask:'http://localhost:'+P.scene+'/questions',story:'http://localhost:'+P.story+'/story'+(slice?'?slice='+slice:''),model:'http://localhost:'+P.story+'/model',delta:'/delta'+(slice?'?slice='+slice:''),review:'http://localhost:'+P.review+'/',prepr:'http://localhost:'+P.prepr+'/',plan:'/plan'+(slice?'?slice='+slice:''),proto:'http://localhost:'+P.proto+'/'})[t]
 const f=document.getElementById('f'),open=document.getElementById('open')
 function show(t){cur=t;for(const b of document.querySelectorAll('header button'))b.classList.toggle('on',b.dataset.t===t);f.src=url(t);open.href=url(t);try{localStorage.setItem('wb-tab',t)}catch{}}
 for(const b of document.querySelectorAll('header button'))b.addEventListener('click',()=>show(b.dataset.t))
@@ -143,6 +143,7 @@ async function poll(){try{const s=await (await fetch('/state')).json();slice=s.s
   document.getElementById('now').textContent=(s.slice?s.slice+' · ':'')+(s.phase?s.phase+' · ':'')+(s.who?s.who+' · ':'')+(s.step||'')
   const badge=(t,on)=>{const b=document.querySelector('header button[data-t="'+t+'"]');let x=b.querySelector('.b');if(on&&!x){x=document.createElement('span');x.className='b';x.textContent='等你';b.appendChild(x)}if(!on&&x)x.remove()}
   badge('scene',s.who==='人')
+  badge('ask',(s.questions||[]).some(q=>!q.answeredAt))
   // 审阅页有没填的判断、故事页有没过的步骤：粗略按现场阶段标
   badge('review',s.who==='人'&&/审阅|判断/.test(s.step||''));badge('prepr',s.who==='人'&&/审查|pre-pr/.test(s.step||''));badge('story',s.who==='人'&&/走故事|预测|过卡|故事页/.test(s.step||''));badge('delta',s.who==='人'&&/增量|确认模型/.test(s.step||''));badge('plan',s.who==='人'&&/计划|链路|plan/.test(s.step||''))
 }catch{}}
