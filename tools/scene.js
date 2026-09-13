@@ -254,38 +254,53 @@ if (cmd === 'questions') {
     console.log(`  问题　　　${q.question}`)
     q.options.forEach((o, i) => console.log(`  答案 ${i + 1}　${o}`))
     console.log(`  偏向　　　${q.lean}（信心${q.confidence}）`)
-    if (q.answeredAt) console.log(`  人答　　　${q.answer}`)
+    if (q.answeredAt) console.log(`  人答　　　${q.answer}${(q.answerHistory ?? []).length ? `　（改过 ${q.answerHistory.length} 次，原来答的是「${q.answerHistory[0].answer}」）` : ''}`)
     console.log('')
   }
   process.exit(0)
 }
 
 // ---------- answer：把人的答复记上 ----------
-if (cmd === 'answer') {
+/** 记下人对某个问题的答复。命令行与现场页面共用；页面上答的记 via「网页」 */
+function recordAnswer(id, text, via) {
   const s0 = readScene()
-  const rest = args.slice(2).filter((a) => !a.startsWith('--'))
-  const id = rest[0]
-  const text = rest.slice(1).join(' ').trim()
-  if (!id || !text) die('用法：scene answer <项目> <问题号，如 q-001> "<人怎么答的，照他的原话>"')
   const qs = s0.questions ?? []
   // 问题号（q-003）或问卷上的序号（3，按没答的那几个数）都收
   const open = qs.filter((x) => !x.answeredAt)
-  const q = qs.find((x) => x.id === id) ?? (/^[0-9]+$/.test(id) ? open[Number(id) - 1] : null)
-  if (!q) die(`没有这个问题号：${id}（scene questions 看有哪些；问卷上的序号也收）`)
+  const q = qs.find((x) => x.id === id) ?? (/^[0-9]+$/.test(String(id)) ? open[Number(id) - 1] : null)
+  if (!q) return { ok: false, error: `没有这个问题号：${id}（scene questions 看有哪些；问卷上的序号也收）` }
+  // 答过的可以改（人在页面上点错是常事）：旧答复进 answerHistory，一条都不抹
+  const redo = !!q.answeredAt
+  if (!String(text ?? '').trim()) return { ok: false, error: '答复不能是空的' }
+  const answer = String(text).trim()
   const now = new Date().toISOString()
-  const writeSceneAnswered = () => writeScene({
+  writeScene({
     ...s0,
     updatedAt: now,
-    questions: qs.map((x) => (x.id === q.id ? { ...x, answer: text, answeredAt: now } : x)),
-    timeline: [...(s0.timeline ?? []), { ts: now, slice: s0.slice, phase: s0.phase, step: `${q.id} 人答：` + text.slice(0, 50) + (text.length > 50 ? '…' : ''), who: '人', note: null, kind: 'answer', machine: ME }].slice(-60),
+    questions: qs.map((x) => (x.id === q.id
+      ? { ...x, answer, answeredAt: now, answeredVia: via ?? '对话',
+          answerHistory: redo ? [...(x.answerHistory ?? []), { answer: x.answer, at: x.answeredAt, via: x.answeredVia ?? null, replacedAt: now }] : (x.answerHistory ?? undefined) }
+      : x)),
+    timeline: [...(s0.timeline ?? []), { ts: now, slice: s0.slice, phase: s0.phase, step: `${q.id} 人${redo ? '改答' : '答'}：` + answer.slice(0, 50) + (answer.length > 50 ? '…' : ''), who: '人', note: null, kind: 'answer', machine: ME }].slice(-60),
   })
-  const sameAsLean = q.wentAhead && (text.includes(q.wentAhead) || text.includes(String(q.wentAhead).split('：')[0]) || String(q.wentAhead).includes(text))
+  const sameAsLean = q.wentAhead && (answer.includes(q.wentAhead) || answer.includes(String(q.wentAhead).split('：')[0]) || String(q.wentAhead).includes(answer))
   const tail = !q.wentAhead
     ? '（把答复送回问这个问题的角色，让它接着往下跑）'
     : sameAsLean
       ? `（问卷模式里它已经照「${q.wentAhead}」先做了，看着跟你答的一样，多半不用返工——自己再确认一眼）`
       : `（问卷模式里它已经照「${q.wentAhead}」先做了，跟你答的不一样：把 ${q.who ?? '那个角色'} 叫回来返工）`
-  writeSceneAnswered(); console.log(`${q.id} 已记下人的答复：${text}\n${tail}`)
+  return { ok: true, id: q.id, who: q.who, answer, redo, was: redo ? q.answer : null,
+    tail: redo ? `（改的，原来答的是「${q.answer}」，已留在 answerHistory 里没抹掉；${q.who ?? '那个角色'} 要是照旧答复做过了，把它叫回来返工）` : tail }
+}
+
+if (cmd === 'answer') {
+  const rest = args.slice(2).filter((a) => !a.startsWith('--'))
+  const id = rest[0]
+  const text = rest.slice(1).join(' ').trim()
+  if (!id || !text) die('用法：scene answer <项目> <问题号，如 q-001> "<人怎么答的，照他的原话>"')
+  const r = recordAnswer(id, text, '对话')
+  if (!r.ok) die(r.error)
+  console.log(`${r.id} 已记下人${r.redo ? '改后' : ''}的答复：${r.answer}\n${r.tail}`)
   process.exit(0)
 }
 
@@ -408,6 +423,14 @@ td:nth-child(n+3),th:nth-child(n+3){white-space:nowrap;width:1%;padding-right:14
 .ask .meta{display:flex;gap:14px;padding:3px 0;font-size:13.5px}
 .ask .meta .k{color:var(--dim);width:64px;flex:none}
 .ask .how{color:var(--dim);font-size:12.5px;margin-top:10px}
+.ask .opt{cursor:pointer;border-radius:6px;transition:background .12s}
+.ask .opt:hover{background:rgba(134,239,172,.10)}
+.ask .opt.picked{background:rgba(134,239,172,.18);border-left-color:var(--ok)}
+.ask textarea{width:100%;margin-top:10px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:14px/1.6 inherit;resize:vertical;min-height:54px}
+.ask .send{margin-top:10px;display:flex;gap:10px;align-items:center}
+.ask button{background:var(--ok);color:#0b1220;border:0;border-radius:8px;padding:7px 18px;font:600 14px inherit;cursor:pointer}
+.ask button:disabled{opacity:.4;cursor:default}
+.ask button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);font-weight:400}
 .prog div{display:flex;gap:10px;padding:2px 0;font-size:13px;border-bottom:1px dashed var(--line,#e5e7eb)}.prog .t{color:#6b7280;font-variant-numeric:tabular-nums}.prog .r{color:#6b7280;min-width:4em}.tl .sub{padding-left:18px;font-size:12px}
 </style></head><body><div class="wrap">
 <h1>现场 · ${esc(projectName)}</h1>
@@ -425,10 +448,14 @@ function render(d){
   const s=d.scene,cur=d.slices.find(x=>x.id===s.slice)
   let h=''
   if(d.warning)h+='<div class="warn">⚠ '+esc(d.warning)+'</div>'
-  const open=(s.questions||[]).filter(q=>!q.answeredAt)
+  const all=(s.questions||[])
+  const open=all.filter(q=>!q.answeredAt)
+  // 刚答完的（这一段里的）也摆出来，点错了能改——2026-09-13 他在页面上点错过一次
+  const justDone=all.filter(q=>q.answeredAt&&(q.slice==null||q.slice===s.slice)&&!reopened[q.id]).slice(-3).reverse()
+  const editing=all.filter(q=>q.answeredAt&&reopened[q.id])
   if(open.length>1)h+='<div class="ask" style="padding:10px 20px"><b>攒着 '+open.length+' 个问题等你</b> <span class="dim">· 问答模式：'+esc(s.askMode||'逐个')+'</span></div>'
-  for(const q of open){
-    h+='<div class="ask"><h2>● '+esc(q.id)+' 等你回答 <span class="dim" style="font-weight:400;font-size:13px">'+esc(q.who||'—')+' · '+ago(q.ts)+'前</span></h2>'
+  for(const q of open.concat(editing)){
+    h+='<div class="ask"><h2>● '+esc(q.id)+' '+(q.answeredAt?'改一下':'等你回答') <span class="dim" style="font-weight:400;font-size:13px">'+esc(q.who||'—')+' · '+ago(q.ts)+'前</span></h2>'
     h+='<div class="meta"><div class="k">在做什么</div><div>'+esc(q.doing)+'</div></div>'
     h+='<div class="meta"><div class="k">上下文</div><div>'+esc(q.context)+'</div></div>'
     h+='<div class="q">'+esc(q.question)+'</div>'
@@ -436,7 +463,17 @@ function render(d){
       return '<div class="opt'+(lean?' lean':'')+'">'+esc(o)+(lean?' <span class="dim">· 它偏向这个</span>':'')+'</div>'}).join('')
     h+='<div class="meta" style="margin-top:8px"><div class="k">偏向</div><div>'+esc(q.lean)+' <span class="dim">· 信心'+esc(q.confidence)+'</span>'
       +(q.wentAhead?' <span class="dim">· 你不在，已经照这个先做下去了，你选别的就要返工</span>':'')+'</div></div>'
-    h+='<div class="how">答完开发指挥会记上（scene answer '+esc(q.id)+'），再把角色接着往下跑。</div></div>'
+    h+='<textarea id="t-'+esc(q.id)+'" placeholder="想补充什么就写在这儿（可以不写）"></textarea>'
+    h+='<div class="send"><button id="b-'+esc(q.id)+'" disabled>答这个</button>'
+      +'<span class="dim" id="m-'+esc(q.id)+'">点上面一个答案，或者只写几句话也行</span></div>'
+    h+='<div class="how">'+(q.answeredAt
+      ?'你原来答的是「'+esc(q.answer)+'」。改了原答复不会被抹掉，会留在记录里；'+esc(q.who||'那个角色')+' 要是已经照旧答复做过了，开发指挥会把它叫回来返工。'
+      :'答完它就记进现场，开发指挥把答复送回 '+esc(q.who||'那个角色')+'，它带着原来的上下文接着跑。')+'</div></div>'
+  }
+  for(const q of justDone){
+    h+='<div class="card" style="padding:12px 20px"><div class="row"><div class="k">'+esc(q.id)+' 已答</div><div class="v">'+esc(q.answer)
+      +' <span class="dim">· '+esc(q.who||'—')+' 问的 · '+ago(q.answeredAt)+'前</span>'
+      +' <button class="reopen" data-q="'+esc(q.id)+'" style="margin-left:10px;background:transparent;color:var(--dim);border:1px solid var(--line);border-radius:8px;padding:3px 12px;font:400 13px inherit;cursor:pointer">改一下</button></div></div></div>'
   }
   if(s.handoff)h+='<div class="card"><div class="row"><div class="k">交接</div><div class="v"><div class="hand">'+esc(s.handoff.text)+'</div><span class="dim">'+esc(s.handoff.machine||'')+' · '+ago(s.handoff.at)+'前'+(s.handoff.slice?' · '+esc(s.handoff.slice):'')+'</span></div></div></div>'
   h+='<div class="card">'
@@ -470,15 +507,69 @@ function render(d){
   const tl=(s.timeline||[]).slice().reverse().slice(0,14)
   h+='<div class="card"><div class="tl">'+(tl.length?tl.map(e=>e.kind==='progress'?'<div class="sub"><span class="t">'+esc(e.ts.slice(5,16).replace('T',' '))+'</span><span class="r">'+esc(e.who||'—')+'</span><span class="dim">└ '+esc(e.note)+'</span></div>':'<div><span class="t">'+esc(e.ts.slice(5,16).replace('T',' '))+'</span><span class="r">'+esc(e.who||'—')+'</span><span>'+esc(e.step)+(e.note?' <span class="dim">· '+esc(e.note)+'</span>':'')+'</span></div>').join(''):'<div class="empty">还没有动态</div>')+'</div></div>'
   $('#app').innerHTML=h
+  wireAsk(open.concat(editing))
+  for(const b of document.querySelectorAll('button.reopen'))b.addEventListener('click',function(){reopened[this.dataset.q]=true;answering=false;tick()})
   $('#upd').textContent=s.updatedAt?('更新于 '+ago(s.updatedAt)+'前'):'还没人写过现场'
 }
-async function tick(){try{render(await (await fetch('/data')).json())}catch(e){$('#upd').textContent='取不到数据：'+e.message}}
+// 正在答题时不重画，不然两秒一刷会把选的和写的字冲掉
+let answering=false
+const picked={}
+const reopened={}
+function wireAsk(open){
+  for(const q of open){
+    const box=document.getElementById('t-'+q.id),btn=document.getElementById('b-'+q.id),msg=document.getElementById('m-'+q.id)
+    if(!box||!btn)continue
+    const card=btn.closest('.ask')
+    const opts=[...card.querySelectorAll('.opt')]
+    const refresh=()=>{const has=picked[q.id]!=null||box.value.trim();btn.disabled=!has;answering=!!has}
+    opts.forEach(function(el,i){
+      el.addEventListener('click',function(){
+        picked[q.id]=i
+        opts.forEach(x=>x.classList.remove('picked'))
+        el.classList.add('picked')
+        msg.textContent='选的是：'+q.options[i]
+        refresh()
+      })
+      if(picked[q.id]===i){el.classList.add('picked');msg.textContent='选的是：'+q.options[i]}
+    })
+    box.addEventListener('input',refresh)
+    box.addEventListener('focus',function(){answering=true})
+    refresh()
+    btn.addEventListener('click',async function(){
+      const i=picked[q.id],extra=box.value.trim()
+      const text=(i!=null?q.options[i]:'')+(i!=null&&extra?'　'+extra:extra)
+      if(!text)return
+      btn.disabled=true;msg.textContent='记上…'
+      try{
+        const r=await (await fetch('/answer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:q.id,text:text})})).json()
+        if(!r.ok){msg.textContent='没记上：'+(r.error||'不知道为什么');btn.disabled=false;return}
+        delete picked[q.id];answering=false;tick()
+      }catch(e){msg.textContent='没记上：'+e.message;btn.disabled=false}
+    })
+  }
+}
+async function tick(){if(answering)return;try{render(await (await fetch('/data')).json())}catch(e){$('#upd').textContent='取不到数据：'+e.message}}
 tick();setInterval(tick,2000)
 </script></body></html>`
 
 const wanted = Number(opt('--port', '4873'))
 function listen(port, tries = 12) {
   const srv = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url.startsWith('/answer')) {
+      let body = ''
+      req.on('data', (d) => (body += d))
+      req.on('end', () => {
+        let out
+        try {
+          const { id, text } = JSON.parse(body || '{}')
+          out = recordAnswer(id, text, '网页')
+          if (out.ok) console.log(`${out.id} 人在网页上答了：${out.answer}\n${out.tail}`)
+        } catch (e) { out = { ok: false, error: String(e.message) } }
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+        res.end(JSON.stringify(out))
+      })
+      return
+    }
     if (req.url.startsWith('/data')) {
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
       const sc = readScene()
