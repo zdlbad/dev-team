@@ -216,6 +216,28 @@
       "type": "string",
       "minLength": 1,
       "description": "它是哪条**业务故事**（完整故事链）里的一个段落。故事链允许多意图混合，段落不允许。衔接只写一句上下文，不在本段展开"
+    },
+    "backgroundTraces": {
+      "type": "array",
+      "description": "本段只作背景的业务语句：故事里讲到它，但它的落点要等后面的段落（那时有对应的动作）。校验器不因它没有落点报错，报告里单列，免得忘。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "why"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "业务语句编号"
+          },
+          "why": {
+            "type": "string",
+            "description": "为什么本段落不了：缺哪个动作、等哪一段"
+          }
+        }
+      }
     }
   },
   "$defs": {

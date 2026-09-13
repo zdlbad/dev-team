@@ -325,12 +325,17 @@ function ruleLandings(id) {
 }
 // 种类 → 该落在哪种元素上（只是提醒，报警告）。消息里用文件里写的那个词（rawKind），旧标签的语句指纹才对得上以前的裁决：事实落字段或结构性的不变量；约束落不变量、守卫、错误；公式落计算；触发落事件处理
 const EXPECTED = { 事实: ['field', 'invariant', 'behavior', 'port'], 约束: ['invariant', 'behavior-guard', 'error', 'field'], 公式: ['behavior', 'behavior-guard', 'service', 'field'], 触发: ['event-handler', 'port'], 流程: ['behavior-guard', 'invariant', 'error', 'command', 'port'], 情形: ['behavior', 'behavior-guard', 'invariant', 'error', 'field', 'command'] }
+// 本段只作背景的语句：故事里讲到它，可本段没有能承载它的动作（次序、核对这类要等后面的段落）。
+// 切片里写明编号与理由，校验器就不因「没有落点」报错——但记进 deferred 单列出来，谁也别忘了它还欠着。
+const background = new Map((sliceRec?.backgroundTraces ?? []).map((b) => [b.id, b.why]))
 for (const r of rules) {
   const landings = ruleLandings(r.id)
   if (!landings.length) {
+    if (background.has(r.id)) { defer('coverage.background', r.id, `本段只作背景，落点等后面的段落：${background.get(r.id)}`); continue }
     add(r1, 'error', 'coverage.rule', r.id, `规则没有任何落点：${r.text}`)
     continue
   }
+  if (background.has(r.id)) add(r1, 'warning', 'coverage.background', r.id, `切片把它记成本段只作背景，模型里却给了落点：要么去掉切片里那一条，要么去掉落点`)
   if (r.ruleKind && EXPECTED[r.ruleKind] && !landings.some((l) => EXPECTED[r.ruleKind].includes(l.kind))) {
     add(r1, 'warning', 'coverage.rule-kind', r.id, `规则种类「${r.rawKind ?? r.ruleKind}」的落点应为 ${EXPECTED[r.ruleKind].join(' / ')}，实际只有 ${[...new Set(landings.map((l) => l.kind))].join(' / ')}`)
   }
@@ -670,7 +675,7 @@ function finish(report, name) {
   fs.writeFileSync(path.join(dir, `${name}.md`), renderMd(report))
   const j = report.judgments.length
   const blank = report.judgments.filter((x) => !x.verdict).length
-  console.log(`方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 需人确认 ${report.confirms.length} · 待判断 ${j}${kept ? `（沿用上一份已填的 ${kept} 条，还要填 ${blank} 条）` : ''} · 已裁决 ${report.decided.length}${report.deferred?.length ? ` · 本段外未建 ${report.deferred.length} 项（粗版，--slice 不计）` : ''} → ${report.conclusion === 'clean' ? '干净' : '不干净'}（${path.relative(process.cwd(), path.join(dir, name + '.md'))}）`)
+  console.log(`方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 需人确认 ${report.confirms.length} · 待判断 ${j}${kept ? `（沿用上一份已填的 ${kept} 条，还要填 ${blank} 条）` : ''} · 已裁决 ${report.decided.length}${report.deferred?.length ? ` · 本段外未建 ${report.deferred.filter((d) => d.kind !== 'coverage.background').length} 项（粗版，--slice 不计）` : ''}${report.deferred?.some((d) => d.kind === 'coverage.background') ? ` · 只作背景 ${report.deferred.filter((d) => d.kind === 'coverage.background').length} 条` : ''} → ${report.conclusion === 'clean' ? '干净' : '不干净'}（${path.relative(process.cwd(), path.join(dir, name + '.md'))}）`)
   if (report.conclusion !== 'clean') process.exitCode = 1
 }
 function rank(x) {

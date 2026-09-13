@@ -2,7 +2,7 @@
 /**
  * 原型：把代码库编译成可跑的原型，起一个页面让人直接操作业务规则。
  *
- *   node tools/proto.js serve <项目目录> --code <代码库> [--port 4872] [--proto-port 4875]
+ *   node tools/proto.js serve <项目目录> --code <代码库> [--port 4872] [--proto-port 4875] [--story-base <地址>] [--no-open]
  *       编译（tsc → <代码库>/.proto-build）、启动 src/proto/main.ts 的原型宿主、起页面：
  *       左：故事（按故事走、逐步走）与命令 / 查询清单；中：表单与结果；右：聚合状态与事件流水
  *   node tools/proto.js check <项目目录> --code <代码库> [--slice <切片id>]
@@ -21,6 +21,8 @@ const root = args[1] && path.resolve(args[1])
 const opt = (k) => { const i = args.indexOf(k); return i > 0 ? args[i + 1] : undefined }
 const codebase = opt('--code') && path.resolve(opt('--code'))
 const port = Number(opt('--port') ?? 4872)
+// 页头「框架图 ↗」「模型图 ↗」指到哪儿：单独跑时是故事页自己的口，工作台起它时传的是工作台里的路径
+const storyBase = opt('--story-base') ?? 'http://127.0.0.1:4871'
 let protoPort = Number(opt('--proto-port') ?? 4875) // 4873 是现场看板 scene.js 的口，别撞
 const protoPortGiven = args.includes('--proto-port')
 if (!['serve', 'check'].includes(cmd) || !root || !fs.existsSync(path.join(root, 'project.json')) || !codebase) {
@@ -225,7 +227,7 @@ const CSS = `
 `
 const PAGE = `<!doctype html>
 <html lang="zh"><head><meta charset="utf-8"><title>原型</title><style>${CSS}</style></head><body>
-<header><h1 id="title">原型</h1><a href="http://127.0.0.1:4871/" target="story">框架图 ↗</a><a href="http://127.0.0.1:4871/model" target="model">模型图 ↗</a><span class="sp"></span><span class="st" id="st"></span><button id="rebuild">重新编译</button><button id="reset">重置状态</button></header>
+<header><h1 id="title">原型</h1><a href="${storyBase}/" target="story">框架图 ↗</a><a href="${storyBase}/model" target="model">模型图 ↗</a><span class="sp"></span><span class="st" id="st"></span><button id="rebuild">重新编译</button><button id="reset">重置状态</button></header>
 <main>
   <div class="col">
     <div class="box story"><h2>按故事走</h2><div id="story-pick"></div><div><button id="run-all" class="primary">从头走到底</button> <span class="muted">每步用模型师填的输入跑一次，和故事写的事实并排</span></div><div id="steps"></div></div>
@@ -396,7 +398,8 @@ async function serve() {
   server.listen(port, '127.0.0.1', () => {
     const url = `http://127.0.0.1:${port}/`
     console.log(`原型页面 ${url}（Ctrl+C 结束）`)
-    if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', url], { stdio: 'ignore', detached: true }).unref()
+    // --no-open：工作台代理这一页，别再自己弹浏览器标签
+    if (process.platform === 'win32' && !args.includes('--no-open')) spawn('cmd', ['/c', 'start', '', url], { stdio: 'ignore', detached: true }).unref()
   })
   process.on('exit', () => { if (child) child.kill() })
   process.on('SIGINT', () => process.exit(0))

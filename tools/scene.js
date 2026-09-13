@@ -453,7 +453,7 @@ function render(d){
   const mode=s.askMode||'逐个'
   if(open.length>1)h+='<div class="ask" style="padding:10px 20px"><b>攒着 '+open.length+' 个问题等你</b> <span class="dim">· 问答模式：'+esc(mode)+'</span>'+(mode==='问卷'?' <a href="/questions" target="_top" style="color:var(--ok)">去「等你答」那一页</a>':'')+'</div>'
   for(const q of open){
-    h+='<div class="ask"><h2>● '+esc(q.id)+' '+(q.answeredAt?'改一下':'等你回答') <span class="dim" style="font-weight:400;font-size:13px">'+esc(q.who||'—')+' · '+ago(q.ts)+'前</span></h2>'
+    h+='<div class="ask"><h2>● '+esc(q.id)+' '+(q.answeredAt?'改一下':'等你回答')+' <span class="dim" style="font-weight:400;font-size:13px">'+esc(q.who||'—')+' · '+ago(q.ts)+'前</span></h2>'
     h+='<div class="meta"><div class="k">在做什么</div><div>'+esc(q.doing)+'</div></div>'
     h+='<div class="meta"><div class="k">上下文</div><div>'+esc(q.context)+'</div></div>'
     h+='<div class="q">'+esc(q.question)+'</div>'
@@ -690,6 +690,6 @@ function listen(port, tries = 12) {
     if (e.code === 'EADDRINUSE' && tries > 0) return listen(port + 1, tries - 1)
     die(String(e.message))
   })
-  srv.listen(port, () => console.log(`现场看板：http://localhost:${port}　（Ctrl+C 停）`))
+  srv.listen(port, '127.0.0.1', () => console.log(`现场看板：http://localhost:${port}　（Ctrl+C 停）`))
 }
 listen(wanted)

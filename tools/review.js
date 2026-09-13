@@ -278,5 +278,6 @@ const server = http.createServer((req, res) => {
 server.listen(port, '127.0.0.1', () => {
   const url = `http://127.0.0.1:${port}/`
   console.log(`审阅：${file}\n打开 ${url}（Ctrl+C 结束）`)
-  if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', url], { stdio: 'ignore', detached: true }).unref()
+  // --no-open：工作台代理这一页，别再自己弹浏览器标签
+  if (process.platform === 'win32' && !process.argv.includes('--no-open')) spawn('cmd', ['/c', 'start', '', url], { stdio: 'ignore', detached: true }).unref()
 })
