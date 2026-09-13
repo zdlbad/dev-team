@@ -7,6 +7,11 @@
  *   node tools/scene.js <项目> set --slice <id> --step "<这一步在做什么>" --who <角色>
  *                                  [--phase 业务|模型|编码|校验] [--note "<一句话>"] [--done]
  *   node tools/scene.js <项目> progress "<一句>" [--who 角色]   细步：角色每做完一个小动作写一句（新建了什么、把什么从 xxx 改成 xxx）；挂在当前这一步下面，页面 2 秒一刷
+ *   node tools/scene.js <项目> ask "<问题>" --who <角色> --doing "<在做什么>" --context "<上下文>"
+ *                                --options "甲：…|乙：…" --lean "<你偏向哪个>" --confidence 高|中|低
+ *                                                 角色遇到要人裁的事，当场发问然后停下交回开发指挥（第七十三批）
+ *   node tools/scene.js <项目> questions [--all]     列出等人回答的问题（开发指挥转给人时用）
+ *   node tools/scene.js <项目> answer <问题号> "<人怎么答的>"   把人的答复记上，问题就算答完
  *   node tools/scene.js <项目> handoff "<一段话>"    收工交接：停在哪、等谁、有什么坑。换台机器的人打开看板先看它
  *   node tools/scene.js <项目> serve [--port 4873]
  *   node tools/scene.js <项目>                      打印一屏（不起页面）
@@ -34,6 +39,8 @@ if (!args.length) die('用法：node tools/scene.js <项目> [set …|serve]')
 const root = path.resolve(args[0])
 if (!fs.existsSync(path.join(root, 'project.json'))) die(`不是项目目录（没有 project.json）：${root}`)
 const cmd = args[1] ?? 'show'
+/** 所有 --x 后面跟的值：取「第一个不带 -- 的参数」当正文时要把它们排掉 */
+const USED = new Set(args.filter((a, i) => i > 0 && args[i - 1].startsWith('--')))
 const opt = (k, d = null) => {
   const i = args.indexOf(k)
   return i > 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : d
@@ -49,8 +56,16 @@ const readJson = (p, d) => {
 }
 const projectName = readJson(path.join(root, 'project.json'), {}).name ?? path.basename(root)
 
+function ago(iso) {
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (m < 1) return '刚刚'
+  if (m < 60) return `${m} 分钟`
+  const h = Math.floor(m / 60)
+  return h < 24 ? `${h} 小时` : `${Math.floor(h / 24)} 天`
+}
+
 function readScene() {
-  return readJson(scenePath, { slice: null, phase: null, step: null, who: null, note: null, since: null, updatedAt: null, machine: null, handoff: null, timeline: [], progress: [] })
+  return readJson(scenePath, { slice: null, phase: null, step: null, who: null, note: null, since: null, updatedAt: null, machine: null, handoff: null, timeline: [], progress: [], questions: [] })
 }
 function writeScene(s) {
   fs.mkdirSync(path.dirname(scenePath), { recursive: true })
@@ -142,6 +157,86 @@ if (cmd === 'progress') {
   process.exit(0)
 }
 
+// ---------- ask：角色当场发问 ----------
+// 第七十三批（2026-09-13 项目所有者）：要人裁的事别攒到交稿一次性列出来，遇到就问，五件事说全：
+// 在做什么、上下文是怎样、遇到了什么问题、两到四个答案、你偏向哪个、信心高低。
+// 问完角色就停下交回开发指挥；开发指挥立刻转给人，人答了再把角色接着往下跑（上下文还在）。
+const CONFIDENCE = ['高', '中', '低']
+if (cmd === 'ask') {
+  const s0 = readScene()
+  const question = args.slice(2).find((a) => !a.startsWith('--') && !USED.has(a))
+  const who = opt('--who', s0.who)
+  const doing = opt('--doing', null)
+  const context = opt('--context', null)
+  const optionsRaw = opt('--options', null)
+  const lean = opt('--lean', null)
+  const confidence = opt('--confidence', null)
+  const missing = []
+  if (!question) missing.push('问题正文（第一个不带 -- 的参数）')
+  if (!doing) missing.push('--doing 你当时在做什么')
+  if (!context) missing.push('--context 上下文：这件事牵涉到谁、哪个文件、哪一步')
+  if (!optionsRaw) missing.push('--options 两到四个答案，用 | 隔开')
+  if (!lean) missing.push('--lean 你偏向哪个')
+  if (!confidence) missing.push('--confidence 信心 高|中|低')
+  if (missing.length) die('发问要说全五件事，缺了：\n  ' + missing.join('\n  ') + '\n用法：scene ask <项目> "<问题>" --who <角色> --doing "…" --context "…" --options "甲：…|乙：…" --lean "甲" --confidence 中')
+  if (who && !ROLES.includes(who)) die(`--who 要用 seed/05 的角色名：${ROLES.join('、')}`)
+  if (!CONFIDENCE.includes(confidence)) die(`--confidence 只有：${CONFIDENCE.join('、')}`)
+  const options = optionsRaw.split('|').map((x) => x.trim()).filter(Boolean)
+  if (options.length < 2 || options.length > 4) die(`--options 要两到四个（用 | 隔开），现在是 ${options.length} 个`)
+  const now = new Date().toISOString()
+  const qs = s0.questions ?? []
+  const id = 'q-' + String(qs.length + 1).padStart(3, '0')
+  const q = { id, ts: now, who, slice: s0.slice, phase: s0.phase, step: s0.step, doing, context, question, options, lean, confidence, answer: null, answeredAt: null, machine: ME }
+  writeScene({
+    ...s0,
+    updatedAt: now,
+    questions: [...qs, q],
+    timeline: [...(s0.timeline ?? []), { ts: now, slice: s0.slice, phase: s0.phase, step: '发问：' + question.slice(0, 50) + (question.length > 50 ? '…' : ''), who, note: null, kind: 'ask', machine: ME }].slice(-60),
+  })
+  console.log(`${id} 已挂上等人回答：${question}\n（你该停下来把这个问题交回开发指挥，别自己替人拿主意）`)
+  process.exit(0)
+}
+
+// ---------- questions：开发指挥把等人回答的问题取出来转给人 ----------
+if (cmd === 'questions') {
+  const s0 = readScene()
+  const all = args.includes('--all')
+  const list = (s0.questions ?? []).filter((q) => all || !q.answeredAt)
+  if (!list.length) { console.log(all ? '一个问题都没提过' : '没有等人回答的问题'); process.exit(0) }
+  for (const q of list) {
+    console.log(`${q.id}　${q.who ?? '—'}　${ago(q.ts)}前${q.answeredAt ? '　已答' : '　等人'}`)
+    console.log(`  在做什么　${q.doing}`)
+    console.log(`  上下文　　${q.context}`)
+    console.log(`  问题　　　${q.question}`)
+    q.options.forEach((o, i) => console.log(`  答案 ${i + 1}　${o}`))
+    console.log(`  偏向　　　${q.lean}（信心${q.confidence}）`)
+    if (q.answeredAt) console.log(`  人答　　　${q.answer}`)
+    console.log('')
+  }
+  process.exit(0)
+}
+
+// ---------- answer：把人的答复记上 ----------
+if (cmd === 'answer') {
+  const s0 = readScene()
+  const rest = args.slice(2).filter((a) => !a.startsWith('--'))
+  const id = rest[0]
+  const text = rest.slice(1).join(' ').trim()
+  if (!id || !text) die('用法：scene answer <项目> <问题号，如 q-001> "<人怎么答的，照他的原话>"')
+  const qs = s0.questions ?? []
+  const q = qs.find((x) => x.id === id)
+  if (!q) die(`没有这个问题号：${id}（scene questions 看有哪些）`)
+  const now = new Date().toISOString()
+  writeScene({
+    ...s0,
+    updatedAt: now,
+    questions: qs.map((x) => (x.id === id ? { ...x, answer: text, answeredAt: now } : x)),
+    timeline: [...(s0.timeline ?? []), { ts: now, slice: s0.slice, phase: s0.phase, step: `${id} 人答：` + text.slice(0, 50) + (text.length > 50 ? '…' : ''), who: '人', note: null, kind: 'answer', machine: ME }].slice(-60),
+  })
+  console.log(`${id} 已记下人的答复：${text}\n（把答复送回问这个问题的角色，让它接着往下跑）`)
+  process.exit(0)
+}
+
 // ---------- handoff：收工交接 ----------
 if (cmd === 'handoff') {
   const text = args.slice(2).filter((a) => !a.startsWith('--')).join(' ').trim()
@@ -175,6 +270,16 @@ function textView() {
   L.push('')
   const mw = machineWarning(s)
   if (mw) { L.push('⚠ ' + mw); L.push('') }
+  const open = (s.questions ?? []).filter((q) => !q.answeredAt)
+  for (const q of open) {
+    L.push(`● ${q.id} 等你回答（${q.who ?? '—'}，${ago(q.ts)}前）`)
+    L.push(`  在做什么　${q.doing}`)
+    L.push(`  上下文　　${q.context}`)
+    L.push(`  问题　　　${q.question}`)
+    q.options.forEach((o, i) => L.push(`  答案 ${i + 1}　${o}`))
+    L.push(`  偏向　　　${q.lean}（信心${q.confidence}）`)
+    L.push('')
+  }
   if (s.handoff) { L.push(`交接（${s.handoff.machine}，${ago(s.handoff.at)}前）　${s.handoff.text}`); L.push('') }
   if (cur) {
     if (cur.line) L.push(`故事线　${cur.line}`)
@@ -193,13 +298,6 @@ function textView() {
   for (const e of (s.timeline ?? []).slice(-8)) L.push(e.kind === 'progress' ? `  ${e.ts.slice(5, 16).replace('T', ' ')}　${e.who ?? '—'}　　└ ${e.note}` : `  ${e.ts.slice(5, 16).replace('T', ' ')}　${e.who ?? '—'}　${e.step}`)
   return L.join('\n')
 }
-function ago(iso) {
-  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
-  if (m < 1) return '刚刚'
-  if (m < 60) return `${m} 分钟`
-  const h = Math.floor(m / 60)
-  return h < 24 ? `${h} 小时` : `${Math.floor(h / 24)} 天`
-}
 
 if (cmd === 'show') {
   console.log(textView())
@@ -207,7 +305,7 @@ if (cmd === 'show') {
 }
 
 // ---------- serve ----------
-if (cmd !== 'serve') die(`不认得的子命令：${cmd}（set | progress | handoff | serve | 不带子命令打印一屏）`)
+if (cmd !== 'serve') die(`不认得的子命令：${cmd}（set | progress | ask | questions | answer | handoff | serve | 不带子命令打印一屏）`)
 
 const esc = (x) => String(x ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 
@@ -249,6 +347,14 @@ td:nth-child(n+3),th:nth-child(n+3){white-space:nowrap;width:1%;padding-right:14
 .empty{color:var(--dim);padding:8px 0}
 .warn{background:rgba(252,211,77,.12);border:1px solid rgba(252,211,77,.5);color:var(--warn);border-radius:10px;padding:10px 14px;margin-bottom:14px}
 .hand{border-left:3px solid var(--hi);padding:4px 12px;margin:4px 0 6px;white-space:pre-wrap}
+.ask{background:rgba(134,239,172,.08);border:1px solid rgba(134,239,172,.45);border-radius:12px;padding:16px 20px;margin-bottom:14px}
+.ask h2{font-size:16px;margin:0 0 10px;color:var(--ok);font-weight:600}
+.ask .q{font-size:17px;font-weight:600;margin:10px 0 8px;line-height:1.5}
+.ask .opt{padding:4px 0 4px 16px;border-left:2px solid var(--line)}
+.ask .opt.lean{border-left-color:var(--ok)}
+.ask .meta{display:flex;gap:14px;padding:3px 0;font-size:13.5px}
+.ask .meta .k{color:var(--dim);width:64px;flex:none}
+.ask .how{color:var(--dim);font-size:12.5px;margin-top:10px}
 .prog div{display:flex;gap:10px;padding:2px 0;font-size:13px;border-bottom:1px dashed var(--line,#e5e7eb)}.prog .t{color:#6b7280;font-variant-numeric:tabular-nums}.prog .r{color:#6b7280;min-width:4em}.tl .sub{padding-left:18px;font-size:12px}
 </style></head><body><div class="wrap">
 <h1>现场 · ${esc(projectName)}</h1>
@@ -266,6 +372,17 @@ function render(d){
   const s=d.scene,cur=d.slices.find(x=>x.id===s.slice)
   let h=''
   if(d.warning)h+='<div class="warn">⚠ '+esc(d.warning)+'</div>'
+  const open=(s.questions||[]).filter(q=>!q.answeredAt)
+  for(const q of open){
+    h+='<div class="ask"><h2>● '+esc(q.id)+' 等你回答 <span class="dim" style="font-weight:400;font-size:13px">'+esc(q.who||'—')+' · '+ago(q.ts)+'前</span></h2>'
+    h+='<div class="meta"><div class="k">在做什么</div><div>'+esc(q.doing)+'</div></div>'
+    h+='<div class="meta"><div class="k">上下文</div><div>'+esc(q.context)+'</div></div>'
+    h+='<div class="q">'+esc(q.question)+'</div>'
+    h+=q.options.map(function(o,i){var lean=String(o).indexOf(String(q.lean))===0||String(q.lean).indexOf(String(i+1))===0
+      return '<div class="opt'+(lean?' lean':'')+'">'+esc(o)+(lean?' <span class="dim">· 它偏向这个</span>':'')+'</div>'}).join('')
+    h+='<div class="meta" style="margin-top:8px"><div class="k">偏向</div><div>'+esc(q.lean)+' <span class="dim">· 信心'+esc(q.confidence)+'</span></div></div>'
+    h+='<div class="how">答完开发指挥会记上（scene answer '+esc(q.id)+'），再把角色接着往下跑。</div></div>'
+  }
   if(s.handoff)h+='<div class="card"><div class="row"><div class="k">交接</div><div class="v"><div class="hand">'+esc(s.handoff.text)+'</div><span class="dim">'+esc(s.handoff.machine||'')+' · '+ago(s.handoff.at)+'前'+(s.handoff.slice?' · '+esc(s.handoff.slice):'')+'</span></div></div></div>'
   h+='<div class="card">'
   if(cur){

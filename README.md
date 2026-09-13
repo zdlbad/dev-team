@@ -66,6 +66,10 @@ node tools/test.js <代码库> [<片段>…]                           # 测试�
 node tools/prepr.js new|check <项目> <id> --mode proto|shell    # pre-pr 审查：骨架 / 形状核对
 node tools/board.js <项目> [--md]                              # 状态看板（算出来的：每个切片走到哪）
 node tools/scene.js <项目> set --slice <id> --step "…" --who <角色> [--phase …] [--note …] [--done]
+node tools/scene.js <项目> progress "<一句>" [--who 角色]        # 细步：角色每做完一个小动作写一句
+node tools/scene.js <项目> ask "<问题>" --who <角色> --doing … --context … --options "甲：…|乙：…" --lean … --confidence 高|中|低
+node tools/scene.js <项目> questions [--all]                    # 等人回答的问题（开发指挥转给人）
+node tools/scene.js <项目> answer <问题号> "<人的原话>"
 node tools/scene.js <项目> serve [--port 4873]                  # 现场看板（开发指挥写的：这一步谁在干什么）
 node tools/check-schema.js --self                              # 编译全部 schema
 node tools/check-schema.js <项目>                              # 校验 glossary / model / slices / plans / contracts 的形状
