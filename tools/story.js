@@ -4,7 +4,7 @@
  *
  * 用法：
  *   node tools/story.js approve <项目目录> <切片id>            人与团队对故事的业务理解一致：写 approved，把故事的编号顺带并入切片 traces
- *   node tools/story.js serve   <项目目录> [切片id] [--port 4871]
+ *   node tools/story.js serve   <项目目录> [切片id] [--port 4871] [--no-open]
  *                                                         本地页面：/ 框架图（模块 × 故事）；/story?slice=<id> 走故事 + 裁定卡；/glossary 名词目录
  *   node tools/story.js apply   <项目目录> <切片id>            把裁定卡写进 raw/rulings.md 与切片 log；算出回流
  *   node tools/story.js usage   <项目目录> <切片id> propose <R-001,R-002 | --none>
@@ -40,6 +40,12 @@ function storyPath(sliceId) {
 }
 function slicePath(sliceId) {
   return path.join(root, 'slices', `${sliceId}.json`)
+}
+/** 故事文件此刻的样子，取个指纹当版本号：页面拿走时记下，保存时带回来核对，防止盖掉别人后来的改动 */
+function storyRev(sliceId) {
+  const f = storyPath(sliceId)
+  if (!f || !fs.existsSync(f)) return null
+  return require('node:crypto').createHash('sha1').update(fs.readFileSync(f)).digest('hex').slice(0, 12)
 }
 
 /** 这张卡是不是已经作废：争点被后来的裁定推翻了，裁定写的是「作废」而不是某个选项 */
@@ -320,11 +326,13 @@ if (cmd === 'serve') {
   .choice.ruled { border-left-color:#1f6feb; background:#fff; }
   .choice .q { font-weight:600; margin-bottom:4px; }
   .choice .ctx { color:var(--muted); font-size:12px; margin-bottom:6px; white-space:pre-wrap; }
-  .opt { display:grid; grid-template-columns: 22px 1fr; gap:4px 8px; padding:6px 8px; border:1px solid transparent; border-radius:6px; margin:4px 0; cursor:pointer; font-size:13px; }
+  /* 编号那一栏跟着编号本身宽窄走：写死 22 宽时，长一点的编号会压在选项文字上（2026-09-13 项目所有者截图点名） */
+  .opt { display:grid; grid-template-columns: minmax(22px, max-content) 1fr; gap:4px 8px; padding:6px 8px; border:1px solid transparent; border-radius:6px; margin:4px 0; cursor:pointer; font-size:13px; }
   .opt:hover { background:var(--lo); }
   .opt.sel { border-color:#1f6feb; background:#eef4ff; }
-  .opt .key { font-weight:700; }
+  .opt .key { font-weight:700; white-space:nowrap; }
   .opt .cons { color:var(--muted); font-size:12px; grid-column:2; white-space:pre-wrap; }
+  .opt .tag { margin-left:6px; }
   .tag { display:inline-block; font-size:11px; padding:0 6px; border-radius:10px; border:1px solid #d0d7de; color:var(--muted); margin-left:6px; }
   .tag.rec { background:var(--rec); } .tag.cur { background:var(--lo); }
   .gaps li { font-size:13px; margin:6px 0; } .gaps label { white-space:nowrap; color:#166534; font-weight:600; }
@@ -684,11 +692,18 @@ function renderSegs(segs) {
     return '<div class="row' + (here ? ' here' : '') + '"><span class="chain">' + label + '</span>' + g.items.map(chip).join('<span class="arrow">→</span>') + '</div>'
   }).join('')
 }
-async function load() { const r = await (await fetch('/data?slice=' + SLICE)).json(); if (!r.story) { $('#story').innerHTML = '<p>没有这条故事：' + esc(SLICE) + '</p>'; return } data = r.story; base = r.base; biz = r.business; buildTerms(r.glossary); render(); renderSegs(r.segs) }
+let rev = null
+async function load() { const r = await (await fetch('/data?slice=' + SLICE)).json(); if (!r.story) { $('#story').innerHTML = '<p>没有这条故事：' + esc(SLICE) + '</p>'; return } data = r.story; base = r.base; biz = r.business; rev = r.rev; buildTerms(r.glossary); render(); renderSegs(r.segs) }
 function inherited(s) { return !!(base && base.texts.includes(s.text)) }
 async function save(auto) {
   if (!auto) { const bad = data.steps.filter(s => s.review?.verdict === 'challenge' && !s.review.note); if (bad.length) { alert('第 ' + bad.map(s => s.n).join('、') + ' 步点了质疑但没写理由'); return false } }
-  const r = await fetch('/save', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(data) })
+  const r = await fetch('/save', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ ...data, _rev: rev }) })
+  if (r.status === 409) {
+    const msg = await r.text()
+    $('#status').innerHTML = '<b style="color:#cf222e">没保存：' + esc(msg) + '</b>'
+    return false
+  }
+  if (r.ok) { try { const j = await r.json(); if (j.rev) rev = j.rev } catch {} }
   $('#status').textContent = r.ok ? (auto ? '已自动保存 ' : '已保存 ') + new Date().toLocaleTimeString() : '保存失败'
   return r.ok
 }
@@ -1079,7 +1094,7 @@ load()
         } catch (e) { /* 读不动的跳过，页面照开 */ }
       }
       segs.sort((x, y) => (x.day ? 0 : 1) - (y.day ? 0 : 1) || String(x.day).localeCompare(String(y.day)) || String(x.slice).localeCompare(String(y.slice)))
-      return res.end(JSON.stringify({ story, base, business, glossary: loadGlossary(root).terms, termNotes, segs }))
+      return res.end(JSON.stringify({ story, base, business, glossary: loadGlossary(root).terms, termNotes, segs, rev: storyRev(sid) }))
     }
     if (req.method === 'POST' && url === '/usage-confirm') {
       let body = ''
@@ -1099,7 +1114,22 @@ load()
       req.on('end', () => {
         try {
           const obj = JSON.parse(body)
-          if (url === '/save') { if (!/^s-[0-9]{3,}$/.test(obj.slice || '')) throw new Error('故事缺 slice'); writeJson(storyPath(obj.slice), obj) }
+          if (url === '/save') {
+            if (!/^s-[0-9]{3,}$/.test(obj.slice || '')) throw new Error('故事缺 slice')
+            // 页面手里那份是从哪一版改起的？跟磁盘上现在这一版对不上，就说明这中间别人改过（角色、命令行、另一台机器）。
+            // 直接写会把那些改动整个盖掉，而且一声不响。宁可拒绝，让人刷新后在新版本上重做这一下。
+            const now = storyRev(obj.slice)
+            const from = obj._rev
+            if (from && now && from !== now) {
+              res.writeHead(409, { 'content-type': 'text/plain; charset=utf-8' })
+              res.end('这条故事在服务器上已被改动（多半是某个角色刚落了裁定或改了措辞）。请刷新这一页，再把你刚才那一下重做一遍——直接保存会把那些改动盖掉。')
+              console.log('挡下一次会盖掉改动的保存：页面从 ' + from + ' 改起，磁盘上已是 ' + now)
+              return
+            }
+            const toWrite = { ...obj }
+            delete toWrite._rev
+            writeJson(storyPath(obj.slice), toWrite)
+          }
           else {
             const notes = fs.existsSync(notesP) ? readJson(notesP) : {}
             for (const n of obj) {
@@ -1108,8 +1138,8 @@ load()
             }
             writeJson(notesP, notes)
           }
-          res.writeHead(200)
-          res.end('ok')
+          res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: true, rev: url === '/save' ? storyRev(obj.slice) : null }))
           console.log(`已保存 ${url} ${new Date().toLocaleTimeString()}`)
         } catch (e) {
           res.writeHead(400)
@@ -1124,7 +1154,8 @@ load()
   server.listen(port, '127.0.0.1', () => {
     const url = `http://127.0.0.1:${port}/`
     console.log(`框架图 ${url}　走故事 ${url}story?slice=${id ?? '<切片id>'}　名词目录 ${url}glossary（Ctrl+C 结束）`)
-    if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', id ? `${url}story?slice=${id}` : url], { stdio: 'ignore', detached: true }).unref()
+    // --no-open：工作台把这一页代理在自己那个口后面，这里再弹一个浏览器标签，人就看见好几个口了（2026-09-13 项目所有者点名）
+    if (process.platform === 'win32' && !args.includes('--no-open')) spawn('cmd', ['/c', 'start', '', id ? `${url}story?slice=${id}` : url], { stdio: 'ignore', detached: true }).unref()
   })
 }
 
