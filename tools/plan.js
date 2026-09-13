@@ -377,6 +377,9 @@ function pickOutAlreadyDone(steps, model) {
     if (!f.endsWith(".json")) continue
     let prev; try { prev = readJson(path.join(dir, f)) } catch { continue }
     for (const s of prev.steps ?? []) if (s.doneAt) priors.push({ slice: prev.slice, n: s.n, file: s.file ?? null, target: s.target, noFile: s.noFile ?? null })
+    // 上一版计划里「已经做过、没列成步骤」的那张表也是先例：--force 重算会把完成记录清零，
+    // 不带上它们，第二次重算就把没动过的错误、端口、适配器全摆回人面前（2026-09-13 s-001 从 10 步变 16 步）
+    for (const a of prev.already ?? []) priors.push({ slice: a.by?.slice ?? prev.slice, n: a.by?.n ?? 0, file: a.file ?? null, target: a.target, noFile: a.by?.noFile ?? null })
   }
   if (!priors.length) return { remaining: [...steps], already: [] } // 拷一份：调用方会先清空 steps 再回填，原样返回同一个数组就把自己清空了（2026-09-13 s-001 算出 0 步）
   const clean = cleanModelFiles(model)

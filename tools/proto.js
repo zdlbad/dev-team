@@ -100,6 +100,31 @@ function modelData() {
   return { system: model.modules?.data.system ?? '', ops, aggregates, errors, business, stories }
 }
 
+// ---------- 代码结构（给原型页「代码」页签）----------
+const SKIP_DIRS = new Set(['node_modules', '.proto-build', 'dist', 'dist-test', '.git', 'coverage'])
+function codeTree() {
+  const rel = (p) => path.relative(codebase, p).replaceAll('\\', '/')
+  const walkDir = (dir, name) => {
+    const out = { name, path: rel(dir), dirs: [], files: [], count: 0 }
+    for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1))) {
+      if (e.name.startsWith('.') || SKIP_DIRS.has(e.name)) continue
+      const p = path.join(dir, e.name)
+      if (e.isDirectory()) { const d = walkDir(p, e.name); out.dirs.push(d); out.count += d.count }
+      else { out.files.push({ name: e.name, path: rel(p), size: fs.statSync(p).size }); out.count++ }
+    }
+    return out
+  }
+  const top = walkDir(codebase, path.basename(codebase))
+  return { root: path.basename(codebase), dirs: top.dirs, files: top.files, count: top.count }
+}
+function codeFile(relPath) {
+  const p = path.resolve(codebase, relPath)
+  if (!p.startsWith(codebase + path.sep) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) return { ok: false, error: '不在代码库里或不是文件：' + relPath }
+  if (fs.statSync(p).size > 400 * 1024) return { ok: false, error: '文件太大，不在页面上看：' + relPath }
+  const text = fs.readFileSync(p, 'utf8')
+  return { ok: true, path: relPath, lines: text.split('\n').length, text }
+}
+
 // ---------- check ----------
 async function check() {
   const b = build()
@@ -154,9 +179,9 @@ const CSS = `
   header { display:flex; align-items:center; gap:14px; padding:8px 16px; border-bottom:1px solid var(--line); background:#fff; position:sticky; top:0; z-index:5; }
   header h1 { font-size:16px; margin:0; } header a { color:var(--blue); } header .sp { flex:1; } header .st { color:var(--muted); font-size:12px; }
   button { font:inherit; font-size:13px; padding:5px 12px; border:1px solid #d0d7de; background:#fff; border-radius:6px; cursor:pointer; } button.primary { background:var(--blue); color:#fff; border-color:var(--blue); } button:disabled { opacity:.5; cursor:default; }
-  main { display:grid; grid-template-columns: 300px minmax(0,1fr) minmax(0,1.25fr); gap:12px; padding:12px 16px; align-items:start; }
+  main { display:grid; grid-template-columns: minmax(380px,1.15fr) minmax(0,1fr) minmax(0,1.1fr); gap:12px; padding:12px 16px; align-items:start; }
   #state-box { position:sticky; top:52px; max-height:calc(100vh - 64px); overflow:auto; }
-  @media (max-width: 1250px) { main { grid-template-columns: 280px minmax(0,1fr); } #state-box { grid-column: 1 / -1; position:static; max-height:none; } }
+  @media (max-width: 1250px) { main { grid-template-columns: minmax(340px,1fr) minmax(0,1fr); } #state-box { grid-column: 1 / -1; position:static; max-height:none; } }
   .col { display:flex; flex-direction:column; gap:12px; }
   .box { background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
   #story-pick { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
@@ -167,7 +192,7 @@ const CSS = `
   #story-pick .arrow { color:#9ca3af; font-size:12px; }
   .box h2 { font-size:14px; margin:0 0 8px; } .box h3 { font-size:13px; margin:10px 0 4px; color:var(--muted); }
   .muted { color:var(--muted); font-size:12px; }
-  .ops button { display:block; width:100%; text-align:left; margin:3px 0; padding:5px 8px; } .ops button.sel { border-color:var(--blue); background:#eef4ff; } .ops .m { font-weight:600; margin-top:6px; font-size:12px; color:var(--muted); }
+  .ops button { display:inline-block; text-align:left; margin:3px 6px 3px 0; padding:5px 10px; } .ops button.sel { border-color:var(--blue); background:#eef4ff; } .ops .m { font-weight:600; margin-top:6px; font-size:12px; color:var(--muted); }
   .ops button.none { color:#9ca3af; border-style:dashed; }
   form label { display:block; margin:6px 0; font-size:13px; } form input, form textarea, form select { width:100%; font:inherit; font-size:13px; padding:5px 8px; border:1px solid #d0d7de; border-radius:6px; }
   .steps { margin:8px 0 0; padding-left:18px; font-size:12px; color:var(--muted); }
@@ -194,6 +219,9 @@ const CSS = `
   .step .out { margin-top:4px; }
   code { font-family: ui-monospace, Consolas, monospace; font-size:12px; background:var(--lo); padding:1px 4px; border-radius:4px; }
   .tabs { display:flex; gap:6px; margin-bottom:6px; } .tabs button.on { background:#eef4ff; border-color:var(--blue); }
+  .tree { font-family: ui-monospace, Consolas, monospace; font-size:12px; } .tree details { margin-left:12px; } .tree > details { margin-left:0; } .tree summary { cursor:pointer; padding:2px 0; color:#111; } .tree summary .c { color:var(--muted); font-weight:400; margin-left:6px; }
+  .tree .f { display:block; cursor:pointer; padding:1px 0 1px 22px; color:#1f6feb; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .tree .f:hover { background:var(--lo); } .tree .f.on { background:#eef4ff; } .tree .f .sz { color:var(--muted); margin-left:6px; }
+  #code-view { margin-top:8px; } #code-view .fh { display:flex; align-items:center; gap:8px; font-size:12px; margin-bottom:4px; } #code-view .fh code { font-size:12px; } #code-view pre { margin:0; max-height:60vh; overflow:auto; font-size:12px; line-height:1.45; background:var(--lo); padding:8px 10px; border-radius:6px; white-space:pre; }
 `
 const PAGE = `<!doctype html>
 <html lang="zh"><head><meta charset="utf-8"><title>原型</title><style>${CSS}</style></head><body>
@@ -201,13 +229,13 @@ const PAGE = `<!doctype html>
 <main>
   <div class="col">
     <div class="box story"><h2>按故事走</h2><div id="story-pick"></div><div><button id="run-all" class="primary">从头走到底</button> <span class="muted">每步用模型师填的输入跑一次，和故事写的事实并排</span></div><div id="steps"></div></div>
-    <div class="box"><h2>命令与查询</h2><div class="ops" id="ops"></div></div>
   </div>
   <div class="col">
+    <div class="box"><h2>命令与查询 <span class="muted">点一个，下面出表单</span></h2><div class="ops" id="ops"></div></div>
     <div class="box" id="form-box"><h2 id="op-title">选一个命令</h2><div class="muted" id="op-meta"></div><form id="form"></form><div id="res"></div></div>
   </div>
   <div class="col">
-    <div class="box" id="state-box"><div class="tabs"><button data-t="state" class="on">聚合状态</button><button data-t="events">事件流水</button></div><div id="state"></div><div id="events" hidden></div></div>
+    <div class="box" id="state-box"><div class="tabs"><button data-t="state" class="on">聚合状态</button><button data-t="events">事件流水</button><button data-t="code">代码</button></div><div id="state"></div><div id="events" hidden></div><div id="code" hidden><div class="muted" style="margin-bottom:6px">代码库的目录树（点目录折叠，点文件看内容；只读）</div><div class="tree" id="tree"></div><div id="code-view"></div></div></div>
   </div>
 </main>
 <script>
@@ -215,7 +243,7 @@ const $ = (s) => document.querySelector(s)
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 let D = null, M = null, sel = null, storyId = null, stepState = {}
 const api = (p, body) => fetch('/api' + p, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json())
-async function load() { D = await (await fetch('/data')).json(); M = await api('/manifest'); document.title = '原型 · ' + D.system; $('#title').textContent = '原型 · ' + D.system; renderOps(); renderStories(); refresh() }
+async function load() { D = await (await fetch('/data')).json(); M = await api('/manifest'); document.title = '原型 · ' + D.system; $('#title').textContent = '原型 · ' + D.system; renderOps(); renderStories(); refresh(); loadTree() }
 function registered(op) { return (op.kind === 'command' ? M.commands : M.queries).includes(op.q) }
 function renderOps() {
   const mods = [...new Set(D.ops.map(o => o.module))]
@@ -250,7 +278,7 @@ $('#form').addEventListener('submit', async (ev) => { ev.preventDefault(); const
 async function refresh() {
   const st = await api('/state'), ev = await api('/events')
   $('#state').innerHTML = Object.keys(st).length ? Object.entries(st).map(([name, rows]) => '<div class="agg-h"><h3>' + esc(name) + '</h3><span class="tags">' + rows.length + ' 条</span></div>' + (rows.length ? records(rows) : '<div class="muted">（空）</div>')).join('') : '<div class="muted">原型没登记仓储</div>'
-  $('#events').innerHTML = ev.length ? ev.slice().reverse().map(e => '<div class="rec"><div class="rh"><b>' + esc(e.name) + '</b><span class="v">' + esc(e.at.slice(11, 19)) + (e.during ? ' · ' + esc(e.during) : '') + '</span></div>' + kv(unwrap(e.payload), ['eventId', 'occurredAt']) + '</div>').join('') : '<div class="muted">还没有事件</div>'
+  $('#events').innerHTML = ev.length ? ev.slice().reverse().map(e => '<div class="rec"><div class="rh"><b>' + esc(e.name) + '</b><span class="v">' + esc(e.at.slice(11, 19)) + (e.during ? ' · ' + esc(e.during) : '') + '</span></div>' + kv(unwrap(e.payload), ['eventId', 'occurredAt']) + '</div>').join('') : '<div class="muted">还没有事件' + (D.ops.some(o => (o.raises || []).length) ? '（跑过会发事件的命令后这里才有）' : '。当前模型里没有任何命令会发事件——这几段的动作不通知别的模块') + '</div>'
   $('#st').textContent = '状态已刷新 ' + new Date().toLocaleTimeString()
 }
 function unwrap(v) { if (Array.isArray(v)) return v.map(unwrap); if (v && typeof v === 'object') { if (v.props && typeof v.props === 'object' && Object.keys(v).every(k => ['props', 'id', 'version', '_version'].includes(k))) { const o = { ...(v.id !== undefined ? { id: v.id } : {}), ...(v.version !== undefined ? { version: v.version } : {}), ...unwrap(v.props) }; return Object.keys(o).length === 1 && 'value' in o ? o.value : o } const o = {}; for (const k in v) o[k] = unwrap(v[k]); return o } return v }
@@ -320,8 +348,21 @@ async function runStep(n) {
 $('#run-all').addEventListener('click', async () => { if (!storyId) return; await api('/reset', {}); stepState = {}; const st = D.stories.find(s => s.slice === storyId); for (const s of st.steps) { if (!(s.walk && s.walk.kind !== 'none' && s.walk.input && resolveName(s.walk).q)) continue; const ok = await runStep(s.n); if (!ok) break } })
 // 故事的切换改成上面那一排按钮（renderStories 里绑的 data-pick）
 $('#reset').addEventListener('click', async () => { await api('/reset', {}); stepState = {}; renderStories(); refresh() })
-$('#rebuild').addEventListener('click', async () => { $('#st').textContent = '编译中…'; const r = await api('/rebuild', {}); $('#st').textContent = r.ok ? '编译完成，原型已重启' : '编译失败'; if (!r.ok) alert(r.output); M = await api('/manifest'); D = await (await fetch('/data')).json(); stepState = {}; renderOps(); renderStories(); refresh() })
-document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); $('#state').hidden = b.dataset.t !== 'state'; $('#events').hidden = b.dataset.t !== 'events' }))
+$('#rebuild').addEventListener('click', async () => { $('#st').textContent = '编译中…'; const r = await api('/rebuild', {}); $('#st').textContent = r.ok ? '编译完成，原型已重启' : '编译失败'; if (!r.ok) alert(r.output); M = await api('/manifest'); D = await (await fetch('/data')).json(); stepState = {}; renderOps(); renderStories(); refresh(); loadTree() })
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); for (const t of ['state', 'events', 'code']) $('#' + t).hidden = b.dataset.t !== t }))
+let TREE = null, openFile = null
+async function loadTree() { TREE = await (await fetch('/tree')).json(); renderTree() }
+function renderTree() {
+  const dir = (d, depth) => '<details' + (depth < 2 ? ' open' : '') + '><summary>' + esc(d.name) + '/<span class="c">' + d.count + ' 个文件</span></summary>' + d.dirs.map(x => dir(x, depth + 1)).join('') + d.files.map(x => '<span class="f' + (openFile === x.path ? ' on' : '') + '" data-f="' + esc(x.path) + '" title="' + esc(x.path) + '">' + esc(x.name) + '<span class="sz">' + (x.size >= 1024 ? (x.size / 1024).toFixed(1) + ' KB' : x.size + ' B') + '</span></span>').join('') + '</details>'
+  $('#tree').innerHTML = TREE ? '<div class="muted" style="margin-bottom:4px">' + esc(TREE.root) + '</div>' + TREE.dirs.map(d => dir(d, 0)).join('') + TREE.files.map(x => '<span class="f" data-f="' + esc(x.path) + '">' + esc(x.name) + '</span>').join('') : '<div class="muted">读不到代码库</div>'
+  document.querySelectorAll('[data-f]').forEach(el => el.addEventListener('click', () => showFile(el.dataset.f)))
+}
+async function showFile(p) {
+  openFile = p; renderTree()
+  const r = await (await fetch('/file?path=' + encodeURIComponent(p))).json()
+  $('#code-view').innerHTML = r.ok ? '<div class="fh"><code>' + esc(p) + '</code><span class="muted">' + r.lines + ' 行</span><span style="flex:1"></span><button id="code-close">收起</button></div><pre>' + esc(r.text) + '</pre>' : '<div class="res bad">' + esc(r.error) + '</div>'
+  const c = document.getElementById('code-close'); if (c) c.addEventListener('click', () => { openFile = null; $('#code-view').innerHTML = ''; renderTree() })
+}
 load()
 </script></body></html>`
 
@@ -336,6 +377,8 @@ async function serve() {
     try {
       if (req.method === 'GET' && url === '/') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(PAGE) }
       if (req.method === 'GET' && url === '/data') return json(200, modelData())
+      if (req.method === 'GET' && url === '/tree') return json(200, codeTree())
+      if (req.method === 'GET' && url === '/file') return json(200, codeFile(new URL(req.url, 'http://x').searchParams.get('path') ?? ''))
       if (req.method === 'POST' && url === '/api/rebuild') {
         const r = build(); const s = r.ok ? await startHost() : { ok: false, log: '' }
         return json(200, { ok: r.ok && s.ok, output: r.output + (s.ok ? '' : '\n' + s.log) })
