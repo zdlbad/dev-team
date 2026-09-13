@@ -1,10 +1,10 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { NotFoundError } from '@shared/building-block/application'
-import { CreateOrderCommand, CreateOrderCommandHandler } from '../../../src/Ordering/application/command-handler.CreateOrderCommandHandler'
-import { InMemoryOrderRepository } from '../../../src/Ordering/adapters/adapter.InMemoryOrderRepository'
-import { StaticCustomerLookup } from '../../../src/Ordering/adapters/adapter.StaticCustomerLookup'
-import { InMemoryEventPublisher } from '../../../src/Ordering/adapters/adapter.InMemoryEventPublisher'
+import { CreateOrderCommand, CreateOrderCommandHandler } from '../../../src/ordering/application/command-handler.CreateOrderCommandHandler'
+import { InMemoryOrderRepository } from '../../../src/ordering/adapters/adapter.InMemoryOrderRepository'
+import { StaticCustomerLookup } from '../../../src/ordering/adapters/adapter.StaticCustomerLookup'
+import { InMemoryEventPublisher } from '../../../src/ordering/adapters/adapter.InMemoryEventPublisher'
 
 // 内存仓储没有公开的行数；测试只看它存了几行
 const rowCount = (repo: InMemoryOrderRepository) => (repo as unknown as { rows: Map<string, unknown> }).rows.size

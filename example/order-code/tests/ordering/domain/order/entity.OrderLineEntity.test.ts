@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { OrderLineEntity } from '../../../../src/Ordering/domain/order/entity.OrderLineEntity'
-import { MoneyValueObject } from '../../../../src/Ordering/domain/order/value-object.MoneyValueObject'
-import { InvalidOrderLineError } from '../../../../src/Ordering/domain/order/error.InvalidOrderLineError'
+import { OrderLineEntity } from '../../../../src/ordering/domain/order/entity.OrderLineEntity'
+import { MoneyValueObject } from '../../../../src/ordering/domain/order/value-object.MoneyValueObject'
+import { InvalidOrderLineError } from '../../../../src/ordering/domain/order/error.InvalidOrderLineError'
 
 const aud = (amount: number) => MoneyValueObject.CREATE(amount, 'AUD')
 

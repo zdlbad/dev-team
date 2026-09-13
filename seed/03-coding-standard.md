@@ -275,14 +275,14 @@ export class CreateOrderCommandHandler {
 
 测试不进模型、不被解码（解码器跳过 `*.test.ts`，且 `tests/` 不在 `src/` 下）。它是代码对自己的承诺，pre-pr 审查的角度 B、D 读它。
 
-**位置与命名**：`tests/` 镜像 `src/`，文件名 = 源文件名 + `.test.ts`。
+**位置与命名**：`tests/` 镜像 `src/`（文件夹同样全小写连字符，02 第三节），文件名 = 源文件名 + `.test.ts`。
 
 ```
-tests/<module>/domain/<aggregate>/aggregate-root.OrderAggregateRoot.test.ts
-tests/<module>/domain/<aggregate>/value-object.MoneyValueObject.test.ts
-tests/<module>/domain/service.PricingService.test.ts
-tests/<module>/application/command-handler.ConfirmOrderCommandHandler.test.ts
-tests/<module>/adapters/adapter.PrismaOrderRepository.test.ts
+tests/<module-folder>/domain/<aggregate>/aggregate-root.OrderAggregateRoot.test.ts
+tests/<module-folder>/domain/<aggregate>/value-object.MoneyValueObject.test.ts
+tests/<module-folder>/domain/service.PricingService.test.ts
+tests/<module-folder>/application/command-handler.ConfirmOrderCommandHandler.test.ts
+tests/<module-folder>/adapters/adapter.PrismaOrderRepository.test.ts
 ```
 
 **框架**：`node:test` + `node:assert/strict`，不引第三方。`tsconfig` 的 `include` 含 `tests/**/*.ts`；运行用 `node $DEV_TEAM/tools/test.js <代码库> [<片段>…]`——一次只跑一小批，不整套跑。

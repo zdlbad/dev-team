@@ -27,7 +27,7 @@ description: pre-pr 审查。代码写完、校验 ② 干净之后，找模型�
 4. **填报告**。每条发现是 `judgments[]` 的一项：
 
    ```jsonc
-   { "target": "src/Ordering/domain/order/aggregate-root.OrderAggregateRoot.ts:61",
+   { "target": "src/ordering/domain/order/aggregate-root.OrderAggregateRoot.ts:61",
      "check": "B 被删的不变量",
      "sides": { "expected": "[R-001] 确认后不能再增删订单行——模型 addLine.throws 有 OrderFailed", "code": "addLine 里 status 的守卫被删了；模型同步删了所以解码比对干净" },
      "failure": "订单已确认后再 POST /orders/{id}/lines → 行被加进去，总额变了，但收款已经按旧总额发生",

@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { NotifySupplierOnOrderConfirmedEventHandler } from '../../../src/Ordering/application/event-handler.NotifySupplierOnOrderConfirmedEventHandler'
-import { OrderConfirmedEvent } from '../../../src/Ordering/domain/order/event.OrderConfirmedEvent'
-import { MoneyValueObject } from '../../../src/Ordering/domain/order/value-object.MoneyValueObject'
-import type { SupplierNotificationInterface } from '../../../src/Ordering/ports/port.SupplierNotificationInterface'
+import { NotifySupplierOnOrderConfirmedEventHandler } from '../../../src/ordering/application/event-handler.NotifySupplierOnOrderConfirmedEventHandler'
+import { OrderConfirmedEvent } from '../../../src/ordering/domain/order/event.OrderConfirmedEvent'
+import { MoneyValueObject } from '../../../src/ordering/domain/order/value-object.MoneyValueObject'
+import type { SupplierNotificationInterface } from '../../../src/ordering/ports/port.SupplierNotificationInterface'
 
 /** 记录每次通知的测试替身 */
 class RecordingSupplierNotification implements SupplierNotificationInterface {

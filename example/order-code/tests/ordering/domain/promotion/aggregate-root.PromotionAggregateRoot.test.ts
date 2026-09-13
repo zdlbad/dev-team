@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { PromotionAggregateRoot } from '../../../../src/Ordering/domain/promotion/aggregate-root.PromotionAggregateRoot'
-import { MoneyValueObject } from '../../../../src/Ordering/domain/order/value-object.MoneyValueObject'
-import { InvalidPromotionError } from '../../../../src/Ordering/domain/promotion/error.InvalidPromotionError'
+import { PromotionAggregateRoot } from '../../../../src/ordering/domain/promotion/aggregate-root.PromotionAggregateRoot'
+import { MoneyValueObject } from '../../../../src/ordering/domain/order/value-object.MoneyValueObject'
+import { InvalidPromotionError } from '../../../../src/ordering/domain/promotion/error.InvalidPromotionError'
 
 const aud = (amount: number) => MoneyValueObject.CREATE(amount, 'AUD')
 const save10 = () => PromotionAggregateRoot.CREATE({ id: 'promo-1', code: 'SAVE10', threshold: aud(15), discountPercent: 10 })

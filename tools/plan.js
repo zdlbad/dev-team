@@ -18,7 +18,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
-const { loadProject, walk, readJson, walkNames, conditionText } = require('./lib/project')
+const { folderOf, codePathOf, modelKeyOf, loadProject, walk, readJson, walkNames, conditionText } = require('./lib/project')
 
 const args = process.argv.slice(2)
 const cmd = args[0]
@@ -28,6 +28,19 @@ const opt = (k) => { const i = args.indexOf(k); return i > 0 ? args[i + 1] : und
 const today = new Date().toISOString().slice(0, 10)
 const now = () => new Date().toISOString()
 
+/** 两条代码路径算不算同一个文件：模块文件夹改成全小写连字符之前（第七十二批）写下的计划里还是 src/Participants/…，
+ *  重算时不能因为大小写不同就把它们的关键逻辑与「已做过」先例丢掉 */
+function sameFile(a, b) {
+  const norm = (f) => (f ? String(f).replace(/^(src|tests)\/([^/]+)/, (_, top, mod) => top + '/' + folderOf(mod)) : null)
+  return norm(a) === norm(b)
+}
+/** 模型里出现过的模块名（给 modelKeyOf 把文件夹名对回真名） */
+function moduleNamesOf(model) {
+  const names = new Set()
+  for (const mf of model.moduleFiles ?? []) names.add(mf.module)
+  for (const el of model.elements ?? []) if (el.module) names.add(el.module)
+  return names
+}
 function die(msg) { console.error(msg); process.exit(2) }
 function writeJson(p, data) { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, JSON.stringify(data, null, 2) + '\n') }
 if (!['build', 'confirm', 'done', 'check'].includes(cmd) || !root || !fs.existsSync(path.join(root, 'project.json')) || !sliceId) {
@@ -199,8 +212,10 @@ function build() {
 
   // ---- 生成步骤 ----
   const steps = []
-  const codeFile = (el) => posix(el.file).replace(/^model\//, 'src/').replace(/\.json$/, '.ts')
-  const testFile = (el) => posix(el.file).replace(/^model\//, 'tests/').replace(/\.json$/, '.test.ts')
+  // 代码文件夹全小写连字符（seed/02 第三节，第七十二批）：model/Participants/… → src/participants/…
+  const codeFile = (el) => codePathOf(posix(el.file), 'src')
+  const testFile = (el) => codePathOf(posix(el.file), 'tests')
+  const dirOf = folderOf
   const add = (layer, file, target, what, traces, needsKeyLogic, extra = {}) => steps.push({ n: steps.length + 1, layer, action: exists(file) ? 'modify' : 'create', file, target, what, traces: [...new Set(traces ?? [])], needsKeyLogic, keyLogic: null, doneAt: null, ...extra })
   const behaviorsText = (el) => el.data.behaviors.map((b) => b.name).join('、')
   const modulesInScope = [...new Set([...aggregates, ...useCases].map((x) => x.split('.')[0]))].sort()
@@ -248,17 +263,17 @@ function build() {
   const portEls = [...ports].sort().map((x) => byQ('port', x)).filter(Boolean)
   const hasWriter = [...useCases].some((u) => { const el = byQ('command-handler', u) ?? byQ('event-handler', u); return el && (el.data.writes ?? []).length })
   if (planKind === 'proto') {
-    for (const r of repoEls) add('adapter', `src/${r.module}/adapters/adapter.InMemory${r.data.aggregate}Repository.ts`, q(r), `内存仓储 InMemory${r.data.aggregate}Repository：实现 ${r.data.name}Interface，另加 all() 给原型页面看状态；save 比对 version`, [], false)
-    for (const p of portEls) add('adapter', `src/${p.module}/adapters/adapter.*${p.data.name}.ts`, q(p), p.data.kind === 'module' ? `直连适配器：实现 ${p.data.name}Interface，内部调 ${p.data.target} 模块的仓储或查询，不含判断` : `原型用的假适配器：实现 ${p.data.name}Interface（${p.data.target}），只记录 / 打印，不含判断`, [], false)
+    for (const r of repoEls) add('adapter', `src/${dirOf(r.module)}/adapters/adapter.InMemory${r.data.aggregate}Repository.ts`, q(r), `内存仓储 InMemory${r.data.aggregate}Repository：实现 ${r.data.name}Interface，另加 all() 给原型页面看状态；save 比对 version`, [], false)
+    for (const p of portEls) add('adapter', `src/${dirOf(p.module)}/adapters/adapter.*${p.data.name}.ts`, q(p), p.data.kind === 'module' ? `直连适配器：实现 ${p.data.name}Interface，内部调 ${p.data.target} 模块的仓储或查询，不含判断` : `原型用的假适配器：实现 ${p.data.name}Interface（${p.data.target}），只记录 / 打印，不含判断`, [], false)
     if (hasWriter) add('adapter', `src/*/adapters/adapter.InMemoryEventPublisher.ts`, 'shared.EventPublisher', '进程内事件总线：按事件名分发给订阅者；原型里顺手记进宿主的事件流水', [], false)
   } else if (planKind === 'shell') {
     const contracts = loadContracts()
     for (const r of repoEls) {
       const t = contracts.tables.find((c) => c.aggregate === `${r.module}.${r.data.aggregate}` || c.aggregate === r.data.aggregate)
       const orm = t?.orm && !isMarker(t.orm) ? t.orm : '*'
-      add('shell', `src/${r.module}/adapters/adapter.${orm}${r.data.aggregate}Repository.ts`, q(r), `生产仓储 ${orm === '*' ? '<技术>' : orm}${r.data.aggregate}Repository：实现 ${r.data.name}Interface；表 ${t?.table && !isMarker(t.table) ? t.table : '（契约未定）'}；save 带乐观锁（where version = ?，成功 +1，不符抛 ConcurrencyError）；不分发事件`, [], true, { contract: t ? posix(t.file) : null })
+      add('shell', `src/${dirOf(r.module)}/adapters/adapter.${orm}${r.data.aggregate}Repository.ts`, q(r), `生产仓储 ${orm === '*' ? '<技术>' : orm}${r.data.aggregate}Repository：实现 ${r.data.name}Interface；表 ${t?.table && !isMarker(t.table) ? t.table : '（契约未定）'}；save 带乐观锁（where version = ?，成功 +1，不符抛 ConcurrencyError）；不分发事件`, [], true, { contract: t ? posix(t.file) : null })
     }
-    for (const p of portEls.filter((x) => x.data.kind === 'external-system')) add('shell', `src/${p.module}/adapters/adapter.*${p.data.name}.ts`, q(p), `生产适配器：实现 ${p.data.name}Interface，对接 ${p.data.target}；只做线格式转换`, [], true)
+    for (const p of portEls.filter((x) => x.data.kind === 'external-system')) add('shell', `src/${dirOf(p.module)}/adapters/adapter.*${p.data.name}.ts`, q(p), `生产适配器：实现 ${p.data.name}Interface，对接 ${p.data.target}；只做线格式转换`, [], true)
     for (const u of [...useCases].sort()) {
       const el = byQ('command-handler', u) ?? byQ('query-handler', u)
       if (!el) continue
@@ -266,11 +281,11 @@ function build() {
       add('shell', null, q(el), `HTTP 入口 ${el.data.name}：${h ? `${h.method ?? '?'} ${h.path ?? '?'}` : '（契约未定）'}；字段名沿用命令 input（${(el.data.input ?? []).map((x) => x.name).join(', ')}）；领域错误按 contracts/errors 映射状态码；文件位置由技术选型定`, el.data.traces, true, { contract: h ? posix(h.file) : null })
     }
   } else {
-    for (const r of repoEls) add('adapter', `src/${r.module}/adapters/adapter.*${r.data.aggregate}Repository.ts`, q(r), `仓储适配器：实现 ${r.data.name}Interface；save 带乐观锁；不分发事件`, [], false)
-    for (const p of portEls) add('adapter', `src/${p.module}/adapters/adapter.*${p.data.name}.ts`, q(p), `适配器：实现 ${p.data.name}Interface（${p.data.target}）；只做线格式转换，不含判断`, [], false)
+    for (const r of repoEls) add('adapter', `src/${dirOf(r.module)}/adapters/adapter.*${r.data.aggregate}Repository.ts`, q(r), `仓储适配器：实现 ${r.data.name}Interface；save 带乐观锁；不分发事件`, [], false)
+    for (const p of portEls) add('adapter', `src/${dirOf(p.module)}/adapters/adapter.*${p.data.name}.ts`, q(p), `适配器：实现 ${p.data.name}Interface（${p.data.target}）；只做线格式转换，不含判断`, [], false)
     if (hasWriter) add('adapter', `src/*/adapters/adapter.*EventPublisher.ts`, 'shared.EventPublisher', '事件发布适配器：实现 EventPublisherInterface', [], false)
   }
-  for (const m of modulesInScope) add('composition', `src/${m}/module.ts`, `${m}.module`, planKind === 'shell' ? `生产装配：换掉内存适配器，顺序 适配器 → 领域服务 → 处理器 → 事件订阅；@module / @responsibility / @trace 不变` : `组合根 build${m}Module：实例化顺序 适配器 → 领域服务 → 处理器 → 事件订阅${planKind === 'proto' ? '；把每个命令 / 查询 / 仓储登记到原型宿主（登记名 = 模块.名字）' : ''}`, [], false)
+  for (const m of modulesInScope) add('composition', `src/${dirOf(m)}/module.ts`, `${m}.module`, planKind === 'shell' ? `生产装配：换掉内存适配器，顺序 适配器 → 领域服务 → 处理器 → 事件订阅；@module / @responsibility / @trace 不变` : `组合根 build${m}Module：实例化顺序 适配器 → 领域服务 → 处理器 → 事件订阅${planKind === 'proto' ? '；把每个命令 / 查询 / 仓储登记到原型宿主（登记名 = 模块.名字）' : ''}`, [], false)
   if (planKind === 'proto') add('proto', 'src/proto/main.ts', 'proto.main', '原型入口：new ProtoHost((h) => { build 各模块 })，serve(PROTO_PORT)', [], false)
 
   // 测试（03 §八：tests/ 镜像 src/，文件名 = 源文件名 + .test.ts）
@@ -285,8 +300,8 @@ function build() {
     for (const sv of [...services].sort().map((s) => byQ('service', s)).filter(Boolean)) add('test', testFile(sv), q(sv), `领域服务测试 ${sv.data.name}：每条 rule 一个用例`, [], false)
     for (const u of [...useCases].sort()) { const el = byQ('command-handler', u) ?? byQ('query-handler', u) ?? byQ('event-handler', u); if (el) add('test', testFile(el), q(el), `用例测试 ${el.data.name}：用内存适配器走 steps 主线 + 每个 when 分流 + 每个 throws`, [], false) }
   } else {
-    for (const r of repoEls) add('test', `tests/${r.module}/adapters/adapter.*${r.data.aggregate}Repository.test.ts`, q(r), `仓储测试：save / find 往返 + 版本冲突抛 ConcurrencyError`, [], false)
-    for (const u of [...useCases].sort()) { const el = byQ('command-handler', u) ?? byQ('query-handler', u); if (el) add('test', `tests/${el.module}/adapters/*${el.data.name}*.test.ts`, q(el), `契约测试 ${el.data.name}：按 contracts/http 的字段发请求，核对响应与错误 → 状态码`, [], false) }
+    for (const r of repoEls) add('test', `tests/${dirOf(r.module)}/adapters/adapter.*${r.data.aggregate}Repository.test.ts`, q(r), `仓储测试：save / find 往返 + 版本冲突抛 ConcurrencyError`, [], false)
+    for (const u of [...useCases].sort()) { const el = byQ('command-handler', u) ?? byQ('query-handler', u); if (el) add('test', `tests/${dirOf(el.module)}/adapters/*${el.data.name}*.test.ts`, q(el), `契约测试 ${el.data.name}：按 contracts/http 的字段发请求，核对响应与错误 → 状态码`, [], false) }
   }
   if (planKind === 'proto' && story) add('input', null, `${sliceId}.story`, `给故事每一步（kind 为 command / query / time 的）walk 填 input：字段名 = 命令 input 的参数名，值来自故事的金额与日期`, [], false)
   // 这一趟动的命令，别的切片的故事里也在走：它那份 walk.input 是照旧模型填的，
@@ -310,7 +325,7 @@ function build() {
   // ---- 合并旧计划的关键逻辑；写出 ----
   const old = fs.existsSync(planPath) ? readJson(planPath) : null
   if (old?.confirmedAt && !args.includes('--force')) die(`计划已于 ${old.confirmedAt} 确认；要重算请加 --force（关键逻辑会尽量保留，确认与完成记录清零）`)
-  if (old) for (const s of steps) { const o = old.steps.find((x) => x.target === s.target && x.layer === s.layer && (x.file ?? null) === (s.file ?? null)); if (o?.keyLogic) s.keyLogic = o.keyLogic }
+  if (old) for (const s of steps) { const o = old.steps.find((x) => x.target === s.target && x.layer === s.layer && sameFile(x.file, s.file)); if (o?.keyLogic) s.keyLogic = o.keyLogic }
   const plan = { slice: sliceId, kind: planKind, role: roleName, builtAt: now(), codebase: posix(path.relative(root, codebase)), scope: { modules: modulesInScope, aggregates: ordered, useCases: [...useCases].sort() }, steps, already, modelFingerprint: modelFingerprint(), confirmedAt: null, log: [...(old?.log ?? []), `${today} ${old ? '重算' : '生成'}：${steps.length} 步（${planKind}）${already.length ? `；另有 ${already.length} 项上一条切片已经做过，没列进步骤` : ''}`] }
   const carried = already.length ? `；另有 ${already.length} 项上一条切片已经做过、代码还在、跟模型仍然一致，没列进步骤` : ''
   if (unrecorded?.length) {
@@ -387,16 +402,14 @@ function pickOutAlreadyDone(steps, model) {
   // 文件名里还带 *），返回 null：那种只看「做过 + 文件还在」，不看跟模型差不差。
   const modelKey = (f) => {
     if (!f) return null
-    let key = null
-    if (f.startsWith("src/") && f.endsWith(".ts")) key = f.slice(4, -3) + ".json"
-    else if (f.startsWith("tests/") && f.endsWith(".test.ts")) key = f.slice(6, -8) + ".json"
+    const key = modelKeyOf(f, moduleNamesOf(model))
     if (!key || key.includes("*")) return null
     return fs.existsSync(path.join(root, "model", key)) ? key : null
   }
   const settle = (s) => {
     // 故事输入不是代码文件：别的切片当初填过，不等于它按现在的模型还填得对，一律不算做过
     if (s.layer === 'input') return null
-    const prior = priors.find((x) => x.target === s.target && (x.file ?? null) === (s.file ?? null))
+    const prior = priors.find((x) => x.target === s.target && sameFile(x.file, s.file))
     if (!prior) return null
     if (!prior.noFile && !exists(s.file)) return null
     const key = modelKey(s.file)
