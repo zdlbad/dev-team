@@ -104,7 +104,7 @@ model/
 ## 三、代码目录
 
 ```
-src/<module>/
+src/<module-folder>/
   domain/
     <aggregate>/
       aggregate-root.OrderAggregateRoot.ts
@@ -126,6 +126,8 @@ src/<module>/
 ```
 
 应用层不分子目录，靠文件前缀区分种类。
+
+**文件夹名全小写、多词用连字符**（2026-09-13 第七十二批）：模块 `Participants` 的代码在 `src/participants/`，模块 `ServiceAgreements` 在 `src/service-agreements/`；聚合文件夹同理（`domain/order/`、`domain/service-agreement/`）；测试镜像 `tests/<module-folder>/`。模块名本身（`modules.json`、`module.json`、模型文件里的 `module` 字段、类名、模型目录 `model/<Module>/`）仍是 PascalCase，不改。两者靠换算来回对应，所以模块名只许「每个词首字母大写、其余小写」，不许 `HCPBilling` 这种整段大写的缩写（会换不回来）；解码器先看组合根 `module.ts` 里 `build<Module>Module` 的真名，没有才按词换算。
 
 ---
 

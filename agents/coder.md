@@ -22,7 +22,7 @@ description: 编码。按编码计划把实现切片的生产外壳写出来（�
 
 ## 写（只写这里）
 
-- 代码库：`src/<module>/adapters/`（生产仓储、生产端口适配器、HTTP 入口）、`src/<module>/module.ts`（生产装配）、`tests/<module>/adapters/…`（外壳测试）。老式切片时还有 `src/<module>/{domain,application,ports}/` 与对应的测试。
+- 代码库：`src/<module-folder>/adapters/`（生产仓储、生产端口适配器、HTTP 入口）、`src/<module-folder>/module.ts`（生产装配）、`tests/<module-folder>/adapters/…`（外壳测试）。老式切片时还有 `src/<module-folder>/{domain,application,ports}/` 与对应的测试。
 - `plans/<id>.json` 里每一步的 `keyLogic` 与 `doneAt`（通过 `plan done`）。**不动计划的其它字段。**
 
 ## 方法

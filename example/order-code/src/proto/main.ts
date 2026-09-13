@@ -1,12 +1,12 @@
 import { ProtoHost } from '@shared/building-block/proto'
-import { buildOrderingModule } from '../Ordering/module'
-import { buildCustomersModule } from '../Customers/module'
-import { AddOrderLineCommand } from '../Ordering/application/command-handler.AddOrderLineCommandHandler'
-import { ConfirmOrderCommand } from '../Ordering/application/command-handler.ConfirmOrderCommandHandler'
-import { CreateOrderCommand } from '../Ordering/application/command-handler.CreateOrderCommandHandler'
-import { GetOrderQuery } from '../Ordering/application/query-handler.GetOrderQueryHandler'
-import { RenameCustomerCommand } from '../Customers/application/command-handler.RenameCustomerCommandHandler'
-import { InMemoryEventPublisher } from '../Ordering/adapters/adapter.InMemoryEventPublisher'
+import { buildOrderingModule } from '../ordering/module'
+import { buildCustomersModule } from '../customers/module'
+import { AddOrderLineCommand } from '../ordering/application/command-handler.AddOrderLineCommandHandler'
+import { ConfirmOrderCommand } from '../ordering/application/command-handler.ConfirmOrderCommandHandler'
+import { CreateOrderCommand } from '../ordering/application/command-handler.CreateOrderCommandHandler'
+import { GetOrderQuery } from '../ordering/application/query-handler.GetOrderQueryHandler'
+import { RenameCustomerCommand } from '../customers/application/command-handler.RenameCustomerCommandHandler'
+import { InMemoryEventPublisher } from '../ordering/adapters/adapter.InMemoryEventPublisher'
 
 /**
  * 原型入口（示例）。组合根不带宿主参数时，在这里把处理器与仓储登记进去。

@@ -9,8 +9,8 @@ InMemoryEventPublisher   进程内事件总线，顺手把事件记进宿主的�
 
 ## 原型角色要写的三样东西
 
-1. **内存仓储适配器**（`src/<Module>/adapters/adapter.InMemory<Aggregate>Repository.ts`）：实现仓储接口，另加一个 `all(): unknown[]`，返回全部行的纯数据（`{ id, version, ...props }`），原型页面用它显示聚合的状态。
-2. **组合根**（`src/<Module>/module.ts`）：`build<Module>Module(host, deps)`，实例化适配器 → 领域服务 → 处理器 → 事件订阅，并把每个处理器与仓储登记到宿主：
+1. **内存仓储适配器**（`src/<module-folder>/adapters/adapter.InMemory<Aggregate>Repository.ts`）：实现仓储接口，另加一个 `all(): unknown[]`，返回全部行的纯数据（`{ id, version, ...props }`），原型页面用它显示聚合的状态。
+2. **组合根**（`src/<module-folder>/module.ts`）：`build<Module>Module(host, deps)`，实例化适配器 → 领域服务 → 处理器 → 事件订阅，并把每个处理器与仓储登记到宿主：
    - `host.command('<Module>.<CommandName>', (input) => new XxxCommand(…), handler)`
    - `host.query('<Module>.<QueryName>', (input) => new XxxQuery(…), handler)`
    - `host.repository('<Module>.<Aggregate>', repo)`

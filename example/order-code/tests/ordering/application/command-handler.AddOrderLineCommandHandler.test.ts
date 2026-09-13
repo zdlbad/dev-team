@@ -1,12 +1,12 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { AddOrderLineCommand, AddOrderLineCommandHandler } from '../../../src/Ordering/application/command-handler.AddOrderLineCommandHandler'
-import { InMemoryOrderRepository } from '../../../src/Ordering/adapters/adapter.InMemoryOrderRepository'
-import { InMemoryEventPublisher } from '../../../src/Ordering/adapters/adapter.InMemoryEventPublisher'
-import { OrderAggregateRoot } from '../../../src/Ordering/domain/order/aggregate-root.OrderAggregateRoot'
-import { InvalidOrderLineError } from '../../../src/Ordering/domain/order/error.InvalidOrderLineError'
-import { OrderFailedError } from '../../../src/Ordering/domain/order/error.OrderFailedError'
-import { MoneyValueObject } from '../../../src/Ordering/domain/order/value-object.MoneyValueObject'
+import { AddOrderLineCommand, AddOrderLineCommandHandler } from '../../../src/ordering/application/command-handler.AddOrderLineCommandHandler'
+import { InMemoryOrderRepository } from '../../../src/ordering/adapters/adapter.InMemoryOrderRepository'
+import { InMemoryEventPublisher } from '../../../src/ordering/adapters/adapter.InMemoryEventPublisher'
+import { OrderAggregateRoot } from '../../../src/ordering/domain/order/aggregate-root.OrderAggregateRoot'
+import { InvalidOrderLineError } from '../../../src/ordering/domain/order/error.InvalidOrderLineError'
+import { OrderFailedError } from '../../../src/ordering/domain/order/error.OrderFailedError'
+import { MoneyValueObject } from '../../../src/ordering/domain/order/value-object.MoneyValueObject'
 
 async function setup(status: 'draft' | 'confirmed' = 'draft') {
   const orders = new InMemoryOrderRepository()

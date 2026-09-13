@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { PricingService } from '../../../src/Ordering/domain/service.PricingService'
-import { OrderAggregateRoot } from '../../../src/Ordering/domain/order/aggregate-root.OrderAggregateRoot'
-import { PromotionAggregateRoot } from '../../../src/Ordering/domain/promotion/aggregate-root.PromotionAggregateRoot'
-import { MoneyValueObject } from '../../../src/Ordering/domain/order/value-object.MoneyValueObject'
+import { PricingService } from '../../../src/ordering/domain/service.PricingService'
+import { OrderAggregateRoot } from '../../../src/ordering/domain/order/aggregate-root.OrderAggregateRoot'
+import { PromotionAggregateRoot } from '../../../src/ordering/domain/promotion/aggregate-root.PromotionAggregateRoot'
+import { MoneyValueObject } from '../../../src/ordering/domain/order/value-object.MoneyValueObject'
 
 const aud = (amount: number) => MoneyValueObject.CREATE(amount, 'AUD')
 function orderOf20(): OrderAggregateRoot {

@@ -63,8 +63,20 @@ const registry = new Map()
 /** 每个模块：{ name, dir, aggregates: Map<folder, {root, members: []}> } */
 const modules = new Map()
 
-for (const modName of fs.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== 'shared' && e.name !== 'proto').map((e) => e.name)) {
-  const modDir = path.join(srcDir, modName)
+/** 文件夹名 → 模块名（seed/02 第三节：文件夹全小写连字符，模块名 PascalCase）。
+ *  组合根 module.ts 里 export function build<Module>Module 写的是真名，先信它；没有就按词换算（service-agreements → ServiceAgreements） */
+function moduleNameOfFolder(folder, modDir) {
+  const modFile = path.join(modDir, 'module.ts')
+  if (fs.existsSync(modFile)) {
+    const m = fs.readFileSync(modFile, 'utf8').match(/export\s+function\s+build([A-Za-z0-9]+)Module\s*\(/)
+    if (m) return m[1]
+  }
+  return folder.split(/[-_]/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('')
+}
+for (const folder of fs.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== 'shared' && e.name !== 'proto').map((e) => e.name)) {
+  const modDir = path.join(srcDir, folder)
+  const modName = moduleNameOfFolder(folder, modDir)
+  if (folder !== folder.toLowerCase()) issue(modDir, `模块文件夹应全小写、多词连字符（第七十二批）：${folder} → ${folder.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`)
   modules.set(modName, { name: modName, dir: modDir, aggregates: new Map() })
   for (const file of walk(modDir)) {
     const relPath = path.relative(modDir, file).replaceAll('\\', '/')

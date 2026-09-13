@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { MoneyValueObject } from '../../../../src/Ordering/domain/order/value-object.MoneyValueObject'
-import { InvalidMoneyError } from '../../../../src/Ordering/domain/order/error.InvalidMoneyError'
-import { CurrencyMismatchError } from '../../../../src/Ordering/domain/order/error.CurrencyMismatchError'
+import { MoneyValueObject } from '../../../../src/ordering/domain/order/value-object.MoneyValueObject'
+import { InvalidMoneyError } from '../../../../src/ordering/domain/order/error.InvalidMoneyError'
+import { CurrencyMismatchError } from '../../../../src/ordering/domain/order/error.CurrencyMismatchError'
 
 describe('Money', () => {
   it('[R-004] 金额不为负', () => {

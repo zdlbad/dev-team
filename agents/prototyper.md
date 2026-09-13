@@ -21,7 +21,7 @@ description: 原型。按编码计划把一条故事的领域代码与应用层�
 
 ## 写（只写这里）
 
-- 代码库：`src/<Module>/{domain,application,ports}/`（按 03，可解码）、`src/<Module>/adapters/adapter.InMemory*.ts`（内存仓储，多一个 `all()`）、`src/<Module>/module.ts`（组合根，登记到宿主）、`src/proto/main.ts`（入口）、`tests/<Module>/…`（领域与用例测试，03 第八节）
+- 代码库：`src/<module-folder>/{domain,application,ports}/`（按 03，可解码；文件夹全小写连字符，`Participants` → `src/participants/`，02 第三节）、`src/<module-folder>/adapters/adapter.InMemory*.ts`（内存仓储，多一个 `all()`）、`src/<module-folder>/module.ts`（组合根，登记到宿主）、`src/proto/main.ts`（入口）、`tests/<Module>/…`（领域与用例测试，03 第八节）
 - 故事文件里每一步 `walk` 的 `input`：这一步在原型上跑时要给的输入（字段名 = 命令 `input` 的参数名，值来自故事的金额与日期）。**只写 `input`，不动 walk 的其它字段，不动步骤、题目、人物、缺口。**
 - `plans/<id>.json` 里每一步的 `keyLogic` 与 `doneAt`（通过 `plan done`）。不动计划的其它字段。
 
