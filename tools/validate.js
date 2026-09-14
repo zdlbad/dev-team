@@ -309,8 +309,8 @@ function ruleLandings(id) {
   const out = []
   for (const el of domainObjects) {
     const objLabel = { 'aggregate-root': '聚合根', entity: '实体', 'value-object': '值对象' }[el.kind]
-    for (const inv of el.data.aggregateInvariants ?? []) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, label: `聚合 ${el.data.name} 的不变量`, text: `聚合 ${el.data.name} 的不变量：${inv.text}${carriesOf(inv, id)}` })
-    for (const inv of el.data.invariants) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, label: `${el.data.name} 的不变量`, text: `${objLabel} ${el.data.name} 的不变量：${inv.text}${carriesOf(inv, id)}${throwsText(inv.throws ?? [])}` })
+    for (const inv of el.data.aggregateInvariants ?? []) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, label: `聚合 ${el.data.name} 的规则`, text: `聚合 ${el.data.name} 的规则：${inv.text}${carriesOf(inv, id)}` })
+    for (const inv of el.data.invariants) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, label: `${el.data.name} 的规则`, text: `${objLabel} ${el.data.name} 的规则：${inv.text}${carriesOf(inv, id)}${throwsText(inv.throws ?? [])}` })
     for (const b of el.data.behaviors) if (b.traces.includes(id)) out.push({ kind: b.throws.length ? 'behavior-guard' : 'behavior', el, label: `${el.data.name}.${b.name}`, text: `${el.data.name}.${sig(b.name, b.input, b.output)}　${rulesText(b.rules, id)}${raisesText(b.raises)}${throwsText(b.throws)}` })
 
     // 字段也是模型的落点：聚合上记着什么、每一栏干什么用，跟不变量一样在承载业务

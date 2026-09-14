@@ -330,20 +330,42 @@ function renderStories() {
   }).join('') : ''
   document.querySelectorAll('[data-run]').forEach(b => b.addEventListener('click', () => runStep(Number(b.dataset.run))))
 }
+// 输入里的引用：值写成 "@<模块>.<聚合>" 或 "@<模块>.<聚合>#<第几条>"，后面可以跟一句人话（"@Participants.Document 第 2 步存下的那份通知书"）。
+// 跑到这一步时从当前状态把那条记录的真 id 带过来，不带就不跑——占位文字被原样送进命令、拨款照样存成的那一幕（2026-09-14 s-002 第 3 步）不能再有。
+const REF = /^@([A-Za-z][A-Za-z0-9]*\\.[A-Za-z][A-Za-z0-9]*)(?:#(\\d+|last))?(?:\\s+([\\s\\S]*))?$/
+function refOf(v) { if (typeof v !== 'string') return null; const m = v.trim().match(REF); return m ? { agg: m[1], pick: m[2] || 'last', note: (m[3] || '').trim() } : null }
+async function resolveInput(input) {
+  const st = await api('/state'), out = {}, carried = [], missing = []
+  for (const [k, v] of Object.entries(input || {})) {
+    const r = refOf(v)
+    if (!r) { out[k] = v; continue }
+    const rows = unwrap(st[r.agg] || []), row = r.pick === 'last' ? rows[rows.length - 1] : rows[Number(r.pick) - 1]
+    if (!row || row.id === undefined) { missing.push(esc(k) + ' 要带 ' + esc(r.agg) + (r.pick === 'last' ? ' 最新一条' : ' 第 ' + esc(r.pick) + ' 条') + ' 的 id' + (r.note ? '（' + esc(r.note) + '）' : '') + '，可现在' + (rows.length ? '只有 ' + rows.length + ' 条' : '一条都没有') + '：先走存它的那一步'); continue }
+    out[k] = row.id
+    carried.push(esc(k) + ' ← ' + esc(r.agg) + (r.pick === 'last' ? ' 最新一条' : ' 第 ' + esc(r.pick) + ' 条') + ' <code>' + esc(String(row.id).slice(0, 8)) + '…</code>' + (r.note ? ' <span class="muted">' + esc(r.note) + '</span>' : ''))
+  }
+  return { input: out, carried, missing }
+}
 async function runStep(n) {
   const st = D.stories.find(s => s.slice === storyId), s = st.steps.find(x => x.n === n), r = resolveName(s.walk)
+  const rs = await resolveInput(s.walk.input)
+  if (rs.missing.length) {
+    stepState[n] = { cls: 'bad', html: '<div class="res bad">没跑：带不出上一步的 id<div style="margin-top:4px">' + rs.missing.join('<br>') + '</div></div>' }
+    renderStories(); return false
+  }
   let res = null, last = r.q
   const parts = []
+  if (rs.carried.length) parts.push('<div class="muted">自动带过来的 id：' + rs.carried.join('；') + '</div>')
   for (const q of r.ops) {
     last = q
-    res = await api('/run', { kind: r.kind, name: q, input: s.walk.input })
+    res = await api('/run', { kind: r.kind, name: q, input: rs.input })
     const tmp = document.createElement('div'); showResult(tmp, res)
     parts.push((r.ops.length > 1 ? '<div class="muted">' + esc(q) + '</div>' : '') + tmp.innerHTML)
     if (!res.ok) break
   }
   const ok = !!(res && res.ok)
   stepState[n] = { cls: ok ? 'ok' : 'bad', html: parts.join('') }
-  sel = last; renderOps(); renderForm(s.walk.input); showResult($('#res'), res)
+  sel = last; renderOps(); renderForm(rs.input); showResult($('#res'), res)
   renderStories(); await refresh()
   return ok
 }

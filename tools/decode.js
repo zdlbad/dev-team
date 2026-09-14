@@ -775,7 +775,7 @@ for (const mod of modules.values()) {
       if (!cls) continue
       const tags = docTags(cls)
       checkBase(cls, 'DomainError', e)
-      emit(relOut, { name: e.modelName, aggregate: e.aggregate, condition: tagValues(tags, 'condition').join(' '), traces: traceTags(tags) })
+      emit(relOut, { name: e.modelName, aggregate: e.aggregate, condition: tagValues(tags, 'condition').join('；') /* 多条 @condition 用「；」拼，与 diff-model 把模型侧数组拼平用的是同一个符号；用空格拼过，每个多条件的错误都会被提成一条「文字差异」判断（2026-09-14 s-002） */, traces: traceTags(tags) })
     } else if (e.prefix === 'repository') {
       const itf = interfacesIn(sf).find((i) => i.name.text === e.className)
       if (!itf) {
