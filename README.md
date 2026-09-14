@@ -6,8 +6,8 @@
 
 ```
 SKILL.md           开发指挥（主持角色：子命令表、run 的分派、节奏、裁定分流）
-seed/              规范（决策文档，入口 seed/README.md；00–07）
-agents/            十个角色的指令（开发指挥启动子 agent 时使用）
+seed/              核心思想（三份：原则、切片、业务分层；改底层思路先改它，角色运行时不读）
+agents/            角色指令与规范，按关注点分 common / business / model / code / casual；tools/brief.js 装配后交给子 agent
 schema/            模型 / 切片 / 故事 / 计划 / 契约的 JSON schema（2020-12），每种文件一份 + common
 building-block/    src/shared/building-block 的 TypeScript 源码（含原型宿主 proto/）
 template/project/  新项目模板
@@ -17,7 +17,7 @@ tools/             脚本（全部 Node）
 
 ## 一段故事怎么走
 
-业务不一次抽干：`raw/` 是暗的，沿故事线 → 段落逐段点亮（`seed/07-business-layers.md`）。一次动手多大见 `seed/01-phases-and-slices.md`「开发范围怎么切」。
+业务不一次抽干：`raw/` 是暗的，沿故事线 → 段落逐段点亮（`seed/layers.md`）。一次动手多大见 `seed/slices.md`「开发范围怎么切」。
 
 ```
 开发指挥定故事线、切段落、排先后 → 讲解写本段故事（每步标需要哪条业务）
@@ -44,7 +44,7 @@ tools/             脚本（全部 Node）
 
 ## 三个让 agent 少出错的位置
 
-- **规范**：`seed/03` 管能不能解码（硬），`seed/06` 管读着顺不顺（软）。
+- **规范**：`agents/code/coding-standard.md` 管能不能解码（硬），`agents/code/style.md` 管读着顺不顺（软）。
 - **上下文**：故事（人物、日期、金额）+ 模型 + 裁定 + 五问问出来的公司事实。
 - **接口**：领域层的接口在模型里已经钉死（入参、返回、规则、事件、错误、步骤）；外壳的接口由契约钉死。写码前先有**计划**，人能看链路对不对，写完机器核对顺序与文件。
 
@@ -112,7 +112,7 @@ node tools/board.js example/order-sample && node tools/render.js example/order-s
 | 切片驱动 | 完成（`slice.js`：new / next / advance / apply / log；`story.js` 含五问补出语句的登记与确认） |
 | 编码计划 | 完成（`plan.js`：从模型算链路、人确认、记完成、核对顺序与文件） |
 | 契约 | 完成（`contract.js`：骨架、核对字段名与模型一致、人确认；两级标记） |
-| 测试 | 完成（03 第八节；`test.js` 编译 + `node --test`；样例 31 个用例——它们抓出了内存仓储 `structuredClone` 丢原型的 bug） |
+| 测试 | 完成（编码规范「测试」；`test.js` 编译 + `node --test`；样例 31 个用例——它们抓出了内存仓储 `structuredClone` 丢原型的 bug） |
 | pre-pr 审查 | 完成（`prepr.js`：骨架与形状核对；七个角度两次跑） |
 | 状态看板 | 完成（`board.js` 算状态；`scene.js` 现场看板，开发指挥写、页面每 2 秒自取） |
 | 可视化 | 完成（`render.js`） |

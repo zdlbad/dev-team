@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 状态看板。依据 seed/05-roles.md：从 slices/、reports/、decisions[] 算出每个切片走到哪、卡在哪。
+ * 状态看板。依据 SKILL.md「开发指挥」：从 slices/、reports/、decisions[] 算出每个切片走到哪、卡在哪。
  *
  * 用法：node tools/board.js <项目目录> [--md]   带 --md 时同时写 reports/board.md
  * 只读，不写任何工件（board.md 除外，它和报告一样是临时物）。

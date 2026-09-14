@@ -27,8 +27,8 @@
  *
  * 每次写都记下机器名；换了机器还没 git pull 就动手，看板和 slice next 都会提醒。
  *
- * 状态存 reports/_scene.json（随 git 走——reports/ 里的 json 都进 git，md 与 html 是重算出来的才忽略；开发指挥的写入目标之一，见 seed/01 的写入权表）。
- * 角色名用 seed/05 的叫法：人、开发指挥、业务分析、讲解、文职、模型师、原型、接口、编码、模型校验、pre-pr 审查、解读。
+ * 状态存 reports/_scene.json（随 git 走——reports/ 里的 json 都进 git，md 与 html 是重算出来的才忽略；开发指挥的写入目标之一，见 agents/common/project-layout.md 的写入权表）。
+ * 角色名用 agents/README.md 的叫法：人、开发指挥、业务分析、讲解、文职、模型师、原型、接口、编码、模型校验、pre-pr 审查、解读。
  */
 const fs = require('fs')
 const path = require('path')
@@ -146,7 +146,7 @@ if (cmd === 'set') {
   const step = opt('--step', s.step)
   const phase = opt('--phase', s.phase)
   const note = opt('--note', null)
-  if (who && !ROLES.includes(who)) die(`--who 要用 seed/05 的角色名：${ROLES.join('、')}`)
+  if (who && !ROLES.includes(who)) die(`--who 要用 agents/README.md 的角色名：${ROLES.join('、')}`)
   if (phase && !PHASES.includes(phase)) die(`--phase 只有：${PHASES.join('、')}`)
   if (!step) die('--step 是必填的：这一步在做什么，一句人话')
   const now = new Date().toISOString()
@@ -178,7 +178,7 @@ if (cmd === 'progress') {
   if (!text) die('用法：scene progress <项目> "<一句：做了什么，具体到名字、从什么到什么>" [--who 角色]')
   const s = readScene()
   const who = opt('--who', s.who)
-  if (who && !ROLES.includes(who)) die(`--who 要用 seed/05 的角色名：${ROLES.join('、')}`)
+  if (who && !ROLES.includes(who)) die(`--who 要用 agents/README.md 的角色名：${ROLES.join('、')}`)
   const now = new Date().toISOString()
   const entry = { ts: now, who, text, machine: ME }
   writeScene({
@@ -237,7 +237,7 @@ if (cmd === 'ask') {
   if (!lean) missing.push('--lean 你偏向哪个')
   if (!confidence) missing.push('--confidence 信心 高|中|低')
   if (missing.length) die('发问要说全五件事，缺了：\n  ' + missing.join('\n  ') + '\n用法：scene ask <项目> "<问题>" --who <角色> --doing "…" --context "…" --options "甲：…|乙：…" --lean "甲" --confidence 中')
-  if (who && !ROLES.includes(who)) die(`--who 要用 seed/05 的角色名：${ROLES.join('、')}`)
+  if (who && !ROLES.includes(who)) die(`--who 要用 agents/README.md 的角色名：${ROLES.join('、')}`)
   if (!CONFIDENCE.includes(confidence)) die(`--confidence 只有：${CONFIDENCE.join('、')}`)
   const options = optionsRaw.split('|').map((x) => x.trim()).filter(Boolean)
   if (options.length < 2 || options.length > 4) die(`--options 要两到四个（用 | 隔开），现在是 ${options.length} 个`)

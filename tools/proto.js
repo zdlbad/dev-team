@@ -8,7 +8,7 @@
  *   node tools/proto.js check <项目目录> --code <代码库> [--slice <切片id>]
  *       只编译 + 启动 + 对照模型：模型里的命令 / 查询 / 聚合有没有都登记进原型；退出码非 0 表示缺
  *
- * 依赖：代码库按 seed/03 写，原型入口 src/proto/main.ts 用 @shared/building-block/proto 的 ProtoHost。
+ * 依赖：代码库按 agents/code/coding-standard.md 写，原型入口 src/proto/main.ts 用 @shared/building-block/proto 的 ProtoHost。
  */
 const fs = require('node:fs')
 const path = require('node:path')
