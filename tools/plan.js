@@ -217,24 +217,24 @@ function build(dry = false) {
 
   // ---- 生成步骤 ----
   const steps = []
-  // 代码文件夹全小写连字符（seed/02 第三节，第七十二批）：model/Participants/… → src/participants/…
+  // 代码文件夹全小写连字符（agents/common/project-layout.md「名字的两套写法」，第七十二批）：model/Participants/… → src/participants/…
   const codeFile = (el) => codePathOf(posix(el.file), 'src')
   const testFile = (el) => codePathOf(posix(el.file), 'tests')
   const dirOf = folderOf
   const add = (layer, file, target, what, traces, needsKeyLogic, extra = {}) => steps.push({ n: steps.length + 1, layer, action: exists(file) ? 'modify' : 'create', file, target, what, traces: [...new Set(traces ?? [])], needsKeyLogic, keyLogic: null, doneAt: null, ...extra })
   const behaviorsText = (el) => el.data.behaviors.map((b) => b.name).join('、')
   const modulesInScope = [...new Set([...aggregates, ...useCases].map((x) => x.split('.')[0]))].sort()
-  // 一个段落最多两个模块（seed/01-phases-and-slices.md「开发范围怎么切」）。三个就是把两段并成了一段，算出来的单子人消化不掉。
+  // 一个段落最多两个模块（seed/slices.md「开发范围怎么切」）。三个就是把两段并成了一段，算出来的单子人消化不掉。
   // 实现切片本来就把几段并在一起上生产外壳，不受这一条限制
   if (slice.kind !== 'implementation' && slice.kind !== 'refactor' && modulesInScope.length > 2 && !args.includes('--允许超界')) {
     const say = [
       "这一段碰了 " + modulesInScope.length + " 个模块（" + modulesInScope.join("、") + "），超过一个段落该有的大小。",
       "一个故事段落是两个模块的一次交互（有时就是一个模块自己），单一业务意图；三个模块说明这里其实是两段并成了一段。",
-      "先把切片拆开；确实要一次算完的话加 --允许超界。见 seed/01-phases-and-slices.md「开发范围怎么切」",
+      "先把切片拆开；确实要一次算完的话加 --允许超界。见 seed/slices.md「开发范围怎么切」",
     ]
     die(say.join(String.fromCharCode(10)))
   }
-  if ((slice.kind === 'story' || story) && !slice.intent) console.error("[计划] 这条切片没写「单一业务意图」（切片记录的 intent）：写不出一句话就是不止一个意图，那要再切。见 seed/01-phases-and-slices.md「开发范围怎么切」")
+  if ((slice.kind === 'story' || story) && !slice.intent) console.error("[计划] 这条切片没写「单一业务意图」（切片记录的 intent）：写不出一句话就是不止一个意图，那要再切。见 seed/slices.md「开发范围怎么切」")
 
   if (planKind !== 'shell') {
     if (!hasBuildingBlock()) add('building-block', 'src/shared/building-block/domain/AggregateRoot.ts', 'shared.building-block', '首次：把 $DEV_TEAM/building-block/ 拷入 src/shared/building-block/（domain / application / ports / proto）', [], false)
@@ -551,7 +551,7 @@ function loadContracts() {
 }
 
 // ---------- 给人看的 markdown ----------
-const KEY_LOGIC_MAX = 600 // 一步关键逻辑的字数提醒线（seed/05「节奏」）：超了只提示「看看有没有啰嗦」，不拒收——完整、直白的话不为凑字数压缩（2026-09-13 项目所有者）
+const KEY_LOGIC_MAX = 600 // 一步关键逻辑的字数提醒线（SKILL.md「节奏」）：超了只提示「看看有没有啰嗦」，不拒收——完整、直白的话不为凑字数压缩（2026-09-13 项目所有者）
 function cellKeyLogic(s) {
   if (!s.keyLogic) return s.needsKeyLogic ? '**待补**' : '—'
   if (!s.keyLogic.includes('\n')) return s.keyLogic.replaceAll('|', '\\|')

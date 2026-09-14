@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 切片驱动。依据 seed/01-phases-and-slices.md 的切片周期与 seed/05-roles.md 的「路由」职责。
+ * 切片驱动。依据 seed/slices.md 的四种切片与 SKILL.md「段落切片」的周期。
  *
  * 用法：
  *   node tools/slice.js new <项目目录> <切片id> <标题> [--kind initial|increment] [--codebase <相对路径>] [--story] [--implements s-002,s-003]
@@ -100,7 +100,7 @@ if (cmd === 'new') {
     // 默认值只在项目第一条切片时才对，后来的切片照抄它就指向了一个不存在的目录（s-003 就这么错过一次）
     codebase: opt('--codebase') ?? lastCodebase() ?? '../' + path.basename(root) + '-code',
     scope: { modules: list('--modules'), aggregates: list('--aggregates'), useCases: list('--use-cases') },
-    // 一个故事段落只许有一个业务意图，写不出一句话就是不止一个（seed/01-phases-and-slices.md「开发范围怎么切」）
+    // 一个故事段落只许有一个业务意图，写不出一句话就是不止一个（seed/slices.md「开发范围怎么切」）
     ...(opt('--意图') ? { intent: opt('--意图') } : {}),
     ...(opt('--业务故事') ? { businessStory: opt('--业务故事') } : {}),
     traces: list('--traces'),
@@ -317,7 +317,7 @@ function computeNext(slice) {
     const mnP = path.join(root, 'reports', '_model-notes.json')
     const mnOpen = fs.existsSync(mnP) ? Object.entries(readJson(mnP)).flatMap(([f, ns]) => ns.filter((n) => !n.handled).map((n) => ({ f, ...n }))) : []
     if (mnOpen.length) return step('路由', `读人对模型的 ${mnOpen.length} 条意见（reports/_model-notes.json）：逐条回应；要改的派模型师，改完把 handled 置真`, null, '人在模型图上留了意见，先回应再推进')
-    if (st.model.status === 'pending') return step('模型师', story ? (story.basedOn ? `只建这一版新增那段所需的最少模型（上一版 ${story.basedOn} 的模型已在）；给每一步填 walk——老步骤也要重走，保证老路没被新东西弄断；做过的选择列进 choices。人还没走故事，他走时质疑或裁定不同再回流；交稿前按第八十四批与 seed/02「规则句怎么写」自检措辞` : '按故事建走通它所需的最少模型；写完给每一步填 walk，把做过的选择列进 choices（每条带 current 与 recommended）。人还没走故事，他走时质疑或裁定不同再回流；交稿前按第八十四批与 seed/02「规则句怎么写」自检措辞') : '在范围内建模 / 改模', `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, story ? '模型建在人走故事之前，人一坐看全（第八十九批）' : '范围已定，模型阶段尚未开始')
+    if (st.model.status === 'pending') return step('模型师', story ? (story.basedOn ? `只建这一版新增那段所需的最少模型（上一版 ${story.basedOn} 的模型已在）；给每一步填 walk——老步骤也要重走，保证老路没被新东西弄断；做过的选择列进 choices。人还没走故事，他走时质疑或裁定不同再回流；交稿前按 agents/common/wording.md 自检措辞` : '按故事建走通它所需的最少模型；写完给每一步填 walk，把做过的选择列进 choices（每条带 current 与 recommended）。人还没走故事，他走时质疑或裁定不同再回流；交稿前按 agents/common/wording.md 自检措辞') : '在范围内建模 / 改模', `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, story ? '模型建在人走故事之前，人一坐看全（第八十九批）' : '范围已定，模型阶段尚未开始')
     if (ss?.state === 'no-walk') return step('模型师', `走故事：给 ${ss.count} 步填 walk（命令 / 事件 / 查询、动了哪个聚合、变了什么；走不通的填 gap），把做过的选择列进 choices（每条带 current 与 recommended）`, storyRel, '模型建好后先在故事上走一遍')
     // 文职只跑一趟：人审之前，是最后一个动文字的人；校完把裁决按对照接回，再 slice proofread 记一笔
     if (story && !st.model.proofreadAt) return step('文职', `总校一趟：本段新点亮的语句（切片与故事 traces 里的编号）与本段新建、改动的模型元素给人读的文字，只改字不改意（第八十四批）。改完把改前改后写成整句对照、跑 validate --重新定基 接回裁决，再标记`, `node tools/slice.js proofread ${rel(root)} ${slice.id}`, '文职一趟，排在校验角色填判断之前（第八十九批）')
