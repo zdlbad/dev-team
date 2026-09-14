@@ -615,18 +615,33 @@ function amend() {
 }
 
 // ========== confirm ==========
+/**
+ * 人确认计划。可以一步一步确认（plan confirm <项目> <切片> <步骤号>），也可以一次全确认（不带步骤号）；
+ * 每一步记 confirmedAt，全部步骤都确认了计划才算通过（plan.confirmedAt）。2026-09-14 项目所有者：「编码计划可以分步确认」。
+ */
 function confirm() {
   const plan = loadPlan()
-  const unfilled = plan.steps.filter((s) => s.needsKeyLogic && !s.keyLogic)
+  const stepArg = args[3] && /^\d+$/.test(args[3]) ? Number(args[3]) : null
+  const targets = stepArg ? plan.steps.filter((s) => s.n === stepArg) : plan.steps.filter((s) => !s.confirmedAt)
+  if (stepArg && !targets.length) die(`没有第 ${stepArg} 步（计划共 ${plan.steps.length} 步）`)
+  const unfilled = targets.filter((s) => s.needsKeyLogic && !s.keyLogic)
   if (unfilled.length) die(`还有 ${unfilled.length} 步没有关键逻辑，不能确认：${unfilled.map((s) => `#${s.n} ${s.target}`).join('、')}`)
-  const over = plan.steps.filter((s) => s.keyLogic && s.keyLogic.length > KEY_LOGIC_MAX)
+  const over = targets.filter((s) => s.keyLogic && s.keyLogic.length > KEY_LOGIC_MAX)
   if (over.length) console.error(`提醒：有 ${over.length} 步关键逻辑超过 ${KEY_LOGIC_MAX} 字，看看有没有啰嗦（完整直白的话不必压缩）：`)
   for (const s of over) console.error(`  #${s.n} ${s.target}（${s.keyLogic.length} 字）`)
-  plan.confirmedAt = today
-  plan.log.push(`${today} 人确认计划`)
-  savePlan(plan)
-  appendSliceLog(`人确认编码计划（${plan.steps.length} 步）`)
-  console.log(`计划已确认：${plan.steps.length} 步。${plan.role}角色按顺序开写，每步完成后 plan done。`)
+  for (const s of targets) s.confirmedAt = today
+  const left = plan.steps.filter((s) => !s.confirmedAt)
+  if (stepArg) plan.log.push(`${today} 人确认第 ${stepArg} 步`)
+  if (!left.length) {
+    plan.confirmedAt = today
+    plan.log.push(`${today} 人确认计划`)
+    savePlan(plan)
+    appendSliceLog(`人确认编码计划（${plan.steps.length} 步${stepArg ? '，分步确认' : ''}）`)
+    console.log(`计划已确认：${plan.steps.length} 步。${plan.role}角色按顺序开写，每步完成后 plan done。`)
+  } else {
+    savePlan(plan)
+    console.log(`第 ${targets.map((s) => s.n).join('、')} 步已确认，还剩 ${left.length} 步：${left.map((s) => '#' + s.n).join(' ')}。全部确认后计划才算通过。`)
+  }
 }
 
 // ========== done ==========

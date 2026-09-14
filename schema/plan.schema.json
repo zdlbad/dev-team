@@ -164,6 +164,13 @@
               "null"
             ],
             "description": "外壳步骤：对应的契约文件（contracts/…）"
+          },
+          "confirmedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "人确认了这一步的关键逻辑（分步确认）；全部步骤都确认了 plan.confirmedAt 才有值"
           }
         }
       }

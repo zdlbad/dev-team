@@ -24,6 +24,7 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 | `plan build <项目> <id> [--code <代码库>] [--force]` | **编码计划**：从模型与切片范围算出要动哪些代码文件、按什么顺序，写 `plans/<id>.json` + `.md`；写码角色补每步的关键逻辑；已确认的要 `--force` 才重算 | `node $DEV_TEAM/tools/plan.js build …` |
 | `plan amend <项目> <id> "<为什么>" [--code <代码库>]` | **确认后追加**：计划确认、步骤写完之后人又当面裁了一条，模型跟着改了一点。核对现在的模型重算出来的活跟这份计划**一件没多、没少、先后没变**，才把模型指纹换掉；人的确认与完成记录都留着，理由记进计划与切片日志。核对不过就明说多出/少掉/挪动了什么，让你去 `build --force` | `node $DEV_TEAM/tools/plan.js amend …` |
 | `plan confirm <项目> <id>` | 人确认计划（门禁）；确认前不开写 | `node $DEV_TEAM/tools/plan.js confirm …` |
+| `plan confirm <项目> <切片id> <步骤号>` | **分步确认**：只确认这一步的关键逻辑；全部步骤都确认了计划才算通过。工作台「编码计划」页每张卡一个「这一步我确认」按钮走的就是它 | `node $DEV_TEAM/tools/plan.js confirm … 6` |
 | `plan done <项目> <id> <n>` | 写码角色完成第 n 步（记时间，核对顺序用） | `node $DEV_TEAM/tools/plan.js done …` |
 | `plan check <项目> <id> [--code <代码库>]` | 核对：已确认、关键逻辑齐、文件都在、顺序与计划一致、故事的 `walk.input` 齐 | `node $DEV_TEAM/tools/plan.js check …` |
 | `contract scaffold <项目> <id>` | 实现切片：给范围内缺的契约建骨架（字段名从模型抄，其余标「（没问过）」） | `node $DEV_TEAM/tools/contract.js scaffold …` |

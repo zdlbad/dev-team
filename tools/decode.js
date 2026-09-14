@@ -603,7 +603,7 @@ function stepsOf(body, currentModule, ctx) {
           if (kind) {
             call = { kind, target, method: r.method }
             // 记下被调节点：处理器算完 raises / throws 闭包后，把被调工厂 / 行为会抛的错挂回这一步（02 第六节步骤级 throws；2026-09-13 之前从不产出，方向 ② 永远差一条）
-            if (kind === 'factory' || kind === 'behavior') call._callee = nodeId(e, r.method)
+            if (kind === 'factory' || kind === 'behavior' || kind === 'service') call._callee = nodeId(e, r.method) // service：交给领域服务那一步，服务操作会抛的错也挂回这一步（第八十五批之后才有领域服务）
             ctx.onCall?.(e, r, kind)
             if (output && ['behavior', 'factory', 'service'].includes(kind)) domainOutputs.add(output)
           }
@@ -803,9 +803,12 @@ for (const mod of modules.values()) {
         const input = paramsOf(sig, M)
         const reads = []
         const writes = []
-        // 参数中的聚合根
+        // 参数中的聚合根：直接是聚合根，或聚合根的数组（existing: Participant[]、ReadonlyArray<FundingAllocation>——
+        // 处理器查出来的一批已有档案 / 已有拨款递进来比对，第八十五批领域服务的形状），数组就看里面那个元素
         for (const p of m.parameters) {
-          const t = checker.getNonNullableType(checker.getTypeAtLocation(p))
+          let t = checker.getNonNullableType(checker.getTypeAtLocation(p))
+          const elem = checker.getIndexTypeOfType(t, ts.IndexKind.Number)
+          if (elem) t = checker.getNonNullableType(elem)
           const pe = entryOfNode(t.getSymbol()?.declarations?.[0])
           if (pe?.prefix === 'aggregate-root') {
             reads.push(pe.modelName)
@@ -824,6 +827,9 @@ for (const mod of modules.values()) {
         const ret = mapType(sig.getReturnType(), M).type
         if (ret) op.output = ret
         Object.assign(op, { reads, writes, steps, rules: tagValues(tags, 'rule'), raises: g.raises, throws: g.throws, traces: traceTags(tags) })
+        // 操作的说明文字（模型里 operation.note：为什么住服务里、管不了什么、真保证在哪儿）
+        const opNote = tagValues(tags, 'note')[0]
+        if (opNote) op.note = opNote
         if (!op.traces.length) issue(e.file, `${op.name}：缺少 @trace`)
         return op
       })

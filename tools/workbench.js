@@ -164,7 +164,65 @@ function planPage(slice) {
   if (!slice) return '<p>还没指到哪一段。</p>'
   const f = path.join(root, 'plans', `${slice}.md`)
   if (!fs.existsSync(f)) return `<p>${esc(slice)} 还没有编码计划（模型确认后由开发指挥 <code>plan build</code> 算出）。</p>`
-  return planGate(slice) + `<article class="md">${mdToHtml(fs.readFileSync(f, 'utf8'))}</article>`
+  let plan = null
+  try { plan = JSON.parse(fs.readFileSync(path.join(root, 'plans', `${slice}.json`), 'utf8')) } catch { /* 没有 json 就只给表 */ }
+  const tree = plan ? planTree(plan) : ''
+  return planGate(slice) + tree + `<details class="seq"><summary>按顺序看（施工单原表）</summary><article class="md">${mdToHtml(fs.readFileSync(f, 'utf8'))}</article></details>`
+}
+/**
+ * 按代码结构摆计划：把每一步按文件路径挂到 src/<模块>/<层>/<聚合>/ 的树上，测试挂在它测的那个源文件下面；
+ * 别的切片已经做过、这次不列步骤的（already）也摆进去灰着——人看到的是整个代码结构，不是一张只有增量的单子。
+ * 每张文件卡：第几步、新建 / 修改、对应哪个模型元素、要做什么、关键逻辑（折叠，超 600 字提醒——第七十批）、做完没。
+ */
+function planTree(plan) {
+  const LAYER = { 'building-block': '构建块', domain: '领域', repository: '仓储接口', service: '领域服务', application: '应用', port: '端口', adapter: '适配器', shell: '外壳', composition: '组合根', proto: '原型入口', test: '测试', input: '故事输入' }
+  const items = []
+  for (const st of plan.steps) items.push({ kind: 'step', ...st })
+  for (const a of plan.already || []) items.push({ kind: 'already', ...a })
+  // 测试挂到源文件下：同一个目标、layer 是 test 的那一步
+  const tests = items.filter((x) => x.layer === 'test' && x.file)
+  const srcs = items.filter((x) => x.layer !== 'test')
+  const testOf = (x) => tests.filter((t) => t.target === x.target)
+  const orphanTests = tests.filter((t) => !srcs.some((x) => x.target === t.target))
+  // 建目录树
+  const rootNode = { name: '', dirs: new Map(), files: [] }
+  const put = (x) => {
+    const file = x.file || `（不是代码文件）/${x.target}`
+    const parts = file.split('/')
+    let node = rootNode
+    for (const d of parts.slice(0, -1)) { if (!node.dirs.has(d)) node.dirs.set(d, { name: d, dirs: new Map(), files: [] }); node = node.dirs.get(d) }
+    node.files.push({ ...x, base: parts[parts.length - 1], tests: x.layer === 'test' ? [] : testOf(x) })
+  }
+  for (const x of srcs) put(x)
+  for (const t of orphanTests) put(t)
+  const stepCount = (node) => node.files.filter((x) => x.kind === 'step').length + [...node.dirs.values()].reduce((n, d) => n + stepCount(d), 0)
+  const doneCount = (node) => node.files.filter((x) => x.kind === 'step' && x.doneAt).length + [...node.dirs.values()].reduce((n, d) => n + doneCount(d), 0)
+  const kl = (x) => {
+    if (x.kind !== 'step') return ''
+    if (!x.needsKeyLogic) return ''
+    if (!x.keyLogic) return '<div class="kl none">关键逻辑还没补</div>'
+    const n = x.keyLogic.length
+    return `<details class="kl"><summary>关键逻辑 <span class="n${n > 600 ? ' over' : ''}">${n} 字${n > 600 ? '，超过 600 字——第七十批：完整直白优先，长了只提醒' : ''}</span></summary><pre>${esc(x.keyLogic)}</pre></details>`
+  }
+  const card = (x) => {
+    const step = x.kind === 'step'
+    const badge = step ? `<span class="no">第 ${x.n} 步</span>` : `<span class="no prior">已做过 · ${x.by?.slice === plan.slice ? '上一版' : esc(x.by?.slice || '')} 第 ${x.by?.n ?? '?'} 步</span>`
+    const act = step ? `<span class="act ${x.action}">${x.action === 'create' ? '新建' : '修改'}</span>` : ''
+    const done = step ? (x.doneAt ? `<span class="done">✓ 已写 ${esc(x.doneAt.slice(5, 16).replace('T', ' '))}</span>` : '<span class="todo">未写</span>') : ''
+    // 分步确认：计划还没整体确认时，每张卡一个按钮；确认过的标日期
+    const confirmBtn = step && !plan.confirmedAt ? (x.confirmedAt ? `<span class="okd">✓ 你已确认 ${esc(x.confirmedAt)}</span>` : (x.needsKeyLogic && !x.keyLogic ? '<span class="todo">关键逻辑没补，还不能确认</span>' : `<button class="cst" data-confirm-step="${x.n}">这一步我确认</button><span class="cmsg"></span>`)) : ''
+    const tests = (x.tests || []).map((t) => `<div class="t"><span class="no">第 ${t.n} 步</span> 测试 <code>${esc(t.file)}</code> ${t.kind === 'step' ? (t.doneAt ? '<span class="done">✓</span>' : '<span class="todo">未写</span>') : '<span class="prior">已做过</span>'}${t.kind === 'step' ? kl(t) : ''}</div>`).join('')
+    return `<div class="fc${step ? '' : ' prior'}"><div class="fh">${badge}${act}<code class="fn">${esc(x.base)}</code><span class="tg">${esc(x.target)}</span>${done}</div><div class="what">${esc(x.what || '')}${(x.traces || []).length ? ' <span class="tr">' + x.traces.map(esc).join(' ') + '</span>' : ''}</div>${kl(x)}${tests}${confirmBtn ? '<div class="cf">' + confirmBtn + '</div>' : ''}</div>`
+  }
+  const dir = (node, depth) => {
+    const n = stepCount(node), d = doneCount(node)
+    const sub = [...node.dirs.values()].sort((a, b) => a.name.localeCompare(b.name)).map((x) => dir(x, depth + 1)).join('')
+    const files = node.files.sort((a, b) => (a.kind === 'step' ? 0 : 1) - (b.kind === 'step' ? 0 : 1) || (a.n ?? 0) - (b.n ?? 0)).map(card).join('')
+    if (depth < 0) return sub + files
+    return `<details${n ? ' open' : ''}><summary><code>${esc(node.name)}/</code> <span class="cnt${n ? '' : ' zero'}">${n ? `这次 ${n} 步${d ? `，已写 ${d}` : ''}` : '这次不动'}</span></summary><div class="dir">${sub}${files}</div></details>`
+  }
+  const total = plan.steps.length, done = plan.steps.filter((x) => x.doneAt).length
+  return `<div class="ptree"><div class="ph">按代码结构看：<b>${total}</b> 步要写${done ? `（已写 ${done}）` : ''}，别的切片已做过、这次不动的 ${(plan.already || []).length} 个文件灰着摆在原位。每张卡上的「关键逻辑」是原型角色开写前写下的人话：这个方法收什么、先查什么再查什么、哪种情形抛哪个错、什么不做——你确认的是这些行为对不对，不是代码。</div>${dir(rootNode, -1)}</div>`
 }
 /** 计划页顶上的关卡：这份计划人确认了没有。没确认就给一个按钮，按下去跟命令行 plan confirm 走的是同一段代码 */
 function planGate(slice) {
@@ -174,16 +232,32 @@ function planGate(slice) {
   if (plan.confirmedAt) return `<div class="gate ok">✓ 这份计划已于 ${esc(plan.confirmedAt)} 由你确认（${plan.steps.length} 步，已写完 ${done} 步）</div>`
   const unfilled = plan.steps.filter((x) => x.needsKeyLogic && !x.keyLogic).length
   if (unfilled) return `<div class="gate wait">这份计划还有 ${unfilled} 步关键逻辑没补，${esc(plan.role)}角色补完才能请你确认。</div>`
-  return `<div class="gate ask"><b>等你确认：</b>${plan.steps.length} 步（${esc(plan.role)}角色写）。看过下面的链路与关键逻辑，没问题就按这一下——按了它才开写。
-<button id="confirmPlan">确认这份计划</button><span id="confirmMsg"></span></div>
+  const okd = plan.steps.filter((x) => x.confirmedAt).length
+  return `<div class="gate ask"><b>等你确认：</b>${plan.steps.length} 步（${esc(plan.role)}角色写）${okd ? `，已确认 ${okd} 步` : ''}。每张卡看过关键逻辑就按那一步的「这一步我确认」；${plan.steps.length - okd} 步都确认了计划才算通过、才开写。
+<button id="confirmPlan">剩下的一并确认</button><span id="confirmMsg"></span></div>
 <script>document.getElementById('confirmPlan').onclick=async function(){this.disabled=true;var m=document.getElementById('confirmMsg');m.textContent='写着…';
 var r=await fetch('/plan/confirm?slice='+encodeURIComponent(${JSON.stringify(slice)}),{method:'POST'});var t=await r.text();
-if(r.ok){m.textContent='已确认，刷新中…';location.reload()}else{this.disabled=false;m.innerHTML='<b style="color:#cf222e">没确认成：</b>'+t.replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}}</script>`
+if(r.ok){m.textContent='已确认，刷新中…';location.reload()}else{this.disabled=false;m.innerHTML='<b style="color:#cf222e">没确认成：</b>'+t.replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}};
+document.querySelectorAll('[data-confirm-step]').forEach(function(b){b.onclick=async function(){b.disabled=true;var m=b.nextElementSibling;m.textContent='写着…';
+var r=await fetch('/plan/confirm?slice='+encodeURIComponent(${JSON.stringify(slice)})+'&step='+b.dataset.confirmStep,{method:'POST'});var t=await r.text();
+if(r.ok){m.textContent='已确认，刷新中…';location.reload()}else{b.disabled=false;m.innerHTML='<b style="color:#cf222e">没确认成：</b>'+t.replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}}})</script>`
 }
 const wrap = (body) => `<!doctype html><html lang="zh"><head><meta charset="utf-8"><style>
 body{margin:0;padding:16px 24px;font:14px/1.6 system-ui,"Segoe UI","Microsoft YaHei",sans-serif;color:#1f2328;background:#fff}
 .md h1{font-size:20px}.md h2{font-size:16px;margin-top:22px;border-bottom:1px solid #e6e8eb;padding-bottom:4px}.md h3{font-size:14px;color:#57606a}
 .md table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0}.md th,.md td{border:1px solid #e6e8eb;padding:5px 8px;text-align:left;vertical-align:top}.md th{background:#f6f8fa}
+.ptree{margin:0 0 18px}.ptree .ph{color:#57606a;font-size:13px;margin:0 0 10px;padding:8px 12px;background:#f6f8fa;border:1px solid #e6e8eb;border-radius:6px}
+.ptree details{margin:4px 0}.ptree summary{cursor:pointer;padding:3px 4px;border-radius:4px}.ptree summary:hover{background:#f6f8fa}.ptree summary code{font-size:13px;background:none;padding:0}
+.ptree .cnt{font-size:12px;color:#1f6feb;margin-left:6px}.ptree .cnt.zero{color:#8c959f}.ptree .dir{margin-left:18px;border-left:1px solid #e6e8eb;padding-left:10px}
+.fc{border:1px solid #e6e8eb;border-radius:8px;padding:8px 12px;margin:6px 0;background:#fff}.fc.prior{opacity:.55;background:#fafbfc}
+.fh{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.fh .no{font-size:11px;font-weight:700;color:#fff;background:#1f6feb;border-radius:999px;padding:0 8px}.fh .no.prior{background:#8c959f}
+.fh .act{font-size:11px;padding:0 6px;border-radius:4px;border:1px solid #d0d7de;color:#57606a}.fh .act.create{color:#1a7f37;border-color:#a7d9b3}.fh .fn{font-weight:600;font-size:13px;background:none;padding:0}
+.fh .tg{color:#57606a;font-size:12px}.fh .done{color:#1a7f37;font-size:12px;margin-left:auto}.fh .todo{color:#b45309;font-size:12px;margin-left:auto}
+.fc .what{color:#1f2328;font-size:13px;margin:4px 0 0}.fc .tr{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:#0969da}
+.fc .kl{margin:6px 0 0}.fc .kl summary{font-size:12.5px;color:#0969da}.fc .kl .n{color:#57606a;font-weight:400}.fc .kl .n.over{color:#b45309}.fc .kl pre{white-space:pre-wrap;background:#f6f8fa;border:1px solid #e6e8eb;border-radius:6px;padding:8px 10px;font-size:12.5px;line-height:1.55;margin:4px 0 0}
+.fc .kl.none{color:#b45309;font-size:12.5px}.fc .t{margin:6px 0 0 10px;padding-left:10px;border-left:2px solid #e6e8eb;font-size:12.5px;color:#57606a}.fc .t .no{font-size:11px;color:#fff;background:#8c959f;border-radius:999px;padding:0 6px}.fc .t .prior{color:#8c959f}
+.fc .cf{margin-top:8px;display:flex;gap:10px;align-items:center}.fc .cst{font:inherit;padding:4px 14px;border-radius:6px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;cursor:pointer}.fc .cst:disabled{opacity:.5}.fc .okd{color:#1a7f37;font-size:12.5px}.fc .cmsg{font-size:12.5px;color:#57606a}
+.seq{margin-top:10px}.seq summary{cursor:pointer;color:#0969da;font-size:13px}
 .gate{margin:0 0 14px;padding:10px 14px;border-radius:6px;border:1px solid #e6e8eb;background:#f6f8fa}.gate.ok{border-color:#a7d9b3;background:#eaf7ed}.gate.ask{border-color:#f3d27a;background:#fff8e1}.gate.wait{color:#57606a}.gate button{font:inherit;margin-left:10px;padding:4px 14px;border-radius:6px;border:1px solid #8a6d00;background:#ffd76a;cursor:pointer}.gate button:disabled{opacity:.5;cursor:default}#confirmMsg{margin-left:10px}
 .md pre{background:#f6f8fa;border:1px solid #e6e8eb;border-radius:6px;padding:10px 12px;overflow:auto;font-size:12.5px;line-height:1.5}.md code{background:#f3f4f6;padding:0 4px;border-radius:3px;font-size:12.5px}
 </style></head><body>${body}</body></html>`
@@ -202,7 +276,7 @@ header .sp{flex:1}header .now{color:var(--dim);font-size:12.5px;white-space:nowr
 main{flex:1;position:relative}iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--page,#fff)}
 </style></head><body>
 <header><h1>工作台<span>${esc(projectName)}</span></h1>
-<button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="delta">这段改了什么</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="plan">编码计划</button><button data-t="proto">试原型</button>
+<button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="plan">编码计划</button><button data-t="proto">试原型</button>
 <span class="sp"></span><span class="now" id="now"></span><button id="theme" title="白天 / 黑夜">🌙</button><a id="open" href="#" target="_blank" title="在新窗口打开这一页">新窗口 ↗</a></header>
 <main><iframe id="f" src="/p/scene/"></iframe></main>
 <script>
@@ -304,7 +378,8 @@ const server = http.createServer((req, res) => {
   if (url === '/plan/confirm' && req.method === 'POST') {
     const slice = q.slice || currentSlice()
     if (!/^s-[0-9]{3,}$/.test(slice ?? '')) { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('没指到哪一段') }
-    const r = spawnSync(process.execPath, [path.join(tools, 'plan.js'), 'confirm', root, slice], { encoding: 'utf8', cwd: root })
+    const stepNo = /^\d+$/.test(q.step ?? '') ? [q.step] : []
+    const r = spawnSync(process.execPath, [path.join(tools, 'plan.js'), 'confirm', root, slice, ...stepNo], { encoding: 'utf8', cwd: root })
     const out = ((r.stdout ?? '') + (r.stderr ?? '')).trim()
     console.log(`页面上确认计划 ${slice} → ${r.status === 0 ? '成' : '拒'}：${out.split('\n')[0]}`)
     res.writeHead(r.status === 0 ? 200 : 409, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' })
