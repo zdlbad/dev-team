@@ -152,6 +152,13 @@ function mdToHtml(md) {
       out.push(`<table><tr>${head.map((c) => `<th>${c}</th>`).join('')}</tr>${body.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</table>`); continue
     }
     const h = l.match(/^(#{1,4})\s+(.*)/); if (h) { out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); i++; continue }
+    // 引用块：原文选读用它摘原句，整段原样显示（等宽、保留换行、不解析里面的记号）
+    if (/^\s*>/.test(l)) {
+      const q = []
+      while (i < lines.length && /^\s*>/.test(lines[i])) q.push(lines[i++].replace(/^\s*>\s?/, ''))
+      out.push(`<blockquote>${esc(q.join('\n'))}</blockquote>`)
+      continue
+    }
     if (/^\s*[-*]\s+/.test(l)) { const items = []; while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) items.push(lines[i++].replace(/^\s*[-*]\s+/, '')); out.push(`<ul>${items.map((x) => `<li>${inline(x)}</li>`).join('')}</ul>`); continue }
     if (!l.trim()) { i++; continue }
     const para = []; while (i < lines.length && lines[i].trim() && !/^(#|\||```|\s*[-*]\s)/.test(lines[i])) para.push(lines[i++])
@@ -335,6 +342,13 @@ ${byRole.size ? `<table class="jsum"><tr><th>角色</th><th>派了几趟</th><th
   }).join('')
   return sum + nav + `<div class="journal">${html}</div>`
 }
+/** 这一段的原文选读：讲解从 raw 里摘的原句与出处，人在走故事之前先读，不必自己去翻大文件 */
+function sourcePage(slice) {
+  if (!slice) return '<p>还没指到哪一段。</p>'
+  const f = path.join(root, '导读', `${slice}-原文选读.md`)
+  if (!fs.existsSync(f)) return `<p>${esc(slice)} 还没有原文选读。讲解写完故事后会从 <code>raw/</code> 里把这一段依据的原句摘出来放在 <code>导读/${esc(slice)}-原文选读.md</code>，给你先读。</p>`
+  return `<article class="md">${mdToHtml(fs.readFileSync(f, 'utf8'))}</article>`
+}
 const wrap = (body) => `<!doctype html><html lang="zh"><head><meta charset="utf-8"><style>
 body{margin:0;padding:16px 24px;font:14px/1.6 system-ui,"Segoe UI","Microsoft YaHei",sans-serif;color:#1f2328;background:#fff}
 .md h1{font-size:20px}.md h2{font-size:16px;margin-top:22px;border-bottom:1px solid #e6e8eb;padding-bottom:4px}.md h3{font-size:14px;color:#57606a}
@@ -365,6 +379,7 @@ body{margin:0;padding:16px 24px;font:14px/1.6 system-ui,"Segoe UI","Microsoft Ya
 .jbody{padding:4px 10px 8px 26px;border-top:1px solid #f0f2f4}.ji{display:flex;gap:8px;font-size:12.5px;padding:2px 0;align-items:baseline}.ji .gap{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:#b45309;min-width:70px}.ji .tx{flex:1}.ji.none{color:#8c959f}
 .jb-end{margin-top:6px;padding-top:6px;border-top:1px dashed #e6e8eb;font-size:13px}.jb-end .stat{float:none;margin-left:8px}.jb-end .tx{display:block;color:#57606a;font-size:12.5px;margin-top:2px}.jb-end.open{color:#b45309}
 .seq{margin-top:10px}.seq summary{cursor:pointer;color:#0969da;font-size:13px}
+.md blockquote{margin:8px 0;padding:8px 14px;border-left:3px solid #8a6d00;background:#fffdf5;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12.5px;line-height:1.55}
 .gate{margin:0 0 14px;padding:10px 14px;border-radius:6px;border:1px solid #e6e8eb;background:#f6f8fa}.gate.ok{border-color:#a7d9b3;background:#eaf7ed}.gate.ask{border-color:#f3d27a;background:#fff8e1}.gate.wait{color:#57606a}.gate button{font:inherit;margin-left:10px;padding:4px 14px;border-radius:6px;border:1px solid #8a6d00;background:#ffd76a;cursor:pointer}.gate button:disabled{opacity:.5;cursor:default}#confirmMsg{margin-left:10px}
 .md pre{background:#f6f8fa;border:1px solid #e6e8eb;border-radius:6px;padding:10px 12px;overflow:auto;font-size:12.5px;line-height:1.5}.md code{background:#f3f4f6;padding:0 4px;border-radius:3px;font-size:12.5px}
 </style></head><body>${body}</body></html>`
@@ -383,12 +398,12 @@ header .sp{flex:1}header .now{color:var(--dim);font-size:12.5px;white-space:nowr
 main{flex:1;position:relative}iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--page,#fff)}
 </style></head><body>
 <header><h1>工作台<span>${esc(projectName)}</span></h1>
-<button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="slices">切片</button><button data-t="journal">日志</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="plan">编码计划</button><button data-t="proto">试原型</button>
+<button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="slices">切片</button><button data-t="journal">日志</button><button data-t="source">读原文</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="plan">编码计划</button><button data-t="proto">试原型</button>
 <span class="sp"></span><span class="now" id="now"></span><button id="theme" title="白天 / 黑夜">🌙</button><a id="open" href="#" target="_blank" title="在新窗口打开这一页">新窗口 ↗</a></header>
 <main><iframe id="f" src="/p/scene/"></iframe></main>
 <script>
 let cur='scene';let slice=null;let who=null
-const url=(t)=>({scene:'/p/scene/',ask:'/p/scene/questions',slices:'/slices',journal:'/journal',story:'/p/story/story'+(slice?'?slice='+slice:''),model:'/p/story/model',delta:'/delta'+(slice?'?slice='+slice:''),review:'/p/review/',codemodel:'/p/codemodel/',prepr:'/p/prepr/',plan:'/plan'+(slice?'?slice='+slice:''),proto:'/p/proto/'})[t]
+const url=(t)=>({scene:'/p/scene/',ask:'/p/scene/questions',slices:'/slices',journal:'/journal',source:'/source'+(slice?'?slice='+slice:''),story:'/p/story/story'+(slice?'?slice='+slice:''),model:'/p/story/model',delta:'/delta'+(slice?'?slice='+slice:''),review:'/p/review/',codemodel:'/p/codemodel/',prepr:'/p/prepr/',plan:'/plan'+(slice?'?slice='+slice:''),proto:'/p/proto/'})[t]
 const f=document.getElementById('f'),open=document.getElementById('open')
 function show(t){cur=t;for(const b of document.querySelectorAll('header button'))b.classList.toggle('on',b.dataset.t===t);f.src=url(t);open.href=url(t);try{localStorage.setItem('wb-tab',t)}catch{}}
 for(const b of document.querySelectorAll('header button'))b.addEventListener('click',()=>show(b.dataset.t))
@@ -483,6 +498,7 @@ const server = http.createServer((req, res) => {
   if (url === '/slices') return html(wrap(slicesPage()))
   if (url === '/journal') return html(wrap(journalPage(q.date)))
   if (url === '/plan') return html(wrap(planPage(q.slice || currentSlice())))
+  if (url === '/source') return html(wrap(sourcePage(q.slice || currentSlice())))
   // 计划页的按钮：确认 / 撤销 / 留话都不另写逻辑，直接跑命令行那一个（plan.js confirm | unconfirm | comment），门禁、日志、切片记录同一套；
   // 留话顺手记进现场日志（scene progress --who 人），事后在「日志」页看得见人在哪一步说了什么
   const planCmd = (sub, slice, extra, okText) => {
