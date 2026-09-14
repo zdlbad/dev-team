@@ -278,6 +278,7 @@ function introNode() {
     ? '<b>这一页在问什么（审代码对模型）：</b>解码器把写好的代码读回一份模型，跟模型师的模型逐条比；对不上的地方一条一问「是代码写错了，还是模型该跟着改」。目标是代码文件，按结构看时挂在它对应的模型元素下。没有条目就是代码与模型一字不差。'
     : '<b>这一页在问什么（审模型）：</b>校验器给你在故事里确认过的每一条业务语句生成一问「模型有没有把它表达出来」，给每个命令的每一步生成一问「这一步是不是只做编排」。')
     + '<b>谁答的：</b>校验角色先答（通过 / 不通过 + 理由）。<b>你只做一件事：</b>看他的理由站不站得住，同意或不同意。这些都是确认，不是新的业务问题——要你拍板的业务分岔在故事页的裁定卡上。<br>'
+    + (function(){ var stale = js.filter(function(j){ return !j.human?.verdict && j.staleDecision && !j.staleDecision.reordered }).length; return open ? '<b>这次：</b>新的 ' + (open - stale) + ' 条、文字改了重浮的 ' + stale + ' 条（重浮的旁边写着上次你怎么裁，意思没变就照旧）。' : '' })()
     + '共 ' + js.length + ' 条，还有 <b>' + open + '</b> 条等你：校验角色高信心通过 ' + nHigh + ' 条（可以点右上角「其余高信心的一并同意」一次处理），' + '值得你看的 ' + nLow + ' 条（信心中 / 低' + (nFail ? '、不通过 ' + nFail + ' 条' : '') + '）。'
     + (mode === 'structure' ? '<b>按结构看：</b>左边是模型的树，红色数字是那一处还有几条等你；点一个命令，能看到它每一步指到哪个聚合的哪个方法、哪个仓储、哪个端口，规则挂在方法下面。' : (data.story ? '顺序按故事走：每一步的标题就是故事那句话，下面是这一步用到的业务在模型里对得上对不上。' : '顺序按重要度从高到低、信心从低到高。'))
     + '每次改动自动保存。'
@@ -864,6 +865,22 @@ const server = http.createServer((req, res) => {
           }
           obj = disk
         } catch { /* 盘上那份读不了就按页面的存 */ }
+        // 人这次改了哪几条裁决，记进日志（2026-09-14 项目所有者：「log 记了吧」——人在页面上点的同意也要看得见）
+        try {
+          const before = JSON.parse(fs.readFileSync(file, 'utf8'))
+          const page = obj.mode ? '审代码' : String(obj.direction) === '2' ? '审代码对模型' : '审模型'
+          const projectDir = (obj.project && fs.existsSync(String(obj.project))) ? String(obj.project) : path.dirname(path.dirname(file))
+          const { journal } = require('./lib/journal')
+          const V = { agree: '同意', disagree: '不同意', dismissed: '不算', confirmed: '确认', pass: '通过', fail: '不通过' }
+          for (const arr of ['judgments', 'confirms']) {
+            const was = new Map((before[arr] ?? []).map((x) => [key(x), x.human ?? null]))
+            for (const it of obj[arr] ?? []) {
+              const w = was.get(key(it)), h = it.human ?? null
+              if (!h?.verdict || (w?.verdict === h.verdict && (w?.note ?? '') === (h.note ?? ''))) continue
+              journal(projectDir, { kind: 'review', who: '人', slice: obj.slice ?? null, text: `${page}页：${V[h.verdict] ?? h.verdict} ${it.target}${it.check ? '［' + it.check + '］' : ''}${h.note ? '：' + h.note : ''}` })
+            }
+          }
+        } catch { /* 日志记不上不影响保存 */ }
         // 页面附上的结构、业务原文、故事不是报告的一部分，不写回
         delete obj.structure; delete obj.business
         fs.writeFileSync(file, JSON.stringify(obj, null, 2) + '\n')

@@ -4,7 +4,7 @@
  *
  * 用法：node tools/workbench.js <项目目录> [--code <代码库>] [--port 4870]
  *
- * 页签（2026-09-13 项目所有者要直白的名字，「审阅」「审查」太像）：谁在干什么（scene）· 等你答（scene 的 /questions：攒着的问题列一页，问卷模式用）· 走故事（story）· 模型图（story 的 /model）· 这段改了什么（model-delta，按当前段落现算）
+ * 页签（2026-09-13 项目所有者要直白的名字，「审阅」「审查」太像）：谁在干什么（scene）· 等你答（scene 的 /questions：攒着的问题列一页，问卷模式用）· 切片（现算：段落 / 修改 / 候选三栏，第八十六批）· 日志（现算：journal/<日期>.jsonl 按派工分块，角色做了什么、花了多久，给人复盘）· 走故事（story）· 模型图（story 的 /model）· 这段改了什么（model-delta，按当前段落现算）
  *      · 审模型（review，读 reports/validate-1.json，校验器对模型的判断）· 审代码对模型（codemodel，读 reports/validate-2.json，方向 ② 留给人的判断）· 审代码（review，读 reports/pre-pr-*.json，pre-pr 审查的发现）· 编码计划（plans/<当前段落>.md 现渲染）· 试原型（proto，给了 --code 且 src/proto/main.ts 在才起）
  * 它自己把这几个服务拉起来：每个现挑一个空闲端口、只听 127.0.0.1、不许它们自己弹浏览器；页面统统从工作台这一个口代理出去（/p/<页面>/…），
  * 所以人只需要开 http://localhost:4870 这一个地址，别的口不用管也看不见。进程退出时把自己拉起来的一并关掉。
@@ -209,10 +209,15 @@ function planTree(plan) {
     const badge = step ? `<span class="no">第 ${x.n} 步</span>` : `<span class="no prior">已做过 · ${x.by?.slice === plan.slice ? '上一版' : esc(x.by?.slice || '')} 第 ${x.by?.n ?? '?'} 步</span>`
     const act = step ? `<span class="act ${x.action}">${x.action === 'create' ? '新建' : '修改'}</span>` : ''
     const done = step ? (x.doneAt ? `<span class="done">✓ 已写 ${esc(x.doneAt.slice(5, 16).replace('T', ' '))}</span>` : '<span class="todo">未写</span>') : ''
-    // 分步确认：计划还没整体确认时，每张卡一个按钮；确认过的标日期
-    const confirmBtn = step && !plan.confirmedAt ? (x.confirmedAt ? `<span class="okd">✓ 你已确认 ${esc(x.confirmedAt)}</span>` : (x.needsKeyLogic && !x.keyLogic ? '<span class="todo">关键逻辑没补，还不能确认</span>' : `<button class="cst" data-confirm-step="${x.n}">这一步我确认</button><span class="cmsg"></span>`)) : ''
+    // 分步确认：每张卡一个按钮，按了就地变成「已确认 · 撤销」，不整页刷新；写完的步不能撤。旁边「有话说」能留话，写码角色开写前读
+    // （2026-09-14 项目所有者：「单步确认按钮不好用，而且也无法撤销或者加 comment」）
+    const confirmBtn = !step ? '' : (x.confirmedAt
+      ? `<span class="okd">✓ 你已确认 ${esc(x.confirmedAt)}</span>${x.doneAt ? '<span class="okd">（已写完，不能撤；有话在下面留）</span>' : `<button class="cst un" data-unconfirm-step="${x.n}">撤销</button>`}`
+      : (x.needsKeyLogic && !x.keyLogic ? '<span class="todo">关键逻辑没补，还不能确认</span>' : `<button class="cst" data-confirm-step="${x.n}">这一步我确认</button>`)) + '<span class="cmsg"></span>'
+    const notes = (x.humanNotes || []).map((h) => `<div class="hn"><span class="t">${esc(String(h.ts).slice(5, 16).replace('T', ' '))}</span>${esc(h.text)}</div>`).join('')
+    const talk = step ? `<details class="hc"${notes ? ' open' : ''}><summary>有话说${(x.humanNotes || []).length ? `（${x.humanNotes.length}）` : ''}</summary>${notes}<div class="hcf"><textarea rows="2" placeholder="对这一步想说的：哪里不对、要改成什么、为什么……${esc(plan.role)}角色开写前会读"></textarea><button class="cst hcb" data-comment-step="${x.n}">记下</button><span class="cmsg"></span></div></details>` : ''
     const tests = (x.tests || []).map((t) => `<div class="t"><span class="no">第 ${t.n} 步</span> 测试 <code>${esc(t.file)}</code> ${t.kind === 'step' ? (t.doneAt ? '<span class="done">✓</span>' : '<span class="todo">未写</span>') : '<span class="prior">已做过</span>'}${t.kind === 'step' ? kl(t) : ''}</div>`).join('')
-    return `<div class="fc${step ? '' : ' prior'}"><div class="fh">${badge}${act}<code class="fn">${esc(x.base)}</code><span class="tg">${esc(x.target)}</span>${done}</div><div class="what">${esc(x.what || '')}${(x.traces || []).length ? ' <span class="tr">' + x.traces.map(esc).join(' ') + '</span>' : ''}</div>${kl(x)}${tests}${confirmBtn ? '<div class="cf">' + confirmBtn + '</div>' : ''}</div>`
+    return `<div class="fc${step ? '' : ' prior'}"><div class="fh">${badge}${act}<code class="fn">${esc(x.base)}</code><span class="tg">${esc(x.target)}</span>${done}</div><div class="what">${esc(x.what || '')}${(x.traces || []).length ? ' <span class="tr">' + x.traces.map(esc).join(' ') + '</span>' : ''}</div>${kl(x)}${tests}${step ? '<div class="cf" data-step="' + x.n + '">' + confirmBtn + '</div>' + talk : ''}</div>`
   }
   const dir = (node, depth) => {
     const n = stepCount(node), d = doneCount(node)
@@ -224,23 +229,111 @@ function planTree(plan) {
   const total = plan.steps.length, done = plan.steps.filter((x) => x.doneAt).length
   return `<div class="ptree"><div class="ph">按代码结构看：<b>${total}</b> 步要写${done ? `（已写 ${done}）` : ''}，别的切片已做过、这次不动的 ${(plan.already || []).length} 个文件灰着摆在原位。每张卡上的「关键逻辑」是原型角色开写前写下的人话：这个方法收什么、先查什么再查什么、哪种情形抛哪个错、什么不做——你确认的是这些行为对不对，不是代码。</div>${dir(rootNode, -1)}</div>`
 }
-/** 计划页顶上的关卡：这份计划人确认了没有。没确认就给一个按钮，按下去跟命令行 plan confirm 走的是同一段代码 */
-function planGate(slice) {
+/** 计划页顶上的关卡那一块（不带脚本）：/plan/state 也用它，按钮按完就地换掉 */
+function planGateDiv(slice) {
   let plan = null
   try { plan = JSON.parse(fs.readFileSync(path.join(root, 'plans', `${slice}.json`), 'utf8')) } catch { return '' }
   const done = plan.steps.filter((x) => x.doneAt).length
-  if (plan.confirmedAt) return `<div class="gate ok">✓ 这份计划已于 ${esc(plan.confirmedAt)} 由你确认（${plan.steps.length} 步，已写完 ${done} 步）</div>`
+  if (plan.confirmedAt) return `<div class="gate ok" id="gate">✓ 这份计划已于 ${esc(plan.confirmedAt)} 由你确认（${plan.steps.length} 步，已写完 ${done} 步）。想收回哪一步，按那张卡上的「撤销」；有话就在卡上「有话说」里留。</div>`
   const unfilled = plan.steps.filter((x) => x.needsKeyLogic && !x.keyLogic).length
-  if (unfilled) return `<div class="gate wait">这份计划还有 ${unfilled} 步关键逻辑没补，${esc(plan.role)}角色补完才能请你确认。</div>`
+  if (unfilled) return `<div class="gate wait" id="gate">这份计划还有 ${unfilled} 步关键逻辑没补，${esc(plan.role)}角色补完才能请你确认。</div>`
   const okd = plan.steps.filter((x) => x.confirmedAt).length
-  return `<div class="gate ask"><b>等你确认：</b>${plan.steps.length} 步（${esc(plan.role)}角色写）${okd ? `，已确认 ${okd} 步` : ''}。每张卡看过关键逻辑就按那一步的「这一步我确认」；${plan.steps.length - okd} 步都确认了计划才算通过、才开写。
-<button id="confirmPlan">剩下的一并确认</button><span id="confirmMsg"></span></div>
-<script>document.getElementById('confirmPlan').onclick=async function(){this.disabled=true;var m=document.getElementById('confirmMsg');m.textContent='写着…';
-var r=await fetch('/plan/confirm?slice='+encodeURIComponent(${JSON.stringify(slice)}),{method:'POST'});var t=await r.text();
-if(r.ok){m.textContent='已确认，刷新中…';location.reload()}else{this.disabled=false;m.innerHTML='<b style="color:#cf222e">没确认成：</b>'+t.replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}};
-document.querySelectorAll('[data-confirm-step]').forEach(function(b){b.onclick=async function(){b.disabled=true;var m=b.nextElementSibling;m.textContent='写着…';
-var r=await fetch('/plan/confirm?slice='+encodeURIComponent(${JSON.stringify(slice)})+'&step='+b.dataset.confirmStep,{method:'POST'});var t=await r.text();
-if(r.ok){m.textContent='已确认，刷新中…';location.reload()}else{b.disabled=false;m.innerHTML='<b style="color:#cf222e">没确认成：</b>'+t.replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}}})</script>`
+  return `<div class="gate ask" id="gate"><b>等你确认：</b>${plan.steps.length} 步（${esc(plan.role)}角色写）${okd ? `，已确认 ${okd} 步` : ''}。每张卡看过关键逻辑就按那一步的「这一步我确认」，按了能撤；有意见在卡上「有话说」里留，${esc(plan.role)}角色开写前会读。${plan.steps.length - okd} 步都确认了计划才算通过、才开写。
+<button id="confirmPlan">剩下的一并确认</button><span id="confirmMsg"></span></div>`
+}
+/** 计划页顶上的关卡 + 整页的按钮脚本。按钮不整页刷新：确认 / 撤销就地换掉那一块，关卡那一块从 /plan/state 重取；留话就地追加一行（2026-09-14 项目所有者：「单步确认按钮不好用，而且也无法撤销或者加 comment」） */
+function planGate(slice) {
+  const div = planGateDiv(slice)
+  if (!div) return ''
+  return div + `<script>(function(){
+var S=${JSON.stringify(slice)};
+function esc(t){return String(t).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+async function post(u,body){var r=await fetch(u,{method:'POST',headers:{'content-type':'text/plain; charset=utf-8'},body:body||''});return {ok:r.ok,text:await r.text()}}
+async function refreshGate(){try{var s=await (await fetch('/plan/state?slice='+encodeURIComponent(S))).json();var g=document.getElementById('gate');if(g&&s.gateHtml){var d=document.createElement('div');d.innerHTML=s.gateHtml;g.replaceWith(d.firstElementChild)}}catch(e){}}
+function fail(m,t){m.innerHTML='<b style="color:#cf222e">没成：</b>'+esc(t)}
+document.addEventListener('click',async function(e){
+  var b=e.target.closest('button');if(!b)return;
+  if(b.id==='confirmPlan'){b.disabled=true;var m=document.getElementById('confirmMsg');m.textContent='写着…';var r=await post('/plan/confirm?slice='+encodeURIComponent(S));if(r.ok){location.reload()}else{b.disabled=false;fail(m,r.text)}return}
+  if(b.dataset.confirmStep||b.dataset.unconfirmStep){var n=b.dataset.confirmStep||b.dataset.unconfirmStep,cf=b.closest('.cf'),m=cf.querySelector('.cmsg');b.disabled=true;m.textContent='写着…';
+    var r=await post('/plan/'+(b.dataset.confirmStep?'confirm':'unconfirm')+'?slice='+encodeURIComponent(S)+'&step='+n);
+    if(r.ok){cf.innerHTML=b.dataset.confirmStep?'<span class="okd">✓ 你已确认 '+new Date().toISOString().slice(0,10)+'</span><button class="cst un" data-unconfirm-step="'+n+'">撤销</button><span class="cmsg"></span>':'<button class="cst" data-confirm-step="'+n+'">这一步我确认</button><span class="cmsg"></span>';refreshGate()}else{b.disabled=false;fail(m,r.text)}return}
+  if(b.dataset.commentStep){var box=b.closest('.hcf'),ta=box.querySelector('textarea'),m=box.querySelector('.cmsg'),t=ta.value.trim();if(!t){m.textContent='先写一句';return}
+    b.disabled=true;m.textContent='写着…';var r=await post('/plan/comment?slice='+encodeURIComponent(S)+'&step='+b.dataset.commentStep,t);
+    if(r.ok){var d=document.createElement('div');d.className='hn';d.innerHTML='<span class="t">'+new Date().toISOString().slice(5,16).replace('T',' ')+'</span>'+esc(t);box.parentNode.insertBefore(d,box);ta.value='';m.textContent='记下了';var k=box.parentNode.querySelectorAll('.hn').length;box.parentNode.querySelector('summary').textContent='有话说（'+k+'）'}else{fail(m,r.text)}b.disabled=false}
+});})()</script>`
+}
+/**
+ * 「切片」页（第八十六批）：段落、修改、候选三栏。人在这里看见开发是按什么节拍走的——
+ * 每个段落走到哪、每个修改切片改的是哪一件事、审阅点出来还没开的候选有几条。只读；记候选与开切片走命令行（slice candidate）。
+ */
+function slicesPage() {
+  const dir = path.join(root, 'slices')
+  const all = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.json') && !f.endsWith('.story.json') && !f.startsWith('_')).map((f) => { try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) } catch { return null } }).filter(Boolean).sort((a, b) => a.id.localeCompare(b.id)) : []
+  let cands = { items: [] }
+  try { cands = JSON.parse(fs.readFileSync(path.join(dir, '_candidates.json'), 'utf8')) } catch { /* 还没记过候选 */ }
+  const cur = currentSlice()
+  const stg = (s) => ['model', 'code', 'validate'].map((k) => { const st = s.stages?.[k]?.status ?? 'pending'; const label = { model: '模型', code: '编码', validate: '校验' }[k]; return `<span class="st ${st}">${label}${st === 'done' ? ' ✓' : st === 'in-progress' ? ' …' : ''}</span>` }).join('')
+  const closed = (s) => ['model', 'code', 'validate'].every((k) => s.stages?.[k]?.status === 'done')
+  const last = (s) => { const l = (s.log || []).slice(-1)[0]; return l ? `${esc(l.ts)} ${esc(l.text)}` : '' }
+  const card = (s) => `<div class="sc${s.id === cur ? ' cur' : ''}${closed(s) ? ' closed' : ''}"><div class="sh"><span class="id">${esc(s.id)}</span><b>${esc(s.title)}</b>${s.id === cur ? '<span class="now">现在在这一段</span>' : ''}${closed(s) ? '<span class="okd">已收口</span>' : ''}<span class="sp"></span>${stg(s)}</div>${s.intent ? `<div class="it">${esc(s.intent)}</div>` : ''}${s.origin ? `<div class="it">来源：${esc(s.origin)}${(s.touches || []).length ? `　动到 ${s.touches.map(esc).join('、')}` : ''}</div>` : ''}<div class="meta">${(s.scope?.modules || []).map(esc).join('、') || '（范围未定）'} · 编号 ${(s.traces || []).length} 条 · 日志 ${(s.log || []).length} 条</div><div class="last" title="${last(s)}">最近：${last(s)}</div></div>`
+  const stories = all.filter((s) => ['story', 'initial', 'increment'].includes(s.kind))
+  const changes = all.filter((s) => s.kind === 'change')
+  const others = all.filter((s) => !stories.includes(s) && !changes.includes(s))
+  const candCard = (x) => `<div class="cc ${esc(x.status)}"><div class="sh"><span class="id">#${x.n}</span><b>${esc(x.text)}</b><span class="sp"></span><span class="st ${esc(x.status)}">${x.status === 'open' ? '等着开' : x.status === 'opened' ? '已开成 ' + esc(x.openedAs) : '不做'}</span></div><div class="it">来源：${esc(x.origin)}${(x.touches || []).length ? `　动到 ${x.touches.map(esc).join('、')}` : ''}　记于 ${esc(x.ts)}</div>${x.note ? `<div class="meta">${esc(x.note)}</div>` : ''}</div>`
+  const openN = cands.items.filter((x) => x.status === 'open').length
+  return `<div class="ptree"><div class="ph">切片是迭代的步伐。<b>段落</b>一段一个最小业务动作，按故事线的先后走；<b>修改</b>只改已走通的段落上被试原型、审阅或裁定点出的一件事，编号 m-xxx；审阅页、试原型页上点出的事先记成<b>候选</b>、不当场改——当前段落收口后再从候选里挑一件开（第八十六批）。</div></div>
+<div class="cols"><section><h2>段落 <span class="n">${stories.length}</span></h2>${stories.map(card).join('') || '<p class="none">还没有段落。</p>'}</section>
+<section><h2>修改 <span class="n">${changes.length}</span></h2>${changes.map(card).join('') || '<p class="none">还没有修改切片。</p>'}${others.length ? `<h2>其他 <span class="n">${others.length}</span></h2>${others.map(card).join('')}` : ''}</section>
+<section><h2>候选 <span class="n">${openN} 等着开${cands.items.length > openN ? ` / 共 ${cands.items.length}` : ''}</span></h2>${cands.items.slice().reverse().map(candCard).join('') || '<p class="none">没有候选。审阅或试原型时点出的事，开发指挥用 <code>slice candidate add</code> 记在这里。</p>'}</section></div>`
+}
+/**
+ * 「日志」页：读 journal/<日期>.jsonl（scene.js 每一笔都追加进去，只追加不裁剪），按「派工」分块——
+ * 开发指挥几点派了谁做什么、角色每一句细步隔了多久、几点交回、这一趟多长、用了多少。
+ * 2026-09-14 项目所有者：「一个任务 agent 们会跑很久……我没有 log 可以看到 agent 们是怎样配合的」。
+ */
+function journalPage(date) {
+  const dir = path.join(root, 'journal')
+  const days = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(f)).map((f) => f.slice(0, 10)).sort().reverse() : []
+  const day = date && days.includes(date) ? date : days[0]
+  const nav = `<div class="jnav">${days.map((d) => `<a href="/journal?date=${d}" class="${d === day ? 'on' : ''}">${d}</a>`).join('') || '<span>还没有日志</span>'}</div>`
+  if (!day) return `<div class="ptree"><div class="ph">日志记的是角色们怎么配合：开发指挥几点派了谁做什么、角色每一句细步、几点交回、花了多久。scene.js 每写一笔看板就往 <code>journal/&lt;日期&gt;.jsonl</code> 追加一行，只追加不裁剪。</div></div>${nav}`
+  const entries = []
+  for (const line of fs.readFileSync(path.join(dir, day + '.jsonl'), 'utf8').split('\n')) { if (!line.trim()) continue; try { entries.push(JSON.parse(line)) } catch { /* 坏行跳过 */ } }
+  entries.sort((a, b) => a.ts.localeCompare(b.ts))
+  const fmtMs = (ms) => { if (ms == null) return ''; const s = Math.round(ms / 1000); if (s < 60) return `${s} 秒`; const m = Math.floor(s / 60); return m < 60 ? `${m} 分 ${s % 60} 秒` : `${Math.floor(m / 60)} 小时 ${m % 60} 分` }
+  const fmtK = (n) => (n == null ? '' : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n))
+  const hm = (ts) => ts.slice(11, 19)
+  const KIND = { set: '看板', ask: '发问', answer: '答', mode: '模式', handoff: '交接', progress: '细步', back: '交回', dispatch: '派工', confirm: '确认', unconfirm: '撤销确认', comment: '留话', review: '审阅' }
+  // 分块
+  const blocks = [], open = new Map()
+  for (const e of entries) {
+    if (e.kind === 'dispatch') { const b = { kind: 'block', who: e.who, start: e, items: [], end: null }; blocks.push(b); open.set(e.who, b); continue }
+    if (e.kind === 'back' && open.has(e.who)) { open.get(e.who).end = e; open.delete(e.who); continue }
+    if ((e.kind === 'progress' || e.kind === 'ask') && open.has(e.who)) { open.get(e.who).items.push(e); continue }
+    blocks.push({ kind: 'event', e })
+  }
+  // 汇总：按角色；等人的时间（看板 who=人 到下一次 who≠人）
+  const byRole = new Map()
+  let waitMs = 0, waitFrom = null
+  for (const e of entries) {
+    if (e.kind === 'set') { if (e.who === '人' && !waitFrom) waitFrom = e.ts; else if (e.who !== '人' && waitFrom) { waitMs += new Date(e.ts) - new Date(waitFrom); waitFrom = null } }
+    if (e.kind === 'back') { const r = byRole.get(e.who) ?? { n: 0, ms: 0, tokens: 0, tools: 0, steps: 0 }; r.n++; r.ms += e.elapsedMs ?? 0; r.tokens += e.tokens ?? 0; r.tools += e.tools ?? 0; r.steps += e.steps ?? 0; byRole.set(e.who, r) }
+  }
+  const stillOpen = [...open.keys()]
+  const sum = `<div class="ptree"><div class="ph">${esc(day)}（UTC）共 ${entries.length} 笔：派工 ${blocks.filter((b) => b.kind === 'block').length} 趟${stillOpen.length ? `（${stillOpen.map(esc).join('、')} 还没交回）` : ''}；等你拍板累计 ${fmtMs(waitMs) || '0 秒'}。每块是一趟派工：开发指挥几点派了谁做什么、角色每一句细步与上一句隔了多久、几点交回、这一趟多长、用了多少。复盘时看：一趟里细步之间的空档在哪、哪一趟来回最多。</div></div>
+${byRole.size ? `<table class="jsum"><tr><th>角色</th><th>派了几趟</th><th>共多久</th><th>细步</th><th>tokens</th><th>工具次数</th></tr>${[...byRole].map(([w, r]) => `<tr><td>${esc(w)}</td><td>${r.n}</td><td>${fmtMs(r.ms)}</td><td>${r.steps || ''}</td><td>${fmtK(r.tokens) || ''}</td><td>${r.tools || ''}</td></tr>`).join('')}</table>` : ''}`
+  const item = (it, prev) => `<div class="ji"><span class="t">${hm(it.ts)}</span><span class="gap">+${fmtMs(new Date(it.ts) - prev)}</span><span class="tx">${it.kind === 'ask' ? '<b>发问：</b>' : ''}${esc(it.text)}</span></div>`
+  const html = blocks.map((b) => {
+    if (b.kind === 'event') { const e = b.e; return `<div class="je k-${esc(e.kind)}${e.done ? ' done' : ''}"><span class="t">${hm(e.ts)}</span><span class="who">${esc(e.who ?? '—')}</span><span class="k">${KIND[e.kind] ?? esc(e.kind)}${e.kind === 'set' && e.done ? '（完）' : ''}</span><span class="tx">${esc(e.text)}${e.kind === 'set' && e.slice ? `<span class="sl">${esc(e.slice)} · ${esc(e.phase ?? '—')}</span>` : ''}${e.kind === 'set' && e.note ? `<span class="sl">结果：${esc(e.note)}</span>` : ''}</span></div>` }
+    const st = b.start, en = b.end
+    let prev = new Date(st.ts).getTime()
+    const items = b.items.map((it) => { const h = item(it, prev); prev = new Date(it.ts).getTime(); return h }).join('')
+    const endLine = en
+      ? `<div class="jb-end"><span class="t">${hm(en.ts)}</span><b>${esc(en.who)} ${esc(en.outcome ?? '交回')}</b><span class="stat">${fmtMs(en.elapsedMs)}${en.steps != null ? ` · ${en.steps} 句细步` : ''}${en.tokens != null ? ` · ${fmtK(en.tokens)} tokens` : ''}${en.tools != null ? ` · ${en.tools} 次工具` : ''}</span><span class="tx">${esc(en.text)}</span></div>`
+      : '<div class="jb-end open">还没交回</div>'
+    return `<details class="jb" open><summary><span class="t">${hm(st.ts)}</span> 开发指挥派 <b>${esc(st.who)}</b>：${esc(st.text)}${en ? `<span class="stat">${fmtMs(en.elapsedMs)} · ${b.items.length} 句细步</span>` : '<span class="stat open">进行中</span>'}</summary><div class="jbody">${items || '<div class="ji none">（没有写细步）</div>'}${endLine}</div></details>`
+  }).join('')
+  return sum + nav + `<div class="journal">${html}</div>`
 }
 const wrap = (body) => `<!doctype html><html lang="zh"><head><meta charset="utf-8"><style>
 body{margin:0;padding:16px 24px;font:14px/1.6 system-ui,"Segoe UI","Microsoft YaHei",sans-serif;color:#1f2328;background:#fff}
@@ -256,7 +349,21 @@ body{margin:0;padding:16px 24px;font:14px/1.6 system-ui,"Segoe UI","Microsoft Ya
 .fc .what{color:#1f2328;font-size:13px;margin:4px 0 0}.fc .tr{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:#0969da}
 .fc .kl{margin:6px 0 0}.fc .kl summary{font-size:12.5px;color:#0969da}.fc .kl .n{color:#57606a;font-weight:400}.fc .kl .n.over{color:#b45309}.fc .kl pre{white-space:pre-wrap;background:#f6f8fa;border:1px solid #e6e8eb;border-radius:6px;padding:8px 10px;font-size:12.5px;line-height:1.55;margin:4px 0 0}
 .fc .kl.none{color:#b45309;font-size:12.5px}.fc .t{margin:6px 0 0 10px;padding-left:10px;border-left:2px solid #e6e8eb;font-size:12.5px;color:#57606a}.fc .t .no{font-size:11px;color:#fff;background:#8c959f;border-radius:999px;padding:0 6px}.fc .t .prior{color:#8c959f}
-.fc .cf{margin-top:8px;display:flex;gap:10px;align-items:center}.fc .cst{font:inherit;padding:4px 14px;border-radius:6px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;cursor:pointer}.fc .cst:disabled{opacity:.5}.fc .okd{color:#1a7f37;font-size:12.5px}.fc .cmsg{font-size:12.5px;color:#57606a}
+.fc .cf{margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.fc .cst.un{background:#fff;color:#57606a;border-color:#d0d7de;padding:2px 10px;font-size:12px}
+.fc .hc{margin-top:6px;font-size:12.5px}.fc .hc summary{color:#57606a;cursor:pointer}.fc .hn{margin:4px 0 0 12px;padding:3px 8px;border-left:3px solid #f3d27a;background:#fff8e1}.fc .hn .t{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:#8c959f;margin-right:6px}
+.fc .hcf{display:flex;gap:8px;align-items:flex-start;margin:6px 0 0 12px}.fc .hcf textarea{flex:1;font:inherit;font-size:12.5px;padding:4px 6px;border:1px solid #d0d7de;border-radius:6px}.fc .hcb{padding:3px 10px;font-size:12px}.fc .cst{font:inherit;padding:4px 14px;border-radius:6px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;cursor:pointer}.fc .cst:disabled{opacity:.5}.fc .okd{color:#1a7f37;font-size:12.5px}.fc .cmsg{font-size:12.5px;color:#57606a}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;align-items:start}.cols h2{font-size:15px;margin:0 0 8px;border-bottom:1px solid #e6e8eb;padding-bottom:4px}.cols h2 .n{font-size:12px;color:#57606a;font-weight:400;margin-left:6px}.cols .none{color:#8c959f;font-size:13px}
+.sc,.cc{border:1px solid #e6e8eb;border-radius:8px;padding:8px 12px;margin:6px 0;background:#fff}.sc.cur{border-color:#1f6feb;box-shadow:0 0 0 2px #dbe7ff}.sc.closed{opacity:.75}.cc.opened,.cc.dropped{opacity:.6}
+.sh{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.sh .id{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:#fff;background:#1f6feb;border-radius:999px;padding:0 8px}.cc .sh .id{background:#8c959f}.sh .sp{flex:1}.sh .now{font-size:11px;color:#b45309;border:1px solid #f3d27a;background:#fff8e1;border-radius:4px;padding:0 6px}.sh .okd{font-size:11px;color:#1a7f37}
+.st{font-size:11px;padding:0 6px;border-radius:4px;border:1px solid #d0d7de;color:#57606a;margin-left:4px}.st.done{color:#1a7f37;border-color:#a7d9b3;background:#eaf7ed}.st.in-progress,.st.open{color:#b45309;border-color:#f3d27a;background:#fff8e1}.st.opened{color:#1a7f37;border-color:#a7d9b3}
+.sc .it,.cc .it{font-size:13px;margin:4px 0 0}.sc .meta,.cc .meta{font-size:12px;color:#57606a;margin-top:2px}.sc .last{font-size:12px;color:#8c959f;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jnav{margin:0 0 10px;font-size:13px}.jnav a{margin-right:10px;color:#0969da;text-decoration:none}.jnav a.on{font-weight:700;color:#1f2328;border-bottom:2px solid #1f6feb}
+.jsum{border-collapse:collapse;font-size:12.5px;margin:0 0 12px}.jsum th,.jsum td{border:1px solid #e6e8eb;padding:3px 10px;text-align:left}.jsum th{background:#f6f8fa}
+.journal .t{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:#57606a;margin-right:8px}.journal .who{font-weight:600;margin-right:6px}.journal .k{font-size:11px;color:#57606a;border:1px solid #d0d7de;border-radius:4px;padding:0 5px;margin-right:8px}
+.je{padding:3px 8px;font-size:13px;border-left:3px solid #e6e8eb;margin:3px 0}.je.k-set{border-left-color:#8c959f}.je.k-set.done{opacity:.7}.je.k-ask{border-left-color:#f3d27a;background:#fff8e1}.je.k-answer,.je.k-confirm,.je.k-review{border-left-color:#a7d9b3;background:#eaf7ed}.je.k-comment,.je.k-unconfirm{border-left-color:#f3d27a;background:#fff8e1}.je.k-handoff{border-left-color:#1f6feb}.je .sl{display:block;font-size:12px;color:#8c959f}
+.jb{border:1px solid #e6e8eb;border-radius:8px;margin:8px 0;background:#fff}.jb summary{padding:6px 10px;cursor:pointer;font-size:13px}.jb summary:hover{background:#f6f8fa}.jb .stat{float:right;font-size:12px;color:#57606a}.jb .stat.open{color:#b45309}
+.jbody{padding:4px 10px 8px 26px;border-top:1px solid #f0f2f4}.ji{display:flex;gap:8px;font-size:12.5px;padding:2px 0;align-items:baseline}.ji .gap{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:#b45309;min-width:70px}.ji .tx{flex:1}.ji.none{color:#8c959f}
+.jb-end{margin-top:6px;padding-top:6px;border-top:1px dashed #e6e8eb;font-size:13px}.jb-end .stat{float:none;margin-left:8px}.jb-end .tx{display:block;color:#57606a;font-size:12.5px;margin-top:2px}.jb-end.open{color:#b45309}
 .seq{margin-top:10px}.seq summary{cursor:pointer;color:#0969da;font-size:13px}
 .gate{margin:0 0 14px;padding:10px 14px;border-radius:6px;border:1px solid #e6e8eb;background:#f6f8fa}.gate.ok{border-color:#a7d9b3;background:#eaf7ed}.gate.ask{border-color:#f3d27a;background:#fff8e1}.gate.wait{color:#57606a}.gate button{font:inherit;margin-left:10px;padding:4px 14px;border-radius:6px;border:1px solid #8a6d00;background:#ffd76a;cursor:pointer}.gate button:disabled{opacity:.5;cursor:default}#confirmMsg{margin-left:10px}
 .md pre{background:#f6f8fa;border:1px solid #e6e8eb;border-radius:6px;padding:10px 12px;overflow:auto;font-size:12.5px;line-height:1.5}.md code{background:#f3f4f6;padding:0 4px;border-radius:3px;font-size:12.5px}
@@ -276,12 +383,12 @@ header .sp{flex:1}header .now{color:var(--dim);font-size:12.5px;white-space:nowr
 main{flex:1;position:relative}iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--page,#fff)}
 </style></head><body>
 <header><h1>工作台<span>${esc(projectName)}</span></h1>
-<button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="plan">编码计划</button><button data-t="proto">试原型</button>
+<button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="slices">切片</button><button data-t="journal">日志</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="plan">编码计划</button><button data-t="proto">试原型</button>
 <span class="sp"></span><span class="now" id="now"></span><button id="theme" title="白天 / 黑夜">🌙</button><a id="open" href="#" target="_blank" title="在新窗口打开这一页">新窗口 ↗</a></header>
 <main><iframe id="f" src="/p/scene/"></iframe></main>
 <script>
 let cur='scene';let slice=null;let who=null
-const url=(t)=>({scene:'/p/scene/',ask:'/p/scene/questions',story:'/p/story/story'+(slice?'?slice='+slice:''),model:'/p/story/model',delta:'/delta'+(slice?'?slice='+slice:''),review:'/p/review/',codemodel:'/p/codemodel/',prepr:'/p/prepr/',plan:'/plan'+(slice?'?slice='+slice:''),proto:'/p/proto/'})[t]
+const url=(t)=>({scene:'/p/scene/',ask:'/p/scene/questions',slices:'/slices',journal:'/journal',story:'/p/story/story'+(slice?'?slice='+slice:''),model:'/p/story/model',delta:'/delta'+(slice?'?slice='+slice:''),review:'/p/review/',codemodel:'/p/codemodel/',prepr:'/p/prepr/',plan:'/plan'+(slice?'?slice='+slice:''),proto:'/p/proto/'})[t]
 const f=document.getElementById('f'),open=document.getElementById('open')
 function show(t){cur=t;for(const b of document.querySelectorAll('header button'))b.classList.toggle('on',b.dataset.t===t);f.src=url(t);open.href=url(t);try{localStorage.setItem('wb-tab',t)}catch{}}
 for(const b of document.querySelectorAll('header button'))b.addEventListener('click',()=>show(b.dataset.t))
@@ -373,17 +480,42 @@ const server = http.createServer((req, res) => {
   if (url === '/') return html(shell, '外壳')
   if (url === '/state') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify(scene())) }
   if (url === '/delta') return html(deltaPage(q.slice || currentSlice()) ?? wrap('<p>还没指到哪一段。</p>'))
+  if (url === '/slices') return html(wrap(slicesPage()))
+  if (url === '/journal') return html(wrap(journalPage(q.date)))
   if (url === '/plan') return html(wrap(planPage(q.slice || currentSlice())))
-  // 页面上的「确认这份计划」按钮：不另写一份确认逻辑，直接跑命令行那一个，门禁、日志、切片记录都是同一套
-  if (url === '/plan/confirm' && req.method === 'POST') {
-    const slice = q.slice || currentSlice()
-    if (!/^s-[0-9]{3,}$/.test(slice ?? '')) { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('没指到哪一段') }
-    const stepNo = /^\d+$/.test(q.step ?? '') ? [q.step] : []
-    const r = spawnSync(process.execPath, [path.join(tools, 'plan.js'), 'confirm', root, slice, ...stepNo], { encoding: 'utf8', cwd: root })
+  // 计划页的按钮：确认 / 撤销 / 留话都不另写逻辑，直接跑命令行那一个（plan.js confirm | unconfirm | comment），门禁、日志、切片记录同一套；
+  // 留话顺手记进现场日志（scene progress --who 人），事后在「日志」页看得见人在哪一步说了什么
+  const planCmd = (sub, slice, extra, okText) => {
+    const r = spawnSync(process.execPath, [path.join(tools, 'plan.js'), sub, root, slice, ...extra], { encoding: 'utf8', cwd: root })
     const out = ((r.stdout ?? '') + (r.stderr ?? '')).trim()
-    console.log(`页面上确认计划 ${slice} → ${r.status === 0 ? '成' : '拒'}：${out.split('\n')[0]}`)
+    console.log(`页面上 plan ${sub} ${slice} ${extra[0] ?? ''} → ${r.status === 0 ? '成' : '拒'}：${out.split('\n')[0]}`)
     res.writeHead(r.status === 0 ? 200 : 409, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' })
-    return res.end(out || (r.status === 0 ? '已确认' : '没确认成'))
+    res.end(out || (r.status === 0 ? okText : '没成'))
+    return r.status === 0
+  }
+  if ((url === '/plan/confirm' || url === '/plan/unconfirm') && req.method === 'POST') {
+    const slice = q.slice || currentSlice()
+    if (!/^[sm]-[0-9]{3,}$/.test(slice ?? '')) { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('没指到哪一段') }
+    const stepNo = /^\d+$/.test(q.step ?? '') ? [q.step] : []
+    if (url === '/plan/unconfirm' && !stepNo.length) { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('撤销要指明第几步') }
+    return planCmd(url === '/plan/confirm' ? 'confirm' : 'unconfirm', slice, stepNo, url === '/plan/confirm' ? '已确认' : '已撤销')
+  }
+  if (url === '/plan/comment' && req.method === 'POST') {
+    const slice = q.slice || currentSlice()
+    if (!/^[sm]-[0-9]{3,}$/.test(slice ?? '') || !/^\d+$/.test(q.step ?? '')) { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('要指明哪一段第几步') }
+    let body = ''
+    req.on('data', (c) => { body += c })
+    req.on('end', () => {
+      const text = body.trim()
+      if (!text) { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('先写一句') }
+      planCmd('comment', slice, [q.step, text], '记下了') // plan.js 自己把这一笔记进日志
+    })
+    return
+  }
+  if (url === '/plan/state') {
+    const slice = q.slice || currentSlice()
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+    return res.end(JSON.stringify({ slice, gateHtml: slice ? planGateDiv(slice) : '' }))
   }
   res.writeHead(404); res.end()
 })

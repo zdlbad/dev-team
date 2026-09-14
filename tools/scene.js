@@ -15,6 +15,13 @@
  *   node tools/scene.js <项目> questions [--all] [--问卷]   列出等人回答的问题；--问卷 排成一份编号问卷，人可以一口气答完
  *   node tools/scene.js <项目> answer <问题号> "<人怎么答的>"   把人的答复记上，问题就算答完
  *   node tools/scene.js <项目> handoff "<一段话>"    收工交接：停在哪、等谁、有什么坑。换台机器的人打开看板先看它
+ *   node tools/scene.js <项目> dispatch <角色> "<派了什么活，一句>"          开发指挥派角色时记一笔（谁、什么活、几点）
+ *   node tools/scene.js <项目> back <角色> "<交回摘要，一句>" [--tokens n] [--tools n] [--ms n] [--outcome 交回|发问|没交回]
+ *                                                 角色交回时记一笔：算出这一趟从派到回花了多久、用了多少
+ *   node tools/scene.js <项目> journal [YYYY-MM-DD]  打印那一天的日志：按「派工」分块，每块里是角色的细步与耗时；给人复盘用
+ *
+ * 日志：现场看板上的每一笔（set / progress / ask / answer / mode / handoff / dispatch / back）都追加进
+ * journal/<UTC 日期>.jsonl，只追加不裁剪（看板的 timeline 只留最近 60 条，日志是全的）。工作台「日志」页读它。
  *   node tools/scene.js <项目> serve [--port 4873]
  *   node tools/scene.js <项目>                      打印一屏（不起页面）
  *
@@ -60,6 +67,28 @@ const readJson = (p, d) => {
 }
 const projectName = readJson(path.join(root, 'project.json'), {}).name ?? path.basename(root)
 
+// ---------- 日志：只追加 ----------
+const journalDir = path.join(root, 'journal')
+const journalPath = (day) => path.join(journalDir, `${day}.jsonl`)
+/** 记一笔进当天（UTC）的日志文件；看板怎么裁剪都不影响它 */
+function journal(entry) {
+  const ts = entry.ts ?? new Date().toISOString()
+  fs.mkdirSync(journalDir, { recursive: true })
+  fs.appendFileSync(journalPath(ts.slice(0, 10)), JSON.stringify({ ts, machine: ME, ...entry }) + '\n')
+}
+/** 读一天（或几天）的日志，按时间排好 */
+function readJournal(days) {
+  const out = []
+  for (const d of days) {
+    const p = journalPath(d)
+    if (!fs.existsSync(p)) continue
+    for (const line of fs.readFileSync(p, 'utf8').split('\n')) { if (!line.trim()) continue; try { out.push(JSON.parse(line)) } catch { /* 坏行跳过 */ } }
+  }
+  return out.sort((a, b) => a.ts.localeCompare(b.ts))
+}
+const fmtMs = (ms) => { if (ms == null) return ''; const s = Math.round(ms / 1000); if (s < 60) return `${s} 秒`; const m = Math.floor(s / 60); return m < 60 ? `${m} 分 ${s % 60} 秒` : `${Math.floor(m / 60)} 小时 ${m % 60} 分` }
+const fmtK = (n) => (n == null ? '' : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n))
+
 function ago(iso) {
   const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
   if (m < 1) return '刚刚'
@@ -82,7 +111,7 @@ function slices() {
   if (!fs.existsSync(dir)) return []
   return fs
     .readdirSync(dir)
-    .filter((f) => f.endsWith('.json') && !f.endsWith('.story.json'))
+    .filter((f) => f.endsWith('.json') && !f.endsWith('.story.json') && !f.startsWith('_'))
     .map((f) => {
       const d = readJson(path.join(dir, f), null)
       if (!d) return null
@@ -136,6 +165,7 @@ if (cmd === 'set') {
     timeline: [...(s.timeline ?? []), entry].slice(-60),
     progress: changed ? [] : (s.progress ?? []),
   })
+  journal({ ts: now, kind: 'set', who, slice, phase, text: step, note, done: args.includes('--done') })
   console.log(`现场已更新：${slice ?? '—'} · ${phase ?? '—'} · ${who ?? '—'} · ${step}`)
   process.exit(0)
 }
@@ -157,6 +187,7 @@ if (cmd === 'progress') {
     progress: [...(s.progress ?? []), entry].slice(-40),
     timeline: [...(s.timeline ?? []), { ts: now, slice: s.slice, phase: s.phase, step: s.step, who, note: text, kind: 'progress', machine: ME }].slice(-60),
   })
+  journal({ ts: now, kind: 'progress', who, slice: s.slice, phase: s.phase, text })
   console.log(`细步：${who ?? '—'} · ${text}`)
   process.exit(0)
 }
@@ -177,6 +208,7 @@ if (cmd === 'mode') {
   const now = new Date().toISOString()
   writeScene({ ...s0, askMode: want, updatedAt: now, machine: ME,
     timeline: [...(s0.timeline ?? []), { ts: now, slice: s0.slice, phase: s0.phase, step: `问答改成「${want}」模式${note ? '：' + note : ''}`, who: '人', kind: 'mode', machine: ME }].slice(-60) })
+  journal({ ts: now, kind: 'mode', who: '人', slice: s0.slice, phase: s0.phase, text: `问答改成「${want}」模式${note ? '：' + note : ''}` })
   console.log(want === '逐个'
     ? '改成「逐个」模式：角色遇到要人裁的事问完就停下，开发指挥当场转给人。'
     : '改成「问卷」模式：角色照自己偏向的那个先做下去，把问题攒起来；人回来 scene questions --问卷 一次性答，跟偏向不一样的把角色叫回来返工。')
@@ -220,6 +252,7 @@ if (cmd === 'ask') {
     questions: [...qs, q],
     timeline: [...(s0.timeline ?? []), { ts: now, slice: s0.slice, phase: s0.phase, step: '发问：' + question.slice(0, 50) + (question.length > 50 ? '…' : ''), who, note: null, kind: 'ask', machine: ME }].slice(-60),
   })
+  journal({ ts: now, kind: 'ask', who, slice: s0.slice, phase: s0.phase, id, text: question, lean, confidence, mode })
   console.log(mode === '逐个'
     ? `${id} 已挂上等人回答：${question}\n现在是「逐个」模式：停下来把这个问题交回开发指挥，别自己替人拿主意、别一边等一边往下写。`
     : `${id} 已攒进问卷：${question}\n现在是「问卷」模式：人不在，照你偏向的「${lean}」先做下去，别停。\n写一句细步说明这一处是按偏向做的（scene progress），交稿里也列出来——人回来答了，跟偏向不一样的那几处要返工。`)
@@ -283,6 +316,7 @@ function recordAnswer(id, text, via) {
       : x)),
     timeline: [...(s0.timeline ?? []), { ts: now, slice: s0.slice, phase: s0.phase, step: `${q.id} 人${redo ? '改答' : '答'}：` + answer.slice(0, 50) + (answer.length > 50 ? '…' : ''), who: '人', note: null, kind: 'answer', machine: ME }].slice(-60),
   })
+  journal({ ts: now, kind: 'answer', who: '人', slice: s0.slice, phase: s0.phase, id: q.id, text: answer, redo, via: via ?? '对话', askedBy: q.who ?? null })
   const sameAsLean = q.wentAhead && (answer.includes(q.wentAhead) || answer.includes(String(q.wentAhead).split('：')[0]) || String(q.wentAhead).includes(answer))
   const tail = !q.wentAhead
     ? '（把答复送回问这个问题的角色，让它接着往下跑）'
@@ -317,7 +351,77 @@ if (cmd === 'handoff') {
     machine: ME,
     timeline: [...(s.timeline ?? []), { ts: now, slice: s.slice, phase: s.phase, step: '交接：' + text.slice(0, 60) + (text.length > 60 ? '…' : ''), who: '开发指挥', note: null, done: true, machine: ME }].slice(-60),
   })
+  journal({ ts: now, kind: 'handoff', who: '开发指挥', slice: s.slice, phase: s.phase, text })
   console.log(`交接已写（${ME}）：${text.slice(0, 80)}`)
+  process.exit(0)
+}
+
+// ---------- dispatch / back：开发指挥派角色、角色交回，各记一笔 ----------
+// 2026-09-14 项目所有者：「一个任务 agent 们会跑很久……我没有 log 可以看到 agent 们是怎样配合的」。
+// 派的时候记谁、什么活；回的时候记摘要、用了多少（tokens / 工具次数 / 毫秒，子 agent 的用量汇报里有），算出从派到回多久。
+if (cmd === 'dispatch') {
+  const who = args[2]
+  const text = args.slice(3).find((a) => !a.startsWith('--') && !USED.has(a))
+  if (!who || !ROLES.includes(who)) die(`用法：scene dispatch <项目> <角色> "<派了什么活>"；角色名：${ROLES.join('、')}`)
+  if (!text) die('要写派了什么活，一句')
+  const s = readScene()
+  const now = new Date().toISOString()
+  journal({ ts: now, kind: 'dispatch', who, by: '开发指挥', slice: s.slice, phase: s.phase, text })
+  console.log(`派工已记：${who} · ${text}`)
+  process.exit(0)
+}
+if (cmd === 'back') {
+  const who = args[2]
+  const text = args.slice(3).find((a) => !a.startsWith('--') && !USED.has(a))
+  if (!who || !ROLES.includes(who)) die(`用法：scene back <项目> <角色> "<交回摘要>" [--tokens n] [--tools n] [--ms n] [--outcome 交回|发问|没交回]`)
+  if (!text) die('要写交回了什么，一句')
+  const s = readScene()
+  const now = new Date().toISOString()
+  const today = now.slice(0, 10), yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+  const all = readJournal([yesterday, today])
+  // 这一趟从哪次派工算起：同一角色最近一次 dispatch，且它后面还没有 back
+  let start = null
+  for (let i = all.length - 1; i >= 0; i--) { const e = all[i]; if (e.who !== who) continue; if (e.kind === 'back') break; if (e.kind === 'dispatch') { start = e; break } }
+  const num = (k) => (opt(k) != null && /^[0-9]+$/.test(opt(k)) ? Number(opt(k)) : null)
+  const elapsedMs = start ? new Date(now).getTime() - new Date(start.ts).getTime() : null
+  const steps = start ? all.filter((e) => e.kind === 'progress' && e.who === who && e.ts > start.ts).length : null
+  journal({ ts: now, kind: 'back', who, slice: s.slice, phase: s.phase, text, outcome: opt('--outcome', '交回'), tokens: num('--tokens'), tools: num('--tools'), ms: num('--ms'), elapsedMs, steps, dispatchedAt: start?.ts ?? null })
+  console.log(`交回已记：${who} · ${text}${elapsedMs != null ? `　从派到回 ${fmtMs(elapsedMs)}${steps != null ? `、写了 ${steps} 句细步` : ''}` : '　（没找到这一趟的派工记录）'}${num('--tokens') != null ? `、${fmtK(num('--tokens'))} tokens` : ''}${num('--tools') != null ? `、${num('--tools')} 次工具` : ''}`)
+  process.exit(0)
+}
+/** 把一天的日志按「派工」分块：块 = 从 dispatch 到同角色的 back；角色的 progress 挂进块里；别的事件平铺 */
+function groupJournal(entries) {
+  const blocks = []
+  const open = new Map() // 角色 → 块
+  for (const e of entries) {
+    if (e.kind === 'dispatch') { const b = { kind: 'block', who: e.who, start: e, items: [], end: null }; blocks.push(b); open.set(e.who, b); continue }
+    if (e.kind === 'back' && open.has(e.who)) { const b = open.get(e.who); b.end = e; open.delete(e.who); continue }
+    if ((e.kind === 'progress' || e.kind === 'ask') && open.has(e.who)) { open.get(e.who).items.push(e); continue }
+    blocks.push({ kind: 'event', e })
+  }
+  return blocks
+}
+if (cmd === 'journal') {
+  const day = args.slice(2).find((a) => /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(a)) ?? new Date().toISOString().slice(0, 10)
+  const entries = readJournal([day])
+  if (!entries.length) die(`${day} 没有日志（journal/${day}.jsonl 不存在或是空的）`)
+  const hm = (ts) => ts.slice(11, 19)
+  const L = [`日志 · ${projectName} · ${day}（UTC）　共 ${entries.length} 笔`, '']
+  const byRole = new Map()
+  for (const b of groupJournal(entries)) {
+    if (b.kind === 'event') { const e = b.e; L.push(`${hm(e.ts)}  ${e.who ?? '—'}　${{ set: e.done ? '看板（完）' : '看板', ask: '发问', answer: '答', mode: '模式', handoff: '交接', progress: '细步', back: '交回', confirm: '确认', unconfirm: '撤销确认', comment: '留话', review: '审阅' }[e.kind] ?? e.kind}：${e.text}${e.kind === 'set' && e.slice ? `　[${e.slice} · ${e.phase ?? '—'}]` : ''}`); continue }
+    const st = b.start, en = b.end
+    L.push(`${hm(st.ts)}  开发指挥　派 ${st.who}：${st.text}`)
+    let prev = new Date(st.ts).getTime()
+    for (const it of b.items) { const t = new Date(it.ts).getTime(); L.push(`    ${hm(it.ts)}  +${fmtMs(t - prev).padEnd(9)} ${it.kind === 'ask' ? '发问：' : ''}${it.text}`); prev = t }
+    if (en) {
+      L.push(`${hm(en.ts)}  ${en.who}　${en.outcome ?? '交回'}（${fmtMs(en.elapsedMs)}${en.steps != null ? `，${en.steps} 句细步` : ''}${en.tokens != null ? `，${fmtK(en.tokens)} tokens` : ''}${en.tools != null ? `，${en.tools} 次工具` : ''}）：${en.text}`)
+      const r = byRole.get(en.who) ?? { n: 0, ms: 0, tokens: 0, tools: 0 }; r.n++; r.ms += en.elapsedMs ?? 0; r.tokens += en.tokens ?? 0; r.tools += en.tools ?? 0; byRole.set(en.who, r)
+    } else L.push(`         ${st.who}　（还没交回）`)
+    L.push('')
+  }
+  if (byRole.size) { L.push('按角色算'); for (const [w, r] of byRole) L.push(`  ${w}　派 ${r.n} 趟　共 ${fmtMs(r.ms)}${r.tokens ? `　${fmtK(r.tokens)} tokens` : ''}${r.tools ? `　${r.tools} 次工具` : ''}`) }
+  console.log(L.join('\n'))
   process.exit(0)
 }
 
@@ -373,7 +477,7 @@ if (cmd === 'show') {
 }
 
 // ---------- serve ----------
-if (cmd !== 'serve') die(`不认得的子命令：${cmd}（set | progress | ask | questions | answer | mode | handoff | serve | 不带子命令打印一屏）`)
+if (cmd !== 'serve') die(`不认得的子命令：${cmd}（set | progress | ask | questions | answer | mode | handoff | dispatch | back | journal | serve | 不带子命令打印一屏）`)
 
 const esc = (x) => String(x ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 

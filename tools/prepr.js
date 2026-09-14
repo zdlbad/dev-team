@@ -40,7 +40,7 @@ const ANGLES = {
   'C 契约完整': { question: 'contracts/ 里每个字段代码都接了吗？标「（故意推迟）」的有没有偷偷实现？', pass: 'HTTP 入口的字段名、来源（params / query / body）、类型与契约一致；表的每列都落了；错误按契约映射状态码；推迟的项没有代码。', fail: '字段名不同、可选变必填、类型漂移、错误映射缺、推迟项被实现了。', how: '逐份契约对代码；contract check 只查字段名，这里查类型、来源、可选性与状态码。' },
   'D 测试行为': { question: '测试测的是业务行为，还是实现细节？', pass: '每个用例断言的是模型说的事：状态变了、抛了哪个错、发了哪个事件、算出的金额；用例名带编号。', fail: '断言的是私有方法被调、某个依赖被调了几次、内部字段的值——模型里没有这一步。', how: '每个 it 找它对应的 rule / throws / raises / step；找不到的就是在测实现。' },
   'E 防御正确性': { question: '正常路径之外，代码自己的错误处理对不对？（只查没有 U-xxx 覆盖的纯工程项）', pass: '外部输入到达逻辑前按它自己声明的类型 / 消息校验了；错误没有被吞掉；部分失败的结果报得准确；抛出的错没有越过这一层声明的范围。', fail: '守卫比错误消息承诺的弱（说「正整数」只挡了 NaN）；try/catch 吞错；Promise.all 结果错位；一个层抛出了它不该抛的东西。', how: '找每个 catch、每个 parseInt / Number、每个 Promise.all / allSettled、每个入口的入参处理；已经有 U-xxx 语句并被模型回应的（重复提交、并发改、部分失败的语义）不在这里重查——那是校验 ① 与原型的事。' },
-  'S 风格': { question: '代码读着顺不顺？（seed/06 的 S1–S8；只出「说明」或「应该改」，不出「必须改」）', pass: '领域概念是类；03 没定形状的数据类用经典写法；领域层没有技术词汇；登记在组合根里显式可见；没有为将来准备的开关；订阅者接事件、服务接参数；处理器体之外的注释说约束不叙述；模块内没有另设 _shared/。', fail: '一个领域概念写成对象字面量加自由函数；技术词汇进了领域层的命名；一个只取一个值的布尔参数；逐行叙述的注释；模块内出现 _shared/。', how: '逐条对 06 的表；03 已定形状的类（聚合根、处理器、命令、事件）按 03 算，不按 S2 挑。' },
+  'S 风格': { question: '代码读着顺不顺？（seed/06 的 S1–S8；只出「说明」或「应该改」，不出「必须改」）', pass: '领域概念是类；03 没定形状的数据类用经典写法；领域层没有技术词汇；登记在组合根里显式可见；没有为将来准备的开关；订阅者接事件、服务接参数；处理器体之外的注释讲行为与原因、类上只说自己守的规则、不抄模型 note 里的上下文（03「注释写什么」）；模块内没有另设 _shared/。', fail: '一个领域概念写成对象字面量加自由函数；技术词汇进了领域层的命名；一个只取一个值的布尔参数；逐行叙述的注释；类注释或方法注释抄了模型 note 里的上下文（并发洞、真保证在哪一层）、写了代码不负责的事；模块内出现 _shared/。', how: '逐条对 06 的表；03 已定形状的类（聚合根、处理器、命令、事件）按 03 算，不按 S2 挑。' },
   'F 并发与状态': { question: '两个流程同时碰同一份数据时会不会出错？（只查没有 U-xxx 覆盖的纯工程项）', pass: '共享状态在 await 前读、await 后用的地方有版本或重读；乐观锁在仓储 save 里落了；页面上同一实体的两个动作互相禁用。', fail: 'await 前后状态不一致；并发写覆盖；同一实体两个按钮能同时按。', how: '找每个 await 前后对同一状态的读写；找每个 save 有没有 version 比对；U-xxx 已覆盖的场景跳过。' },
 }
 const MODES = { proto: ['A 用例流程', 'B 被删的不变量', 'D 测试行为', 'S 风格'], shell: ['C 契约完整', 'E 防御正确性', 'F 并发与状态', 'S 风格'] }
@@ -62,6 +62,16 @@ if (cmd === 'new') {
     conclusion: null,
   }
   fs.mkdirSync(path.dirname(reportPath), { recursive: true })
+  // 上一份报告是别的切片的、或已经填过发现的，先存档成 pre-pr-<模式>.<那条切片>.json 再盖——人还没过眼的说明不能被下一段的骨架冲掉（2026-09-14 s-001 那份被盖过一次）
+  if (fs.existsSync(reportPath)) {
+    let prev = null
+    try { prev = readJson(reportPath) } catch { prev = null }
+    if (prev?.slice && (prev.slice !== sliceId || (prev.judgments ?? []).length || (prev.confirms ?? []).length)) {
+      const arch = path.join(root, 'reports', `pre-pr-${mode}.${prev.slice}.json`)
+      fs.writeFileSync(arch, JSON.stringify(prev, null, 2) + '\n')
+      console.log(`上一份报告（${prev.slice}，${(prev.judgments ?? []).length} 条发现）已存档：${path.relative(process.cwd(), arch)}`)
+    }
+  }
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n')
   console.log(`报告骨架：${path.relative(process.cwd(), reportPath)}（模式 ${mode}：${MODES[mode].join('、')}；范围文件 ${files.length}，可跳过的旧使用语句 ${usage.length}）`)
 }
