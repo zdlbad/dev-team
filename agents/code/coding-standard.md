@@ -1,12 +1,81 @@
-# 03 — 编码规范：模型与代码的编解码规则
+# 编码规范：模型与代码的编解码规则
 
-*dev-team 种子文档。上位文档：[00-principles.md](00-principles.md)、[02-model.md](02-model.md)。目录与命名见 02 的第二至五节，本文不重复。*
+*原型与编码读全文；pre-pr 审查读「测试」一节。模型文件的形状在 [model/shapes.md](../model/shapes.md)；写法（读着顺不顺）在 [style.md](style.md)，两者冲突时以本文为准。*
 
 本规范的每一条都必须能被反向解析。凡是解码器读不出来的约定，就不是规范，只是风格。语言：TypeScript。基础构建块以路径别名 `@shared/building-block/*` 引入（tsconfig `paths` 映射到 `src/shared/building-block/*`）。
 
 ---
 
-## 一、基础构建块 `src/shared/building-block/`
+## 一、代码目录
+
+```
+src/<module-folder>/
+  domain/
+    <aggregate>/
+      aggregate-root.OrderAggregateRoot.ts
+      entity.OrderLineEntity.ts
+      value-object.MoneyValueObject.ts
+      event.OrderCreatedEvent.ts
+      error.OrderFailedError.ts
+      repository.OrderRepositoryInterface.ts
+    service.PricingService.ts
+  application/
+    command-handler.CreateOrderCommandHandler.ts
+    query-handler.GetOrderQueryHandler.ts
+    event-handler.NotifySupplierOnOrderCreatedEventHandler.ts
+  ports/
+    port.PaymentGatewayInterface.ts
+  adapters/
+    adapter.PrismaOrderRepository.ts
+    adapter.StripePaymentGateway.ts
+```
+
+应用层不分子目录，靠文件前缀区分种类。
+
+**文件夹名全小写、多词用连字符，模块名 PascalCase**（`common/project-layout.md`「名字的两套写法」）：`Participants` → `src/participants/`，聚合文件夹同理（`domain/service-agreement/`），测试镜像 `tests/<module-folder>/`。解码器先看组合根 `module.ts` 里 `build<Module>Module` 的真名，没有才按词换算。
+
+---
+
+## 二、命名规则
+
+**文件名 = `<种类前缀>.<类名>.<扩展名>`；主导出的类名与文件名中的类名一字不差；类名以种类后缀结尾。**
+
+| 前缀 | 类名后缀 | 示例文件 | 主导出 | 伴随导出 |
+|---|---|---|---|---|
+| `aggregate-root.` | `AggregateRoot` | `aggregate-root.OrderAggregateRoot.ts` | `OrderAggregateRoot` | |
+| `entity.` | `Entity` | `entity.OrderLineEntity.ts` | `OrderLineEntity` | |
+| `value-object.` | `ValueObject` | `value-object.MoneyValueObject.ts` | `MoneyValueObject` | |
+| `event.` | `Event` | `event.OrderCreatedEvent.ts` | `OrderCreatedEvent` | |
+| `error.` | `Error` | `error.OrderFailedError.ts` | `OrderFailedError` | |
+| `service.` | `Service` | `service.PricingService.ts` | `PricingService` | |
+| `repository.` | `RepositoryInterface` | `repository.OrderRepositoryInterface.ts` | `OrderRepositoryInterface` | |
+| `command-handler.` | `CommandHandler` | `command-handler.CreateOrderCommandHandler.ts` | `CreateOrderCommandHandler` | `CreateOrderCommand` |
+| `query-handler.` | `QueryHandler` | `query-handler.GetOrderQueryHandler.ts` | `GetOrderQueryHandler` | `GetOrderQuery`、`GetOrderResult` |
+| `event-handler.` | `EventHandler` | `event-handler.NotifySupplierOnOrderCreatedEventHandler.ts` | `NotifySupplierOnOrderCreatedEventHandler` | |
+| `port.` | `Interface` | `port.PaymentGatewayInterface.ts` | `PaymentGatewayInterface` | |
+| `adapter.` | 无；以技术名开头 | `adapter.PrismaOrderRepository.ts` | `PrismaOrderRepository` | |
+
+补充：
+- 事件处理的类名 = `<动作>On<事件类名>EventHandler`。解码器从类名读出触发事件，与代码中实际订阅的事件核对。
+- 适配器类名 = `<技术><被实现的接口名去掉 Interface>`。解码器从类名推出它实现哪个接口，与 `implements` 子句核对。适配器不进模型，但命名规则同样适用。
+- 伴随导出只允许表中列出的；其它导出即违规。
+
+## 三、编解码对应
+
+| 代码 | 模型 |
+|---|---|
+| `domain/<aggregate>/aggregate-root.*`、`entity.*`、`value-object.*`、`event.*`、`error.*` | **折叠**为一个 `aggregate-root.<Name>AggregateRoot.json` |
+| `domain/<aggregate>/repository.*` | `repository.*.json` 一对一 |
+| `domain/service.*` | `service.*.json` 一对一 |
+| `application/*` | 一对一 |
+| `ports/*` | 一对一 |
+| `adapters/*` | 不解码 |
+
+路径本身就是对应关系；解码器按文件前缀判定种类，不做推断。
+
+---
+
+## 四、基础构建块 `src/shared/building-block/`
 
 所有模块共用的技术基座：聚合根、事件、错误等抽象的基类与技术守卫。**不含任何业务概念**——它不是 DDD 战略意义上的「共享内核」（Shared Kernel，两个上下文共享的一块业务模型）；模块之间不共享任何业务模型，跨模块只经端口与事件。
 
@@ -36,7 +105,7 @@ export class ConcurrencyError extends Error {}   // 基础设施错误，不是�
 
 ---
 
-## 二、领域层
+## 五、领域层
 
 **import 规则：领域层只能 import 同模块的领域层与 `shared/building-block/domain`。** 不 import 应用层、端口、适配器、任何框架或 ORM。
 
@@ -118,7 +187,7 @@ export class PricingService {
 
 ---
 
-## 三、应用层
+## 六、应用层
 
 **import 规则：应用层可 import 同模块领域层、同模块端口、`shared/building-block/*`。** 不 import 适配器。
 
@@ -185,7 +254,7 @@ export class CreateOrderCommandHandler {
 
 ---
 
-## 四、端口与适配器
+## 七、端口与适配器
 
 - **端口** = 接口，方法只用领域类型或标量。
 - **适配器** = 类，`implements` 一个仓储接口或端口接口；内部只做线格式转换；**不含分支业务逻辑**。
@@ -194,7 +263,7 @@ export class CreateOrderCommandHandler {
 
 ---
 
-## 五、结构化注释
+## 八、结构化注释
 
 类型表达不了的模型信息，用固定的 JSDoc 标签承载。解码器只认这几个。
 
@@ -220,18 +289,18 @@ export class CreateOrderCommandHandler {
 
 ---
 
-## 五之二、注释写什么
+## 九、注释写什么
 
 > 由来：2026-09-14 验收项目第八十七批。pre-pr 把「类注释与方法 `@note` 把同一段上下文写了两遍」报成说明，项目所有者说口径不对：注释该注释的是代码在做的东西，「看不见」说的是相关上下文，不该是代码不负责的内容。
 
 - **注释讲代码的行为和原因**：这个方法做什么、为什么这么做（为什么不用那个显而易见的做法、给下一个改代码的人的提醒）。
 - **不写代码不负责的事**：类上的注释只说这个类守的规则；要提示别处守的，最多一句「唯一性不由这里守」，不加也行。
 - **上下文不必写全，能不写就不写**：并发洞、真保证在哪一层、为什么住在这里——那是模型说明文字（`note`）的事，给人审模型看的。代码不照抄；模型有 `note` 而代码没写，校验 ② 不算差异。
-- 第五节的结构化注释照旧：它们是模型的一部分，不是叙述。
+- 第八节的结构化注释照旧：它们是模型的一部分，不是叙述。
 
 ---
 
-## 六、解码规则汇总
+## 十、解码规则汇总
 
 | 代码 | 模型 |
 |---|---|
@@ -253,12 +322,12 @@ export class CreateOrderCommandHandler {
 | `Command` / `Query` / `Result` 类的字段 | `input` / `result` |
 | `handle` 的参数类型 | `trigger` |
 | 端口接口的方法签名 | `operations` |
-| JSDoc 标签 | 见第五节 |
+| JSDoc 标签 | 见第八节 |
 | 错误的 `condition` | 无法解码，留空；比对只比名字 |
 
 ---
 
-## 七、禁止项（校验直接报告）
+## 十一、禁止项（校验直接报告）
 
 1. 领域层 import 同模块领域层与 `shared/building-block/domain` 以外的任何东西
 2. 应用层 import 适配器
@@ -282,11 +351,11 @@ export class CreateOrderCommandHandler {
 
 ---
 
-## 八、测试
+## 十二、测试
 
 测试不进模型、不被解码（解码器跳过 `*.test.ts`，且 `tests/` 不在 `src/` 下）。它是代码对自己的承诺，pre-pr 审查的角度 B、D 读它。
 
-**位置与命名**：`tests/` 镜像 `src/`（文件夹同样全小写连字符，02 第三节），文件名 = 源文件名 + `.test.ts`。
+**位置与命名**：`tests/` 镜像 `src/`（文件夹同样全小写连字符，见第一节），文件名 = 源文件名 + `.test.ts`。
 
 ```
 tests/<module-folder>/domain/<aggregate>/aggregate-root.OrderAggregateRoot.test.ts
@@ -309,13 +378,13 @@ tests/<module-folder>/adapters/adapter.PrismaOrderRepository.test.ts
 
 **用例名带编号**：`it('[R-001] 确认后的订单不能再加订单行', …)`。pre-pr 审查的角度 D 靠它把测试对回模型；没有编号的用例视为在测实现。
 
-**纯度**：领域测试只 `import` 同模块领域层与 `shared/building-block/domain`——不 import 适配器、不起数据库、不 mock。用例测试用内存适配器（原型用的那几个），不 mock 仓储接口。测试替身（记录调用的端口实现）按 06 的 S2 写成小类。
+**纯度**：领域测试只 `import` 同模块领域层与 `shared/building-block/domain`——不 import 适配器、不起数据库、不 mock。用例测试用内存适配器（原型用的那几个），不 mock 仓储接口。测试替身（记录调用的端口实现）按 style.md 的 S2 写成小类。
 
 **谁写**：原型角色写领域层与应用层的测试（它写那些代码）；编码角色写外壳的测试。计划（`plan.js`）会把测试文件列成步骤。
 
 ---
 
-## 九、未定
+## 十三、未定
 
 - 目标架构是否只支持六边形（v4 曾支持传统 MVC 作为第二目标；本规范只写六边形）
 - HTTP 入口的文件位置与命名：契约管形状，不管文件放哪；等第一个实现切片按技术选型定下来再写进这里

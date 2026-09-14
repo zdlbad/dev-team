@@ -147,7 +147,7 @@ function applyWordMap(text, pairs, keys) {
 }
 
 /**
- * 模块名 ↔ 代码文件夹名（seed/02 第三节，第七十二批）：模块名是 PascalCase（Participants、ServiceAgreements），
+ * 模块名 ↔ 代码文件夹名（agents/common/project-layout.md「名字的两套写法」，第七十二批）：模块名是 PascalCase（Participants、ServiceAgreements），
  * 代码库里的文件夹全小写、多词连字符（participants、service-agreements）；模型目录 model/<Module>/ 仍用模块名。
  * 模块名只允许「每个词首字母大写、其余小写」这样才能来回换算；HCPBilling 这种全大写缩写会换不回来，规范里不许。
  */

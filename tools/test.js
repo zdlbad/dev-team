@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 测试运行器。依据 seed/03-coding-standard.md 第八节：tests/ 镜像 src/，文件名 = 源文件名 + .test.ts，用 node:test。
+ * 测试运行器。依据 agents/code/coding-standard.md「测试」：tests/ 镜像 src/，文件名 = 源文件名 + .test.ts，用 node:test。
  *
  * 用法：node tools/test.js <代码库> [<子路径或文件名片段>…]
  *   编译代码库（tsc → .proto-build，与原型共用），然后 node --test 跑 tests/ 下编译出的 *.test.js；

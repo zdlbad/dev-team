@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 校验器。依据 seed/04-validation.md。
+ * 校验器。依据 agents/model/validation.md。
  *
  * 用法：node tools/validate.js <项目目录> [--code <代码库目录>] [--slice <切片id>]
  *   方向 ①（模型 ↔ 业务描述）总是执行；带 --code 时执行方向 ②（解码代码并与模型比对）。
@@ -195,7 +195,7 @@ const byId = new Map(business.map((s) => [s.id, s]))
 const sliceRec = sliceId ? (project.slices ?? []).map((s) => s.data).find((s) => s.id === sliceId) : null
 const scopeIds = sliceRec?.traces?.length ? new Set(sliceRec.traces) : null
 const inScope = (id) => !scopeIds || scopeIds.has(id)
-// 聚合粗版（module.json 的 aggregates / members / idRefs）是战略设计时人确认的路标，段落建到哪个聚合再细化哪个（seed/01）。
+// 聚合粗版（module.json 的 aggregates / members / idRefs）是战略设计时人确认的路标，段落建到哪个聚合再细化哪个（seed/slices.md）。
 // 带 --slice 时，切片 scope 之外还没建的聚合、成员、引用与范围外模块的空追溯不算错，记进 report.deferred 给人看个数。
 const scopeAggs = sliceRec?.scope?.aggregates?.length ? new Set(sliceRec.scope.aggregates) : null
 const scopeMods = sliceRec?.scope?.modules?.length ? new Set(sliceRec.scope.modules) : null
@@ -260,7 +260,7 @@ if (schemaRun.status !== 0) {
 }
 for (const el of model.elements.filter((e) => e.kind === 'invalid')) add(r1, 'error', 'schema', el.file, `JSON 解析失败：${el.error}`)
 
-// 标签：层与文件对得上、字母与种类对得上、分层文件里每条都标了层（07 第三节）
+// 标签：层与文件对得上、字母与种类对得上、分层文件里每条都标了层（agents/business/layers.md）
 let unlayered = 0
 for (const s of business) {
   if (!inScope(s.id)) continue
@@ -319,7 +319,7 @@ function ruleLandings(id) {
   for (const s of services) for (const op of s.data.operations) if (op.traces.includes(id)) out.push({ kind: 'service', el: s, label: `领域服务 ${s.data.name}.${op.name}`, text: `领域服务 ${s.data.name}.${sig(op.name, op.input, op.output)}　${rulesText(op.rules, id)}${throwsText(op.throws)}` })
   for (const h of handlers) if (h.data.traces.includes(id)) out.push({ kind: 'event-handler', el: h, label: `事件处理 ${h.data.name}`, text: `事件处理 ${h.data.name}（触发：${h.data.trigger}）：${h.data.steps.map((s) => s.text).join(' → ')}` })
   for (const e of errors) if (e.data.traces.includes(id)) out.push({ kind: 'error', el: e, label: `错误 ${e.data.name}`, text: `错误 ${e.data.name}：${e.data.condition ? pickText(e.data.condition, id, '；') : '（无条件说明）'}` })
-  // 端口也是落点：描述我方系统之外的业务流程（政府门户上收到转介）的事实落在边界上，不落聚合（seed/02；验收项目第六十八批）
+  // 端口也是落点：描述我方系统之外的业务流程（政府门户上收到转介）的事实落在边界上，不落聚合（agents/model/shapes.md；验收项目第六十八批）
   for (const p of ports) if ((p.data.traces ?? []).includes(id)) out.push({ kind: 'port', el: p, label: `端口 ${p.data.name}`, text: `端口 ${p.data.name}（${p.data.kind === 'external-system' ? '外部系统' : '模块'} ${p.data.target}）：${(p.data.operations ?? []).map((op) => `${op.name}${op.note ? '——' + op.note : ''}`).join('；')}` })
   return out
 }
