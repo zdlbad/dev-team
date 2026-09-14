@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 解码器：从代码库的核心圈（domain / application / ports）还原模型 JSON。
- * 依据：seed/03-coding-standard.md 第六节「解码规则汇总」。
+ * 依据：agents/code/coding-standard.md「解码规则汇总」。
  *
  * 用法：node tools/decode.js <代码库目录> <输出目录> [--system <系统名>]
  * 输出：与 model/ 同结构的 JSON；另有 _decode-issues.json 记录解码期发现的违规。
@@ -63,7 +63,7 @@ const registry = new Map()
 /** 每个模块：{ name, dir, aggregates: Map<folder, {root, members: []}> } */
 const modules = new Map()
 
-/** 文件夹名 → 模块名（seed/02 第三节：文件夹全小写连字符，模块名 PascalCase）。
+/** 文件夹名 → 模块名（agents/common/project-layout.md「名字的两套写法」：文件夹全小写连字符，模块名 PascalCase）。
  *  组合根 module.ts 里 export function build<Module>Module 写的是真名，先信它；没有就按词换算（service-agreements → ServiceAgreements） */
 function moduleNameOfFolder(folder, modDir) {
   const modFile = path.join(modDir, 'module.ts')
@@ -602,7 +602,7 @@ function stepsOf(body, currentModule, ctx) {
           else if (e.prefix === 'command-handler') kind = 'command'
           if (kind) {
             call = { kind, target, method: r.method }
-            // 记下被调节点：处理器算完 raises / throws 闭包后，把被调工厂 / 行为会抛的错挂回这一步（02 第六节步骤级 throws；2026-09-13 之前从不产出，方向 ② 永远差一条）
+            // 记下被调节点：处理器算完 raises / throws 闭包后，把被调工厂 / 行为会抛的错挂回这一步（agents/model/shapes.md「步骤语法」的步骤级 throws；2026-09-13 之前从不产出，方向 ② 永远差一条）
             if (kind === 'factory' || kind === 'behavior' || kind === 'service') call._callee = nodeId(e, r.method) // service：交给领域服务那一步，服务操作会抛的错也挂回这一步（第八十五批之后才有领域服务）
             ctx.onCall?.(e, r, kind)
             if (output && ['behavior', 'factory', 'service'].includes(kind)) domainOutputs.add(output)

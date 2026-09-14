@@ -1,69 +1,12 @@
-# 02 — 模型：目录、命名与文件形状
+# 模型：目录、命名与文件形状
 
-*dev-team 种子文档。上位文档：[00-principles.md](00-principles.md)、[01-phases-and-slices.md](01-phases-and-slices.md)。*
+*模型师、接口、解读、模型校验读它。思想在 [seed/principles.md](../../seed/principles.md)；项目目录与写入权在 [common/project-layout.md](../common/project-layout.md)；代码那边的目录、命名、编解码对应在 [code/coding-standard.md](../code/coding-standard.md)。*
 
-本文七节：项目目录、模型目录、代码目录、命名规则、编解码对应、文件形状、推论出的规则。
-
----
-
-## 一、项目目录
-
-```
-<project>/                    每个项目一个文件夹、一个 git 仓库；变化靠 git 追溯
-  raw/                        原料，任意格式，人放入；暗的，按段落点亮（07）
-  business/00-overview.md         粗读的产物：这门生意、钱的路径、模块候选；给人读，不进解析
-  business/<Module>/abstraction.md   第一层：手册层面的抽象业务（按段落点亮）
-  business/<Module>/practice.md   第二层：这家公司的做法，含五问问出来的情形
-  glossary.json               词汇表
-  stories/                    故事线索引：段落先后、一句衔接、每段到第几轮（开发指挥写）
-  model/                      设计模型（见「二」）
-  model-decoded/<version>/    解码出的实际模型；与 model/ 同结构；临时产物
-  slices/<id>.json            切片记录；<id>.story.json 故事
-  plans/<id>.json             编码计划：这次要动哪些代码文件、按什么顺序、每步守什么（开发指挥算骨架，写码角色补关键逻辑，人确认）
-  contracts/                  生产外壳的契约：http.<UseCase> / table.<Aggregate> / errors.<Module>（接口角色写，人确认）
-  reports/                    校验与审查报告，每种只留最新一份；json 进 git（审到一半的裁决、现场看板要随人换机器），md / html 重算得出、不进
-```
-
-代码库在项目目录之外，其路径记在切片记录里。计划与契约的形状见 `schema/plan.schema.json`、`schema/contract.schema.json`。
-
-### 业务描述的形式
-
-分几层、怎么判、怎么写、怎么点亮，全在 [07-business-layers.md](07-business-layers.md)。这里只记形状：陈述性语句，不写故事、步骤、角色矩阵。两类编号（能力 G、规则 R），每条带编号与 `(层-种类)` 标签，编号按点亮顺序发、永不复用。`abstraction.md` 与 `practice.md` 都按能力 / 规则分节：
-
-```markdown
-## 能力
-- [G-001] (业务抽象-能力) 协调员能为参与者制定预算
-
-## 规则
-- [R-001] (业务抽象-约束) 预算总额在参与者的核定额度之内
-- [R-003] (业务抽象-公式) 剩余额度 = 核定额度 − 已分配
-- [R-002] (业务落地-触发) 预算被批准后，服务提供方收到通知
-- [R-004] (业务落地-情形) 同一份预算可能由两位协调员先后经手
-```
-
-校验器只认以 `- [G-`、`- [R-` 开头的行（`- [U-` 是老项目里已停发的使用语句，只认不发）；语句下面缩进的依据子项（出处、批次）不是语句。种类七种：能力、事实、约束、公式、触发、流程、情形（定义与判据见 07 第三节）。
-
-五问（会不会同时、会不会重复、一次几条与部分失败、失败了业务上怎么处置、谁在什么时候能看见）问出来的是可能碰上的情形，通常不在原料里，要业务分析主动问出来、写成普通的业务落地语句（种类「情形」）；模型师照它们定第三层的回应（同时改 → 版本号或状态守卫；重复 → 状态守卫或幂等；一次几条 → 命令的输入形状与部分失败的语义；失败处置 → 事件或错误；可见性 → 查询的范围），写在元素规则里，校验 ① 会要求每条语句都有落点。
-
-| 种类 | 在模型中的落点 |
-|---|---|
-| 能力 | 命令或查询 |
-| 事实 | 字段，或结构性的不变量 |
-| 约束 | 不变量（行为的守卫 + 错误） |
-| 公式 | 值对象或行为的计算、领域服务 |
-| 触发 | 事件处理 |
-| 流程 | 后一个动作的状态守卫 + 错误；用例的先后 |
-| 情形 | 行为的规则：状态守卫、幂等、错误 |
-
-层决定倾向：业务抽象多半落聚合（字段、不变量、推导），业务落地多半落用例（命令、执行者、编排先后）。事实归模块存放。粗读时的主题是模块候选；战略设计定稿后 `business/` 的文件夹跟着模块走，编号不变。
-
-### 解码出的实际模型
-
-`model-decoded/<version>/`，版本 = 代码提交号 + 时间戳。与 `model/` 同结构，由解码器整体生成，**永不手改，随时可删**。校验 ② 读 `model/` 与某一版 `model-decoded/<version>/` 比对。
+本文四节：模型目录、模型名与类名、文件形状、由形状推论出的规则。
 
 ---
 
-## 二、模型目录
+## 一、模型目录
 
 ```
 model/
@@ -86,10 +29,10 @@ model/
 - 六边形核心圈 = `domain` + `application` + `ports`，进模型、可解码。实现圈 = 代码里的 `adapters`，不进模型。
 - 仓储是接口，放在领域层；实现在 `adapters`。查询直接调用仓储的读方法，不经过聚合行为，不设独立读模型。
 - 事件只在**发出它的聚合**里声明一次；事件处理的 `trigger` 引用事件名。
-- 模型文字一事一处：同一件事只在它归属的元素上写全，别处至多指一句「住在 X 上」；叙述、字段说明、不变量、端口说明、用例步骤之间不互相重抄（验收项目 2026-09-12 点名）。
+- 模型文字一事一处（见 [common/wording.md](../common/wording.md)）：同一件事只在它归属的元素上写全，别处至多指一句「住在 X 上」。
 - 不变量是聚合**随时能拿自己的状态核对**的一句话（五项参与者信息齐全、出生日期不晚于今天）；核对不了的（别人的流程、事情的先后）不是不变量，是叙述或别处的规则。
 - **要看别的实例或别的模块才能判的规则，不是聚合的不变量，归领域服务**（第八十五批）。「标识唯一」「同一位老人只有一笔持续服务拨款」「出处那份文档得是她名下真有的」都是全部档案、全部拨款这个集合上的约束，一份档案自己核对不了；从库里读回来走 FROM_PERSISTENCE 也不经过创建方法，说明它本来就不是对象自己的状态。形状：处理器先查仓储、问端口，把查到的已有档案、已有拨款、端口答复当参数递给**纯函数式领域服务**（第 12 条不变），服务比对后抛错或调聚合的 CREATE；聚合的创建方法只查自己这一份填得对不对。把「已有档案」塞给 CREATE 让静态方法比对是名不副实：聚合只能信处理器给的参数全不全，而处理器又不该做业务判断。唯一性的真保证在仓储存的那一刻（数据库唯一约束，外壳阶段加），领域服务里的比对是给人一句像样的错误，挡不住两个人同一秒各建一份。
-- **规则句怎么写**（第八十四批，与 seed/07 第三节同一条规矩）：给人看的页面上不变量叫「规则」。一条规则有骨架——**谁的哪个方法检查什么；不成立时抛出哪个错误**——骨架帮人不漏，填进去的仍然是通顺的话，不是变量替换。例：「FundingAllocation 的创建方法会检查分类季度金额与分类年度金额；缺一项或不是一个数，就抛出 InvalidFundingAllocation」。业务上的事先一句说清（「一位老人名下只能有一笔持续服务拨款」），再说方法怎么查、抛什么，再说边界；一句缠三件事、用冒号分号串起来，读到末尾已经忘了主语。**规则句只说规则**：「金额是不是正数，业务没说，本段不管」「换不换人，本段不管」这类边界说明不写在规则里，聚合整体的写进 `aggregateNarrative`，某一项的写进那个字段的 `note`。
+- 给人看的页面上不变量叫「规则」。规则句、字段说明、错误说明怎么写（骨架、只说规则、边界说明放 `aggregateNarrative` 或字段 `note`）见 [common/wording.md](../common/wording.md)「规则句怎么写」。
 - `ports/` 只放对外依赖；进入方向不设端口，命令与查询本身就是模块入口。
 - 描述我方系统之外的业务流程的事实（「老人选定提供方后，提供方在政府门户上收到她的转介」）落在端口的操作上，不落聚合：聚合无从核对别人的流程，写成不变量只是给编号凑落点。端口标的是边界，本轮适配器是人照抄也照建（验收项目所有者 2026-09-12 第六十八批）。
 - **模块之间的关系不手写**，由渲染器与校验器推导：`ports/` 中指向其他模块的条目 = 同步依赖；事件处理触发于其他模块的事件 = 异步依赖。
@@ -103,82 +46,13 @@ model/
 
 ---
 
-## 三、代码目录
-
-```
-src/<module-folder>/
-  domain/
-    <aggregate>/
-      aggregate-root.OrderAggregateRoot.ts
-      entity.OrderLineEntity.ts
-      value-object.MoneyValueObject.ts
-      event.OrderCreatedEvent.ts
-      error.OrderFailedError.ts
-      repository.OrderRepositoryInterface.ts
-    service.PricingService.ts
-  application/
-    command-handler.CreateOrderCommandHandler.ts
-    query-handler.GetOrderQueryHandler.ts
-    event-handler.NotifySupplierOnOrderCreatedEventHandler.ts
-  ports/
-    port.PaymentGatewayInterface.ts
-  adapters/
-    adapter.PrismaOrderRepository.ts
-    adapter.StripePaymentGateway.ts
-```
-
-应用层不分子目录，靠文件前缀区分种类。
-
-**文件夹名全小写、多词用连字符**（2026-09-13 第七十二批）：模块 `Participants` 的代码在 `src/participants/`，模块 `ServiceAgreements` 在 `src/service-agreements/`；聚合文件夹同理（`domain/order/`、`domain/service-agreement/`）；测试镜像 `tests/<module-folder>/`。模块名本身（`modules.json`、`module.json`、模型文件里的 `module` 字段、类名、模型目录 `model/<Module>/`）仍是 PascalCase，不改。两者靠换算来回对应，所以模块名只许「每个词首字母大写、其余小写」，不许 `HCPBilling` 这种整段大写的缩写（会换不回来）；解码器先看组合根 `module.ts` 里 `build<Module>Module` 的真名，没有才按词换算。
-
----
-
-## 四、命名规则
-
-**文件名 = `<种类前缀>.<类名>.<扩展名>`；主导出的类名与文件名中的类名一字不差；类名以种类后缀结尾。**
-
-| 前缀 | 类名后缀 | 示例文件 | 主导出 | 伴随导出 |
-|---|---|---|---|---|
-| `aggregate-root.` | `AggregateRoot` | `aggregate-root.OrderAggregateRoot.ts` | `OrderAggregateRoot` | |
-| `entity.` | `Entity` | `entity.OrderLineEntity.ts` | `OrderLineEntity` | |
-| `value-object.` | `ValueObject` | `value-object.MoneyValueObject.ts` | `MoneyValueObject` | |
-| `event.` | `Event` | `event.OrderCreatedEvent.ts` | `OrderCreatedEvent` | |
-| `error.` | `Error` | `error.OrderFailedError.ts` | `OrderFailedError` | |
-| `service.` | `Service` | `service.PricingService.ts` | `PricingService` | |
-| `repository.` | `RepositoryInterface` | `repository.OrderRepositoryInterface.ts` | `OrderRepositoryInterface` | |
-| `command-handler.` | `CommandHandler` | `command-handler.CreateOrderCommandHandler.ts` | `CreateOrderCommandHandler` | `CreateOrderCommand` |
-| `query-handler.` | `QueryHandler` | `query-handler.GetOrderQueryHandler.ts` | `GetOrderQueryHandler` | `GetOrderQuery`、`GetOrderResult` |
-| `event-handler.` | `EventHandler` | `event-handler.NotifySupplierOnOrderCreatedEventHandler.ts` | `NotifySupplierOnOrderCreatedEventHandler` | |
-| `port.` | `Interface` | `port.PaymentGatewayInterface.ts` | `PaymentGatewayInterface` | |
-| `adapter.` | 无；以技术名开头 | `adapter.PrismaOrderRepository.ts` | `PrismaOrderRepository` | |
-
-补充：
-- 事件处理的类名 = `<动作>On<事件类名>EventHandler`。解码器从类名读出触发事件，与代码中实际订阅的事件核对。
-- 适配器类名 = `<技术><被实现的接口名去掉 Interface>`。解码器从类名推出它实现哪个接口，与 `implements` 子句核对。适配器不进模型，但命名规则同样适用。
-- 伴随导出只允许表中列出的；其它导出即违规。
-
-### 模型名与类名
+## 二、模型名与类名
 
 **模型里的名字 = 类名去掉种类后缀。** 模型与词汇表用 `Order`、`Money`、`OrderCreated`、`CreateOrder`、`NotifySupplierOnOrderCreated`、`PaymentGateway`、`OrderRepository`；代码用带后缀的类名。编码时加后缀，解码时去后缀。词汇表只收模型名。
 
 ---
 
-## 五、编解码对应
-
-| 代码 | 模型 |
-|---|---|
-| `domain/<aggregate>/aggregate-root.*`、`entity.*`、`value-object.*`、`event.*`、`error.*` | **折叠**为一个 `aggregate-root.<Name>AggregateRoot.json` |
-| `domain/<aggregate>/repository.*` | `repository.*.json` 一对一 |
-| `domain/service.*` | `service.*.json` 一对一 |
-| `application/*` | 一对一 |
-| `ports/*` | 一对一 |
-| `adapters/*` | 不解码 |
-
-路径本身就是对应关系；解码器按文件前缀判定种类，不做推断。
-
----
-
-## 六、文件形状
+## 三、文件形状
 
 ### 通用约定
 
@@ -370,7 +244,7 @@ src/<module-folder>/
 
 ---
 
-## 七、由形状推论出的规则（供 03 编码规范与 04 校验引用）
+## 四、由形状推论出的规则（供编码规范与校验引用）
 
 1. 模型中的每个名字必须是词汇表中的词。
 2. 领域服务只协调本模块的聚合；跨模块只经端口或事件。
