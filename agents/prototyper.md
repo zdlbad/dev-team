@@ -23,6 +23,7 @@ description: 原型。按编码计划把一条故事的领域代码与应用层�
 
 - 代码库：`src/<module-folder>/{domain,application,ports}/`（按 03，可解码；文件夹全小写连字符，`Participants` → `src/participants/`，02 第三节）、`src/<module-folder>/adapters/adapter.InMemory*.ts`（内存仓储，多一个 `all()`）、`src/<module-folder>/module.ts`（组合根，登记到宿主）、`src/proto/main.ts`（入口）、`tests/<Module>/…`（领域与用例测试，03 第八节）
 - 故事文件里每一步 `walk` 的 `input`：这一步在原型上跑时要给的输入（字段名 = 命令 `input` 的参数名，值来自故事的金额与日期）。**只写 `input`，不动 walk 的其它字段，不动步骤、题目、人物、缺口。**
+  - 值要用前面步骤存下的那条记录的 id 时，写 `"@<模块>.<聚合>"`（当前状态里最新一条；要第二条写 `"@Participants.Document#2"`），后面可以跟一句人话说明它是谁（`"@Participants.Document 第 2 步存下的那份通知书"`）。试原型页跑到这一步时从当前状态把真 id 带过来，带不出就不跑。**不要写占位文字**——「（跑的时候填…的 id）」会被当成真值送进命令，2026-09-14 s-002 第 3 步就这样把拨款记在一段占位文字名下。
 - `plans/<id>.json` 里每一步的 `keyLogic` 与 `doneAt`（通过 `plan done`）。不动计划的其它字段。
 
 ## 方法

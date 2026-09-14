@@ -86,7 +86,7 @@ function domainCard(el) {
   return `<div class="${cardCls(el.file)}" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], d.name, d.traces)}
   ${d.aggregateNarrative ? `<p class="narr">${esc(d.aggregateNarrative)}</p>` : ''}
   ${d.fields?.length ? `<div class="sec"><div class="sec-title">字段</div>${fieldsTable(d.fields)}</div>` : ''}
-  ${inv(d.aggregateInvariants, '聚合不变量')}${inv(d.invariants, '不变量')}${behaviors}${diffBlock(el.file)}</div>`
+  ${inv(d.aggregateInvariants, '聚合级规则')}${inv(d.invariants, '规则')}${behaviors}${diffBlock(el.file)}</div>`
 }
 function smallCard(el, body) {
   return `<div class="${cardCls(el.file)} small" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], el.data.name, el.data.traces)}${body}${diffBlock(el.file)}</div>`
