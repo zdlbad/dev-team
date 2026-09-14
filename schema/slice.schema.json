@@ -17,7 +17,8 @@
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^s-[0-9]{3,}$"
+      "pattern": "^[sm]-[0-9]{3,}$",
+      "description": "s-xxx：段落 / 实现 / 改说法切片；m-xxx：修改切片（第八十六批）"
     },
     "title": {
       "type": "string",
@@ -29,9 +30,10 @@
         "increment",
         "story",
         "implementation",
-        "refactor"
+        "refactor",
+        "change"
       ],
-      "description": "initial / increment：老式按主题的切片；story：建模切片（一条故事，到模型确认为止，不编码）；implementation：实现切片（若干条已确认的故事的模型 → 代码）；refactor：只改说法或结构、一个字的业务行为都不变（改名、挪位置）。refactor 没有业务意图，所以不走故事、不走裁定卡、也不算编码计划——它的门禁是「测试照旧全绿 + 把改名套在改前的解码结果上与改后逐字节一致」（tools/rename-check.js），不是跟模型 0 差异。见 seed/01-phases-and-slices.md「开发范围怎么切」"
+      "description": "initial / increment：老式按主题的切片；story：建模切片（一条故事，到模型确认为止，不编码）；implementation：实现切片（若干条已确认的故事的模型 → 代码）；refactor：只改说法或结构、一个字的业务行为都不变（改名、挪位置）。refactor 没有业务意图，所以不走故事、不走裁定卡、也不算编码计划——它的门禁是「测试照旧全绿 + 把改名套在改前的解码结果上与改后逐字节一致」（tools/rename-check.js），不是跟模型 0 差异。见 seed/01-phases-and-slices.md「开发范围怎么切」；change：修改切片（编号 m-xxx）——已走通的段落上，原型、审阅或裁定点出的一件事要改（业务行为或模型结构，不是改说法）；先记候选、当前段落收口后再开，一个只改一件事，周期见 seed/01「修改切片」"
     },
     "codebase": {
       "type": "string",
@@ -102,6 +104,13 @@
                 "null"
               ],
               "description": "模型阶段开工（in-progress）时的 git 提交；model-delta 以它为基线算这一段的增量"
+            },
+            "proofreadAt": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "文职总校完的日期（slice proofread）；段落切片里文职只跑这一趟，排在校验角色填判断之前（第八十九批）"
             }
           }
         },
@@ -238,6 +247,25 @@
           }
         }
       }
+    },
+    "origin": {
+      "type": "string",
+      "minLength": 1,
+      "description": "修改切片：这件事是谁在哪儿点出来的（试原型页 / 审阅页 / 裁定第几批）"
+    },
+    "touches": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^s-[0-9]{3,}$"
+      },
+      "uniqueItems": true,
+      "description": "修改切片：动到哪几个已走通的段落；收口前人要在原型上重走它们"
+    },
+    "candidate": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "修改切片：从 slices/_candidates.json 的第几号候选开出来的"
     }
   },
   "$defs": {

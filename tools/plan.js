@@ -6,7 +6,9 @@
  *
  * 用法：
  *   node tools/plan.js build   <项目目录> <切片id> [--code <代码库>] [--force]   算链路（已确认的计划要 --force 才重算）
- *   node tools/plan.js confirm <项目目录> <切片id>                              人确认计划（门禁）
+ *   node tools/plan.js confirm <项目目录> <切片id> [步骤号]                      人确认计划（门禁）；带步骤号只确认那一步，全确认了计划才算通过
+ *   node tools/plan.js unconfirm <项目目录> <切片id> <步骤号>                    人撤销某一步的确认（写完的步不能撤，改用留话）
+ *   node tools/plan.js comment <项目目录> <切片id> <步骤号> "<一句话>"            人在某一步上留话（哪里不对、要改成什么）；写码角色开写前读它
  *   node tools/plan.js done    <项目目录> <切片id> <步骤号> [说明]                角色：完成第 n 步（记时间，核对顺序用）
  *   node tools/plan.js check   <项目目录> <切片id> [--code <代码库>] [--json]    核对：已确认、关键逻辑齐、文件都在、顺序一致、walk.input 齐
  *
@@ -19,6 +21,7 @@ const os = require('node:os')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 const { folderOf, codePathOf, modelKeyOf, loadProject, walk, readJson, walkNames, conditionText } = require('./lib/project')
+const { journal } = require('./lib/journal')
 
 const args = process.argv.slice(2)
 const cmd = args[0]
@@ -331,9 +334,20 @@ function build(dry = false) {
 
   // ---- 合并旧计划的关键逻辑；写出 ----
   const old = fs.existsSync(planPath) ? readJson(planPath) : null
-  if (old?.confirmedAt && !args.includes('--force')) die(`计划已于 ${old.confirmedAt} 确认；要重算请加 --force（关键逻辑会尽量保留，确认与完成记录清零）`)
-  if (old) for (const s of steps) { const o = old.steps.find((x) => x.target === s.target && x.layer === s.layer && sameFile(x.file, s.file)); if (o?.keyLogic) s.keyLogic = o.keyLogic }
-  const plan = { slice: sliceId, kind: planKind, role: roleName, builtAt: now(), codebase: posix(path.relative(root, codebase)), scope: { modules: modulesInScope, aggregates: ordered, useCases: [...useCases].sort() }, steps, already, modelFingerprint: modelFingerprint(), confirmedAt: null, log: [...(old?.log ?? []), `${today} ${old ? '重算' : '生成'}：${steps.length} 步（${planKind}）${already.length ? `；另有 ${already.length} 项上一条切片已经做过，没列进步骤` : ''}`] }
+  if (old?.confirmedAt && !args.includes('--force')) die(`计划已于 ${old.confirmedAt} 确认；要重算请加 --force（关键逻辑与人留的话保留；内容没变的步确认也留着，只有新步和变了的步要重新确认；完成记录清零）`)
+  // 重算按「这次改了什么」算账（2026-09-14 项目所有者：「我改一条，两个段落都被重新写了一遍」）：
+  // 上一版同一步的关键逻辑、人留的话都带过来；一步的做什么与关键逻辑一个字没变，人对它的确认也留着——只有新步和内容变了的步要人重新确认。
+  let kept = 0
+  if (old) for (const s of steps) {
+    const o = old.steps.find((x) => x.target === s.target && x.layer === s.layer && sameFile(x.file, s.file))
+    if (!o) continue
+    if (o.keyLogic) s.keyLogic = o.keyLogic
+    if (o.humanNotes?.length) s.humanNotes = o.humanNotes
+    if (o.confirmedAt && o.action === s.action && o.what === s.what && (o.keyLogic ?? null) === (s.keyLogic ?? null)) { s.confirmedAt = o.confirmedAt; kept++ }
+  }
+  const allConfirmed = steps.length > 0 && steps.every((s) => s.confirmedAt)
+  const redo = steps.filter((s) => !s.confirmedAt).length
+  const plan = { slice: sliceId, kind: planKind, role: roleName, builtAt: now(), codebase: posix(path.relative(root, codebase)), scope: { modules: modulesInScope, aggregates: ordered, useCases: [...useCases].sort() }, steps, already, modelFingerprint: modelFingerprint(), confirmedAt: allConfirmed ? (old?.confirmedAt ?? today) : null, log: [...(old?.log ?? []), `${today} ${old ? '重算' : '生成'}：${steps.length} 步（${planKind}）${already.length ? `；另有 ${already.length} 项上一条切片已经做过，没列进步骤` : ''}${old && kept ? `；${kept} 步内容没变、人的确认留着${redo ? `，${redo} 步要重新确认` : ''}` : ''}`] }
   const carried = already.length ? `；另有 ${already.length} 项上一条切片已经做过、代码还在、跟模型仍然一致，没列进步骤` : ''
   if (unrecorded?.length) {
     const line = `这 ${unrecorded.length} 处的文件其实已经在代码库里、也跟模型一致，但没有哪张施工单记过是谁建的，所以仍然列成步骤：${unrecorded.map((s) => s.target).join('、')}`
@@ -563,6 +577,11 @@ function renderMd(plan) {
     L.push('| 层 | 文件 | 目标 | 谁做的 |', '|---|---|---|---|')
     for (const a of plan.already) L.push(`| ${LAYER[a.layer] ?? a.layer} | ${a.file ? '`' + a.file + '`' : '—'} | ${a.target} | ${a.by.slice} 第 ${a.by.n} 步${a.by.noFile ? '（用现成的，不另建文件）' : ''} |`)
   }
+  const talked = plan.steps.filter((s) => s.humanNotes?.length)
+  if (talked.length) {
+    L.push('', '## 人在步骤上留的话', '', '写码角色开写前先读这一节：人对哪一步有话，按话改，改了在 plan done 的说明里回一句。', '')
+    for (const s of talked) for (const h of s.humanNotes) L.push(`- 第 ${s.n} 步 ${s.target}（${String(h.ts).slice(0, 16).replace('T', ' ')}）：${h.text}`)
+  }
   L.push('', '## 记录', '', ...plan.log.map((l) => `- ${l}`), '')
   return L.join('\n')
 }
@@ -632,6 +651,7 @@ function confirm() {
   for (const s of targets) s.confirmedAt = today
   const left = plan.steps.filter((s) => !s.confirmedAt)
   if (stepArg) plan.log.push(`${today} 人确认第 ${stepArg} 步`)
+  journal(root, { kind: 'confirm', who: '人', slice: sliceId, text: stepArg ? `确认编码计划第 ${stepArg} 步 ${targets[0].target}` : `确认编码计划剩下的 ${targets.length} 步` })
   if (!left.length) {
     plan.confirmedAt = today
     plan.log.push(`${today} 人确认计划`)
@@ -642,6 +662,37 @@ function confirm() {
     savePlan(plan)
     console.log(`第 ${targets.map((s) => s.n).join('、')} 步已确认，还剩 ${left.length} 步：${left.map((s) => '#' + s.n).join(' ')}。全部确认后计划才算通过。`)
   }
+}
+
+/** 人撤销某一步的确认（2026-09-14 项目所有者：「单步确认按钮不好用，而且也无法撤销或者加 comment」）。写完的步不能撤——要改就留话，写码角色按话改 */
+function unconfirm() {
+  const n = Number(args[3])
+  if (!Number.isInteger(n) || n < 1) die('用法：plan unconfirm <项目目录> <切片id> <步骤号>')
+  const plan = loadPlan()
+  const s = plan.steps.find((x) => x.n === n)
+  if (!s) die(`没有第 ${n} 步（计划共 ${plan.steps.length} 步）`)
+  if (!s.confirmedAt) die(`第 ${n} 步本来就没确认`)
+  if (s.doneAt) die(`第 ${n} 步已经写完了，撤销确认没有意义；对它有话就 plan comment 留下，写码角色按话改`)
+  s.confirmedAt = null
+  plan.confirmedAt = null
+  plan.log.push(`${today} 人撤销第 ${n} 步的确认`)
+  journal(root, { kind: 'unconfirm', who: '人', slice: sliceId, text: `撤销编码计划第 ${n} 步 ${s.target} 的确认` })
+  savePlan(plan)
+  console.log(`第 ${n} 步的确认撤了；计划回到未通过，还有 ${plan.steps.filter((x) => !x.confirmedAt).length} 步没确认`)
+}
+/** 人在某一步上留话：哪里不对、要改成什么、为什么。存进步骤的 humanNotes，写进 .md 的「人在步骤上留的话」一节，写码角色开写前读 */
+function comment() {
+  const n = Number(args[3])
+  const text = args.slice(4).filter((a) => !a.startsWith('--') && !USED_VALUES.has(a)).join(' ').trim()
+  if (!Number.isInteger(n) || n < 1 || !text) die('用法：plan comment <项目目录> <切片id> <步骤号> "<一句话：哪里不对、要改成什么>"')
+  const plan = loadPlan()
+  const s = plan.steps.find((x) => x.n === n)
+  if (!s) die(`没有第 ${n} 步（计划共 ${plan.steps.length} 步）`)
+  s.humanNotes = [...(s.humanNotes ?? []), { ts: now(), text }]
+  plan.log.push(`${today} 人在第 ${n} 步留话：${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`)
+  journal(root, { kind: 'comment', who: '人', slice: sliceId, text: `在编码计划第 ${n} 步 ${s.target} 留话：${text}` })
+  savePlan(plan)
+  console.log(`第 ${n} 步 ${s.target} 留下了：${text}（${plan.role}角色开写前会读）`)
 }
 
 // ========== done ==========
@@ -713,6 +764,8 @@ function check() {
 
 if (cmd === 'build') build()
 if (cmd === 'confirm') confirm()
+if (cmd === 'unconfirm') unconfirm()
+if (cmd === 'comment') comment()
 if (cmd === 'done') done()
 if (cmd === 'check') check()
 if (cmd === 'amend') amend()

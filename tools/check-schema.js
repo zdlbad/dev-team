@@ -87,7 +87,7 @@ function main() {
     ...walk(path.join(root, 'slices')),
     ...walk(path.join(root, 'plans')),
     ...walk(path.join(root, 'contracts')),
-  ].filter((f) => fs.existsSync(f))
+  ].filter((f) => fs.existsSync(f) && !path.basename(f).startsWith('_')) // slices/_candidates.json 是候选清单，不是切片记录
 
   let bad = 0
   let checked = 0

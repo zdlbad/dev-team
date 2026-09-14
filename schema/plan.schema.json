@@ -171,6 +171,26 @@
               "null"
             ],
             "description": "人确认了这一步的关键逻辑（分步确认）；全部步骤都确认了 plan.confirmedAt 才有值"
+          },
+          "humanNotes": {
+            "type": "array",
+            "description": "人在这一步上留的话（计划页「有话说」或 plan comment）：哪里不对、要改成什么；写码角色开写前读",
+            "items": {
+              "type": "object",
+              "required": [
+                "ts",
+                "text"
+              ],
+              "properties": {
+                "ts": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
           }
         }
       }

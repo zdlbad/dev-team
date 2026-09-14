@@ -133,7 +133,8 @@ function confirmUsage(sliceId, via) {
 // ---------- usage：五问补出的语句按故事登记（编号不限字母；U 已停发，只为老项目保留） ----------
 if (cmd === 'usage') {
   const sub = args[3]
-  if (!story.approved) die('故事还没有理解一致（approve），五问补语句等理解一致之后再做')
+  // 第八十九批：五问与点亮同一趟做，人在走故事页一坐确认——propose 不等 approve；confirm 仍要先理解一致
+  if (sub === 'confirm' && !story.approved) die('故事还没有理解一致（approve），五问语句的确认等理解一致之后')
   if (sub === 'propose') {
     const none = args.includes('--none')
     const ids = none ? [] : (args[4] ?? '').split(',').map((s) => s.trim()).filter(Boolean)

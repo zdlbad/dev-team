@@ -106,7 +106,7 @@ function loadGlossary(root) {
 }
 function loadSlices(root) {
   return walk(path.join(root, 'slices'))
-    .filter((p) => p.endsWith('.json') && !p.endsWith('.story.json')) // *.story.json 是故事，不是切片记录
+    .filter((p) => p.endsWith('.json') && !p.endsWith('.story.json') && !path.basename(p).startsWith('_')) // *.story.json 是故事、_candidates.json 是候选清单，都不是切片记录
     .map((p) => ({ file: path.relative(root, p).replaceAll('\\', '/'), data: readJson(p) }))
 }
 function loadProject(root) {
