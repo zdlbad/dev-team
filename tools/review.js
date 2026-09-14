@@ -134,6 +134,22 @@ const html = `<!doctype html>
   .step .n { font-weight:700; margin-right:8px; } .step .who { color:var(--muted); margin-right:8px; } .step .cnt { color:var(--muted); font-size:12px; margin-left:8px; }
   .kind { font-size:12px; color:var(--muted); margin:10px 0 2px; }
   #status { color:var(--muted); font-size:12px; }
+  body.dir1 header { border-bottom:3px solid #1f6feb; } body.dir2 header { border-bottom:3px solid #1a7f37; } body.prepr header { border-bottom:3px solid #d4770a; }
+  body.dir1 header h1::before { content:'模型 ⇄ 业务'; } body.dir2 header h1::before { content:'代码 ⇄ 模型'; } body.prepr header h1::before { content:'代码审查'; }
+  header h1::before { font-size:11px; font-weight:600; color:#fff; background:#1f6feb; border-radius:4px; padding:1px 7px; margin-right:10px; vertical-align:middle; }
+  body.dir2 header h1::before { background:#1a7f37; } body.prepr header h1::before { background:#d4770a; }
+  .sev { display:inline-block; font-size:11px; padding:0 7px; border-radius:4px; color:#fff; margin-right:6px; }
+  .sev.high { background:#cf222e; } .sev.medium { background:#d4770a; } .sev.low { background:#8c959f; } .sev.ok { background:#1a7f37; }
+  .angle { display:inline-block; font-size:11px; padding:0 6px; border-radius:10px; border:1px solid #d0d7de; color:var(--muted); margin-right:6px; }
+  .clean { border:1px solid #a7d9b3; background:#eaf7ed; border-radius:10px; padding:16px 20px; margin:12px 0; }
+  .clean b.big { font-size:18px; display:block; margin-bottom:6px; color:#1a7f37; }
+  .nums { display:flex; gap:10px; flex-wrap:wrap; margin:10px 0; }
+  .nums .m { border:1px solid var(--line); border-radius:8px; padding:8px 14px; min-width:120px; } .nums .m b { font-size:20px; display:block; }
+  .cc { border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin:8px 0; background:var(--lo); } .cc.high { background:var(--hi); } .cc.medium { background:var(--mid); } .cc.done { opacity:.6; }
+  .cc .ln { font-family: ui-monospace, Consolas, monospace; font-size:12px; color:var(--muted); }
+  .cc .ttl { font-weight:600; margin:4px 0; }
+  .cc .fail { color:#7d2a2a; font-size:13px; margin:4px 0; }
+  .tn .k.code { font-family: ui-monospace, Consolas, monospace; }
   /* 树 */
   .tn { display:flex; align-items:center; gap:6px; padding:3px 6px; border-radius:6px; cursor:pointer; white-space:nowrap; overflow:hidden; }
   .tn:hover { background:var(--lo); } .tn.sel { background:var(--sel); } .tn.hl { background:var(--hl); }
@@ -246,6 +262,7 @@ function bindControls(root) {
       it.human = it.human || {}; it.human[el.dataset.f] = el.value; it.human.at = new Date().toISOString().slice(0,10)
       const box = el.closest('.item, .jc'); if (box) box.classList.toggle('done', !!it.human.verdict)
       if (mode === 'structure') renderTree()
+      if (mode === 'code') renderCodeTree()
       scheduleSave()
     })
     if (it.human?.verdict) { const box = el.closest('.item, .jc'); if (box) box.classList.add('done') }
@@ -256,7 +273,10 @@ function introNode() {
   const js = data.judgments || []
   const nHigh = js.filter(j => j.verdict === 'pass' && j.confidence === 'high').length, nLow = js.filter(j => j.verdict && !(j.verdict === 'pass' && j.confidence === 'high')).length, nFail = js.filter(j => j.verdict === 'fail').length
   const open = js.filter(j => !j.human?.verdict).length
-  intro.innerHTML = '<b>这一页在问什么：</b>校验器给你在故事里确认过的每一条业务语句生成一问「模型有没有把它表达出来」，给每个命令的每一步生成一问「这一步是不是只做编排」。'
+  intro.innerHTML = data.mode ? '<b>这一页在问什么（审代码）：</b>pre-pr 审查角色读写好的代码，按几个角度找毛病：用例流程走得对不对、有没有删掉或放松规则、测试测的是不是行为、读着顺不顺。每条发现标着轻重——必须改、应该改、说明——附上会出什么事。<b>你做的：</b>同意它的判断，或不同意写一句为什么；上一轮让改的这轮核过的列在旁边。' + (mode === 'code' ? '<b>按代码结构看：</b>左边是这一段的代码文件，红数字是那个文件上还有几条等你。' : '') + '每次改动自动保存。'
+    : (String(data.direction) === '2'
+    ? '<b>这一页在问什么（审代码对模型）：</b>解码器把写好的代码读回一份模型，跟模型师的模型逐条比；对不上的地方一条一问「是代码写错了，还是模型该跟着改」。目标是代码文件，按结构看时挂在它对应的模型元素下。没有条目就是代码与模型一字不差。'
+    : '<b>这一页在问什么（审模型）：</b>校验器给你在故事里确认过的每一条业务语句生成一问「模型有没有把它表达出来」，给每个命令的每一步生成一问「这一步是不是只做编排」。')
     + '<b>谁答的：</b>校验角色先答（通过 / 不通过 + 理由）。<b>你只做一件事：</b>看他的理由站不站得住，同意或不同意。这些都是确认，不是新的业务问题——要你拍板的业务分岔在故事页的裁定卡上。<br>'
     + '共 ' + js.length + ' 条，还有 <b>' + open + '</b> 条等你：校验角色高信心通过 ' + nHigh + ' 条（可以点右上角「其余高信心的一并同意」一次处理），' + '值得你看的 ' + nLow + ' 条（信心中 / 低' + (nFail ? '、不通过 ' + nFail + ' 条' : '') + '）。'
     + (mode === 'structure' ? '<b>按结构看：</b>左边是模型的树，红色数字是那一处还有几条等你；点一个命令，能看到它每一步指到哪个聚合的哪个方法、哪个仓储、哪个端口，规则挂在方法下面。' : (data.story ? '顺序按故事走：每一步的标题就是故事那句话，下面是这一步用到的业务在模型里对得上对不上。' : '顺序按重要度从高到低、信心从低到高。'))
@@ -340,6 +360,7 @@ const openNodes = new Set()
 function filesOf(it) {
   const t = it.target || ''
   if (t.startsWith('model/')) return [t.split('#')[0]]
+  if (it.modelFile) return [it.modelFile]
   return it.related || []
 }
 function stepOf(it) { const t = it.target || ''; const k = t.indexOf('#steps.'); return k < 0 ? null : Number(t.slice(k + 7)) }
@@ -625,8 +646,121 @@ function renderPane() {
   for (const el of main.querySelectorAll('[data-go]')) el.addEventListener('click', () => { sel = el.dataset.go; const parts = sel.split(':'); if (parts[0] === 'a') openNodes.add('m:' + parts[1]); else { const f = sel.startsWith('f:') ? findByFile(sel.slice(2)) : null; if (f) { openNodes.add('m:' + f.M.name); if (f.a) openNodes.add('a:' + f.M.name + ':' + f.a.key) } else if (parts[0] === 'm') openNodes.add(sel) } renderTree(); renderPane(); window.scrollTo(0, 0) })
   for (const el of main.querySelectorAll('[data-chip]')) el.addEventListener('click', (ev) => { ev.stopPropagation(); hlId = hlId === el.dataset.chip ? null : el.dataset.chip; renderTree(); renderPane(); $('#status').textContent = hlId ? '高亮 ' + hlId + ' 落在哪儿（树上黄色的），再点一次取消' : '' })
 }
+/* ---------------- 按代码结构（校验 ②、pre-pr） ---------------- */
+function isCodeMode() { return !!data.mode || String(data.direction) === '2' }
+function fileOfTarget(t) { return String(t || '').split('#')[0].split(':')[0] }
+function lineOfTarget(t) { const m = String(t || '').match(/:(\d+)/); return m ? Number(m[1]) : null }
+function isCodeFile(f) { return f.startsWith('src/') || f.startsWith('tests/') }
+const SEV = { high: '必须改', medium: '应该改', low: '说明' }
+// 文件 → 落在它上面的条目 [{k:'judgments'|'confirms', i}]
+let byCode = new Map(), codeFilesAll = []
+function indexCode() {
+  byCode = new Map()
+  const add = (f, k, i) => { if (!byCode.has(f)) byCode.set(f, []); byCode.get(f).push({ k, i }) }
+  ;(data.judgments || []).forEach((it, i) => { const f = fileOfTarget(it.target); if (isCodeFile(f)) add(f, 'judgments', i) })
+  ;(data.confirms || []).forEach((it, i) => { const f = fileOfTarget(it.target); if (isCodeFile(f)) add(f, 'confirms', i) })
+  codeFilesAll = [...new Set([...(data.codeFiles || []), ...byCode.keys()])].sort()
+}
+const openCode = (files) => files.reduce((n, f) => n + (byCode.get(f) || []).filter(({ k, i }) => !data[k][i].human?.verdict).length, 0)
+function renderCodeTree() {
+  const rootNode = { name: '', dirs: new Map(), files: [] }
+  for (const f of codeFilesAll) { const parts = f.split('/'); let node = rootNode; for (const d of parts.slice(0, -1)) { if (!node.dirs.has(d)) node.dirs.set(d, { name: d, dirs: new Map(), files: [], path: (node.path ? node.path + '/' : '') + d }); node = node.dirs.get(d) } node.files.push({ name: parts[parts.length - 1], path: f }) }
+  const allFiles = (node) => [...node.files.map(x => x.path), ...[...node.dirs.values()].flatMap(allFiles)]
+  let h = ''
+  const dir = (node, depth) => {
+    const id = 'd:' + node.path, files = allFiles(node), n = openCode(files), cnt = files.reduce((a, f) => a + (byCode.get(f) || []).length, 0)
+    const open = openNodes.has(id) || depth < 2
+    h += '<div class="tn' + (n ? '' : ' zero') + (sel === id ? ' sel' : '') + '" data-id="' + esc(id) + '" style="padding-left:' + (6 + depth * 14) + 'px"><span class="tw" data-tw="' + esc(id) + '">' + (open ? '▾' : '▸') + '</span><span class="lb k code">' + esc(node.name) + '/</span><span class="cnt' + (n ? '' : ' zero') + '">' + (n || (cnt ? '' : '')) + '</span></div>'
+    if (!open) return
+    for (const d of [...node.dirs.values()].sort((a, b) => a.name.localeCompare(b.name))) dir(d, depth + 1)
+    for (const f of node.files.sort((a, b) => a.name.localeCompare(b.name))) {
+      const items = byCode.get(f.path) || [], n2 = openCode([f.path])
+      h += '<div class="tn' + (n2 ? '' : ' zero') + (sel === 'c:' + f.path ? ' sel' : '') + '" data-id="' + esc('c:' + f.path) + '" style="padding-left:' + (6 + (depth + 1) * 14) + 'px" title="' + esc(f.path) + '"><span class="tw"></span><span class="lb k code">' + esc(f.name) + '</span>' + (items.length ? '<span class="k">' + items.length + ' 条</span>' : '') + '<span class="cnt' + (n2 ? '' : ' zero') + '">' + (n2 || '') + '</span></div>'
+    }
+  }
+  for (const d of [...rootNode.dirs.values()].sort((a, b) => a.name.localeCompare(b.name))) dir(d, 0)
+  for (const f of rootNode.files) h += '<div class="tn" data-id="' + esc('c:' + f.path) + '"><span class="tw"></span><span class="lb k code">' + esc(f.name) + '</span></div>'
+  const tree = $('#tree'), top = tree.scrollTop
+  const total = openCode(codeFilesAll)
+  tree.innerHTML = '<div class="tn' + (sel === null ? ' sel' : '') + '" data-id="" style="font-weight:600"><span class="tw"></span><span class="lb">总览</span><span class="cnt' + (total ? '' : ' zero') + '">' + (total || '') + '</span></div>' + (codeFilesAll.length ? h : '<div class="empty" style="padding:10px">这一段还没有代码文件可摆（计划没算、范围没划）</div>')
+  tree.scrollTop = top
+  for (const el of tree.querySelectorAll('.tn')) el.addEventListener('click', (ev) => {
+    const id = el.dataset.id
+    if (ev.target.dataset.tw) { openNodes.has(id) ? openNodes.delete(id) : openNodes.add(id); if (!openNodes.has(id)) openNodes.add('closed:' + id); renderCodeTree(); return }
+    sel = id || null; renderCodeTree(); renderCodePane()
+  })
+}
+function ccard(k, i) {
+  const it = data[k][i]
+  const sev = k === 'confirms' ? '<span class="sev ok">上一轮改过，核过</span>' : (it.importance ? '<span class="sev ' + it.importance + '">' + (SEV[it.importance] || it.importance) + '</span>' : '')
+  const line = lineOfTarget(it.target)
+  const sides = it.sides ? Object.entries(it.sides).filter(([, v]) => v !== undefined).map(([kk, v]) => '<b>' + ({ business: '业务', expected: '该是', model: '模型', code: '代码' }[kk] || kk) + '</b><span>' + esc(typeof v === 'string' ? v : JSON.stringify(v)) + '</span>').join('') : ''
+  const ctl = k === 'confirms' ? confirmControls(it, i) : judgmentControls(it, i)
+  return '<div class="cc ' + (k === 'judgments' ? (it.importance || '') : '') + (it.human?.verdict ? ' done' : '') + '">'
+    + '<div>' + sev + (it.check ? '<span class="angle">' + esc(it.check) + '</span>' : '') + (line ? '<span class="ln">第 ' + line + ' 行</span>' : '') + '</div>'
+    + (it.round1 ? '<div class="ttl">' + esc(it.round1) + '</div>' : '')
+    + (sides ? '<div class="sides">' + sides + '</div>' : '')
+    + (it.failure ? '<div class="fail">会出什么事：' + esc(it.failure) + '</div>' : '')
+    + ctl + guideOf(it.check) + '</div>'
+}
+function codeOverviewHtml() {
+  const js = data.judgments || [], cs = data.confirms || []
+  const isPrepr = !!data.mode
+  let h = ''
+  if (!js.length && !cs.length) {
+    h += '<div class="clean"><b class="big">' + (isPrepr ? 'pre-pr 审查没有发现' : '解码回来的模型与模型师的一字不差') + '</b>'
+      + (isPrepr ? '查了 ' + (data.angles || []).length + ' 个角度' + ((data.cleanAngles || []).length ? '，干净的：' + data.cleanAngles.map(esc).join('、') : '') : '把代码读回一份模型，跟 model/ 下的逐条比：字段、规则、错误条件、步骤、端口——没有一处对不上')
+      + '。<div class="k" style="margin-top:6px">比对时间 ' + esc((data.at || '').slice(0, 16).replace('T', ' ')) + (data.decodedVersion ? ' · 代码版本 ' + esc(data.decodedVersion) : '') + ' · 摆在左边的 ' + codeFilesAll.length + ' 个文件是这一段计划里要写或写过的' + ((data.deferred || []).length ? ' · 另有 ' + data.deferred.length + ' 项本段范围外、未建，不算' : '') + '</div></div>'
+  } else {
+    const c = (imp) => js.filter(x => x.importance === imp).length
+    h += '<div class="nums"><div class="m"><b style="color:#cf222e">' + c('high') + '</b>必须改</div><div class="m"><b style="color:#d4770a">' + c('medium') + '</b>应该改</div><div class="m"><b style="color:#8c959f">' + c('low') + '</b>说明</div>' + (cs.length ? '<div class="m"><b style="color:#1a7f37">' + cs.length + '</b>上一轮改过、这轮核过</div>' : '') + '<div class="m"><b>' + (js.filter(x => !x.human?.verdict).length + cs.filter(x => !x.human?.verdict).length) + '</b>等你</div></div>'
+    if (isPrepr) h += '<div class="k">角度：' + (data.angles || []).map(a => '<span class="angle">' + esc(a) + ((data.cleanAngles || []).includes(a) ? ' ✓ 干净' : '') + '</span>').join('') + '</div>'
+  }
+  if ((data.notes || []).length) h += '<details><summary>审查角色的说明（' + data.notes.length + '）</summary>' + data.notes.map(n => '<div class="narr">' + esc(n) + '</div>').join('') + '</details>'
+  if ((data.blindSpots || []).length) h += '<details><summary>这一轮没查的（盲区，' + data.blindSpots.length + '）</summary><ul>' + data.blindSpots.map(b => '<li>' + esc(typeof b === 'string' ? b : b.text || JSON.stringify(b)) + '</li>').join('') + '</ul></details>'
+  // 文件清单：有条目的排前面
+  const withItems = codeFilesAll.filter(f => (byCode.get(f) || []).length)
+  if (withItems.length) h += '<h3>有发现的文件</h3>' + withItems.map(f => '<div class="card"><h4><span class="to" data-go="' + esc('c:' + f) + '">' + esc(f) + '</span> <span class="k">' + (byCode.get(f) || []).length + ' 条，等你 ' + openCode([f]) + '</span></h4></div>').join('')
+  // 不落在代码文件上的条目（目标是模型文件或别的）
+  const rest = [...(data.judgments || []).map((it, i) => ({ k: 'judgments', i, it })), ...(data.confirms || []).map((it, i) => ({ k: 'confirms', i, it }))].filter(({ it }) => !isCodeFile(fileOfTarget(it.target)))
+  if (rest.length) h += '<h3>不落在代码文件上的</h3>' + rest.map(({ k, i }) => ccard(k, i)).join('')
+  return h
+}
+function renderCodePane() {
+  const main = $('#main'); main.innerHTML = ''
+  if (!sel) {
+    main.appendChild(introNode())
+    const d = document.createElement('div'); d.innerHTML = codeOverviewHtml(); main.appendChild(d)
+    section(main, '警告', data.warnings, warningControls, true)
+    section(main, '错误（只读，必须修）', data.errors, () => '', false)
+  } else if (sel.startsWith('d:')) {
+    const dirPath = sel.slice(2), files = codeFilesAll.filter(f => f.startsWith(dirPath + '/'))
+    const d = document.createElement('div')
+    d.innerHTML = '<div class="hd"><span class="k">目录</span><h2>' + esc(dirPath) + '/</h2></div>' + files.map(f => '<div class="card"><h4><span class="to" data-go="' + esc('c:' + f) + '">' + esc(f.slice(dirPath.length + 1)) + '</span> <span class="k">' + ((byCode.get(f) || []).length ? (byCode.get(f) || []).length + ' 条，等你 ' + openCode([f]) : '没有发现') + '</span></h4></div>').join('')
+    main.appendChild(d)
+  } else if (sel.startsWith('c:')) {
+    const f = sel.slice(2), items = (byCode.get(f) || []).slice().sort((a, b) => (lineOfTarget(data[a.k][a.i].target) || 0) - (lineOfTarget(data[b.k][b.i].target) || 0))
+    const modelFile = (data.judgments || []).concat(data.confirms || []).find(it => fileOfTarget(it.target) === f && it.modelFile)?.modelFile
+    const d = document.createElement('div')
+    d.innerHTML = '<div class="hd"><span class="k">文件</span><h2 style="font-family:ui-monospace,Consolas,monospace;font-size:15px">' + esc(f) + '</h2></div>'
+      + (modelFile ? '<div class="meta">对应模型：<code>' + esc(modelFile) + '</code></div>' : '')
+      + (items.length ? items.map(({ k, i }) => ccard(k, i)).join('') : '<div class="clean" style="padding:10px 14px">这个文件上没有发现。</div>')
+    main.appendChild(d)
+  }
+  bindControls(main)
+  for (const el of main.querySelectorAll('[data-go]')) el.addEventListener('click', () => { sel = el.dataset.go; renderCodeTree(); renderCodePane(); window.scrollTo(0, 0) })
+}
 function render() {
-  $('#title').textContent = '审阅 · 方向 ' + data.direction + ' · ' + (data.project||'').split(/[\\\\/]/).pop() + (data.slice ? ' · ' + data.slice : '')
+  $('#title').textContent = (data.mode ? '审代码（pre-pr ' + (data.mode === 'proto' ? '原型' : '外壳') + '）' : String(data.direction) === '2' ? '审代码对模型' : '审模型') + ' · ' + (data.project||'').split(/[\\\\/]/).pop() + (data.slice ? ' · ' + data.slice : '')
+  document.body.className = data.mode ? 'prepr' : String(data.direction) === '2' ? 'dir2' : 'dir1'
+  if (isCodeMode()) {
+    // 校验 ② 与 pre-pr：按代码结构看，不切故事
+    $('#mode').hidden = true
+    mode = 'code'
+    $('#tree').hidden = false
+    indexJudgments(); indexCode(); renderCodeTree(); renderCodePane()
+    return
+  }
   const canStructure = !!(data.structure && data.structure.length)
   $('#mode').hidden = !canStructure
   if (!canStructure) mode = 'story'
@@ -671,19 +805,40 @@ const server = http.createServer((req, res) => {
     try { obj = JSON.parse(fs.readFileSync(file, 'utf8')) } catch { return res.end(fs.readFileSync(file, 'utf8')) }
     // 故事切片：附上故事步骤（页面按步骤分组），以及每个模型文件目标的 traces（命令的步骤靠它对到故事的哪一步）
     try {
-      if (obj.project && obj.slice) {
-        const sp = path.join(obj.project, 'slices', obj.slice + '.story.json')
+      // 项目目录按报告文件所在位置推（<项目>/reports/x.json）：报告可能是另一台机器写的，里面的 project 是那台机器的路径
+      const projectDir = (obj.project && fs.existsSync(String(obj.project))) ? String(obj.project) : path.dirname(path.dirname(file))
+      if (projectDir && obj.slice) {
+        const sp = path.join(projectDir, 'slices', obj.slice + '.story.json')
         let st = null
         if (fs.existsSync(sp)) { st = JSON.parse(fs.readFileSync(sp, 'utf8')); obj.story = { title: st.title, steps: (st.steps || []).map((x) => ({ n: x.n, day: x.day, actor: x.actor, text: x.text, traces: x.traces || [] })) } }
+        // 方向 ②：目标是代码文件（src/…、tests/…），对回模型文件，按结构看时才挂得上树
+        try {
+          const { modelKeyOf, loadModel } = require('./lib/project')
+          const names = (loadModel(projectDir).moduleFiles || []).map((m) => m.module)
+          for (const it of obj.judgments || []) {
+            const t = String(it.target || '').split('#')[0].split(':')[0]
+            if (!/^(src|tests)\//.test(t)) continue
+            const key = modelKeyOf(t, names)
+            if (key && fs.existsSync(path.join(projectDir, 'model', key))) it.modelFile = 'model/' + key
+          }
+        } catch { /* 对不回去就当没落点 */ }
         obj.targetTraces = {}
         for (const it of obj.judgments || []) {
           const f = String(it.target || '').split('#')[0]
           if (!f.startsWith('model/') || obj.targetTraces[f]) continue
-          try { obj.targetTraces[f] = JSON.parse(fs.readFileSync(path.join(obj.project, f), 'utf8')).traces || [] } catch { obj.targetTraces[f] = [] }
+          try { obj.targetTraces[f] = JSON.parse(fs.readFileSync(path.join(projectDir, f), 'utf8')).traces || [] } catch { obj.targetTraces[f] = [] }
         }
         // 按结构看：模型的树 + 业务语句原文（编号的提示）
-        try { obj.structure = buildStructure(obj.project, st) } catch (e) { console.error('[审阅] 模型结构算不出来，只给按故事那一面：' + e.message) }
-        try { const { loadBusiness } = require('./lib/project'); obj.business = Object.fromEntries((loadBusiness(obj.project) || []).map((s) => [s.id, { text: s.text, label: s.label }])) } catch { /* 没有就不给提示 */ }
+        // 按代码结构看（校验 ②、pre-pr）：这一段要摆的代码文件——计划里这次要写的、上一段做过的、pre-pr 划进范围的
+        try {
+          const files = new Set()
+          const pp = path.join(projectDir, 'plans', obj.slice + '.json')
+          if (fs.existsSync(pp)) { const plan = JSON.parse(fs.readFileSync(pp, 'utf8')); for (const x of [...(plan.steps || []), ...(plan.already || [])]) if (x.file && !x.file.includes('*')) files.add(x.file) }
+          for (const f of obj.scope?.files || []) files.add(f)
+          obj.codeFiles = [...files].sort()
+        } catch { obj.codeFiles = [] }
+        try { obj.structure = buildStructure(projectDir, st) } catch (e) { console.error('[审阅] 模型结构算不出来，只给按故事那一面：' + e.message) }
+        try { const { loadBusiness } = require('./lib/project'); obj.business = Object.fromEntries((loadBusiness(projectDir) || []).map((s) => [s.id, { text: s.text, label: s.label }])) } catch { /* 没有就不给提示 */ }
       }
     } catch { /* 附不上就按原样给 */ }
     return res.end(JSON.stringify(obj))
