@@ -273,10 +273,19 @@ for (const s of business) {
 }
 if (unlayered) add(r1, 'warning', 'label.unlayered', 'business/', `${unlayered} 条语句还没分层（老布局；按段落点亮时补标签、搬进 business/<Module>/abstraction.md 或 practice.md）`)
 
-// 覆盖：能力 → 命令/查询
+// 一个模块分三遍建（第九十五批，seed/slices.md）：校验 ① 只查本遍及之前的遍该落的种类，还没到的种类不报错、单列「留给后面的遍」。
+// 骨架遍只有字段，事实才有落点；行为遍加约束、公式、情形；应用遍（或没写 pass 的老切片）全查。
+const pass = sliceRec?.pass ?? '应用'
+const PASS_KINDS = { 骨架: new Set(['事实']), 行为: new Set(['事实', '约束', '公式', '情形']), 应用: null }
+const NEXT_PASS = { 骨架: '行为遍', 行为: '应用遍' }
+const passAllows = (kind) => !PASS_KINDS[pass] || !kind || PASS_KINDS[pass].has(kind)
+// 覆盖：能力 → 命令/查询（命令与查询是应用遍的东西）
 for (const g of goals) {
   const hit = [...commands, ...queries].some((e) => e.data.traces.includes(g.id))
-  if (!hit) add(r1, 'error', 'coverage.goal', g.id, `能力没有任何命令或查询追溯：${g.text}`)
+  if (!hit) {
+    if (pass !== '应用') { defer('coverage.pass', g.id, `能力的落点是命令 / 查询，留给应用遍：${g.text}`); continue }
+    add(r1, 'error', 'coverage.goal', g.id, `能力没有任何命令或查询追溯：${g.text}`)
+  }
 }
 // 覆盖：规则 → 按种类的落点
 const sig = (name, input, output) => `${name}(${(input ?? []).map((p) => `${p.name}: ${p.type}`).join(', ')})${output ? ` → ${output}` : ''}`
@@ -332,6 +341,7 @@ for (const r of rules) {
   const landings = ruleLandings(r.id)
   if (!landings.length) {
     if (background.has(r.id)) { defer('coverage.background', r.id, `本段只作背景，落点等后面的段落：${background.get(r.id)}`); continue }
+    if (!passAllows(r.ruleKind)) { defer('coverage.pass', r.id, `种类「${r.rawKind ?? r.ruleKind}」的落点留给${NEXT_PASS[pass] ?? '后面的遍'}：${r.text}`); continue }
     add(r1, 'error', 'coverage.rule', r.id, `规则没有任何落点：${r.text}`)
     continue
   }
@@ -677,7 +687,7 @@ function finish(report, name) {
   fs.writeFileSync(path.join(dir, `${name}.md`), renderMd(report))
   const j = report.judgments.length
   const blank = report.judgments.filter((x) => !x.verdict).length
-  console.log(`方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 需人确认 ${report.confirms.length} · 待判断 ${j}${kept ? `（沿用上一份已填的 ${kept} 条，还要填 ${blank} 条）` : ''} · 已裁决 ${report.decided.length}${report.deferred?.length ? ` · 本段外未建 ${report.deferred.filter((d) => d.kind !== 'coverage.background').length} 项（粗版，--slice 不计）` : ''}${report.deferred?.some((d) => d.kind === 'coverage.background') ? ` · 只作背景 ${report.deferred.filter((d) => d.kind === 'coverage.background').length} 条` : ''} → ${report.conclusion === 'clean' ? '干净' : '不干净'}（${path.relative(process.cwd(), path.join(dir, name + '.md'))}）`)
+  console.log(`方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 需人确认 ${report.confirms.length} · 待判断 ${j}${kept ? `（沿用上一份已填的 ${kept} 条，还要填 ${blank} 条）` : ''} · 已裁决 ${report.decided.length}${report.deferred?.length ? ` · 本段外未建 ${report.deferred.filter((d) => d.kind !== 'coverage.background' && d.kind !== 'coverage.pass').length} 项（粗版，--slice 不计）` : ''}${report.deferred?.some((d) => d.kind === 'coverage.background') ? ` · 只作背景 ${report.deferred.filter((d) => d.kind === 'coverage.background').length} 条` : ''}${report.deferred?.some((d) => d.kind === 'coverage.pass') ? ` · 留给后面的遍 ${report.deferred.filter((d) => d.kind === 'coverage.pass').length} 条` : ''} → ${report.conclusion === 'clean' ? '干净' : '不干净'}（${path.relative(process.cwd(), path.join(dir, name + '.md'))}）`)
   if (report.conclusion !== 'clean') process.exitCode = 1
 }
 function rank(x) {

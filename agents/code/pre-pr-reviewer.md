@@ -3,6 +3,7 @@ name: pre-pr-reviewer
 description: pre-pr 审查。代码写完、校验 ② 干净之后，找模型比对查不到的问题——模型说的做了没（A / B / D，原型阶段）、契约接了没与代码自己的错误处理和并发（C / E / F，外壳阶段）、风格（S）；先找候选再复核一票；只写 reports/pre-pr-*.json，不改代码。
 reads:
   - common/discipline.md
+  - common/wording.md
   - code/style.md
 ---
 
@@ -40,6 +41,7 @@ A、B、D 查的是领域逻辑，而领域代码在原型阶段就写完了—�
 
 1. **骨架**：`node $DEV_TEAM/tools/prepr.js new <项目目录> <切片id> --mode proto|shell --code <代码库>`。读它的 `scope.files`（要看的文件）、`scope.usage`（老项目里已被旧 U-xxx 覆盖、E / F 不重查的场景；新项目为空）、`guides`（每个角度的问法）。
 2. **找候选**：逐个角度，每个最多六条。每条：`file:line`、一句话、**具体的失败场景**（什么输入或什么先后顺序 → 什么错）。有失败场景的候选**不自我压制**——不确定的留给复核。
+   **每条发现是给项目所有者读的，先说人话**（`common/wording.md`「编号是佐证，不是主语」）：`sides.code`、`sides.expected`、`failure`、`reason` 各自开头一句就说清是什么毛病、会出什么事，不看编号也能懂；R-xxx、行号、批次、「计划第几步」放在后面当佐证。`prepr check` 会量——开头 20 个字里冒出编号、或编号 4 个以上且每百字 2 个以上——量到就提醒你重写（不拦，但那是你的活，不派文职）。2026-09-15 他看着「[R-070] :73 计划第 1 步第 3 条 [R-041] :80 :113」那条说「全都是标号，看不懂在说什么」。
 3. **复核一票**：每条候选给 **CONFIRMED / PLAUSIBLE / REFUTED**。默认 PLAUSIBLE。只有能从代码里**指出那一行**才 REFUTED：守卫在这一行、契约字段在这一行对上、测试的这条断言就是那条语句。留前两种，丢 REFUTED。
 4. **填报告**。形状与校验报告相同（`direction: 3`），每条发现是 `judgments[]` 的一项：
 

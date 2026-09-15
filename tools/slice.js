@@ -33,11 +33,21 @@ const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 const { loadProject, walkNames } = require('./lib/project')
 const { storyState } = require('./story')
+const { densityIssues } = require('./lib/wording')
+/** 校验报告里给人读的字（判断的 reason、需确认项的文字）编号太密就提醒填的角色重写——不拦、不派文职（agents/common/wording.md「编号是佐证，不是主语」，2026-09-15 项目所有者） */
+function wordingReminders(report, who) {
+  const out = []
+  for (const [i, j] of (report?.judgments ?? []).entries()) for (const w of densityIssues(j.reason)) out.push(`judgments[${i}] reason：${w}`)
+  for (const [i, c] of (report?.confirms ?? []).entries()) for (const w of densityIssues(c.text ?? c.ask)) out.push(`confirms[${i}]：${w}`)
+  if (out.length) { console.error(`措辞提醒 ${out.length} 条（${who}自己改，不拦）：`); for (const w of out) console.error('  · ' + w) }
+}
 
 const args = process.argv.slice(2)
 const cmd = args[0]
 const root = args[1] && path.resolve(args[1])
 const today = new Date().toISOString().slice(0, 10)
+/** 一个模块分三遍建（第九十五批）：段落切片的 pass 只许这三个值，按这个先后走；不写＝应用遍（老切片一遍建全） */
+const PASSES = ['骨架', '行为', '应用']
 
 function die(msg) {
   console.error(msg)
@@ -90,6 +100,8 @@ if (cmd === 'new') {
   if (!id || !title) die('用法：slice new <项目目录> <切片id> <标题> [--kind …] [--codebase …] [--modules …] [--aggregates …] [--use-cases …] [--traces …]')
   if (!/^[sm]-[0-9]{3,}$/.test(id)) die('切片 id 形如 s-001（段落 / 实现 / 改说法）或 m-001（修改切片）')
   if (fs.existsSync(slicePath(id))) die(`切片已存在：${id}`)
+  if (opt('--pass') && !PASSES.includes(opt('--pass'))) die(`--pass 只能是 ${PASSES.join(' / ')}（第九十五批：一个模块分三遍建）`)
+  if (opt('--pass') && !args.includes('--story')) die('--pass 只给段落切片（--story）用：三遍说的是一个段落从骨架到肉怎么走')
   const implementsArg = opt('--implements')
   const kind = args.includes('--改') || id.startsWith('m-') ? 'change' : args.includes('--重构') ? 'refactor' : args.includes('--story') ? 'story' : implementsArg ? 'implementation' : (opt('--kind') ?? (fs.existsSync(path.join(root, 'slices')) && fs.readdirSync(path.join(root, 'slices')).length ? 'increment' : 'initial'))
   const slice = {
@@ -102,6 +114,8 @@ if (cmd === 'new') {
     scope: { modules: list('--modules'), aggregates: list('--aggregates'), useCases: list('--use-cases') },
     // 一个故事段落只许有一个业务意图，写不出一句话就是不止一个（seed/slices.md「开发范围怎么切」）
     ...(opt('--意图') ? { intent: opt('--意图') } : {}),
+    // 一个模块分三遍建（第九十五批）：段落切片标现在走哪一遍；不写＝应用遍，老切片照旧一遍建全
+    ...(opt('--pass') ? { pass: opt('--pass') } : {}),
     ...(opt('--业务故事') ? { businessStory: opt('--业务故事') } : {}),
     traces: list('--traces'),
     stages: {
@@ -308,7 +322,8 @@ function computeNext(slice) {
     if (ss?.state === 'adds-missing') return step('讲解', `故事 ${storyRel} 基于 ${story.basedOn} 但 adds 还是占位：一句话写清这一版多了什么`, null, '谱系要能一眼看出每版加了什么')
     if (story) {
       const dark = story.steps.filter((s) => (s.needs ?? []).length && !(s.traces ?? []).length).length
-      if (dark || !story.usage?.proposedAt) return step('业务分析', `一趟做完两件。① 点亮：按故事 ${storyRel} 每步的 needs 回 raw，写成正向陈述句、分层进 abstraction.md / practice.md、标 (层-种类)、发编号、回填每步 traces（还有 ${dark} 步没点亮）；② 五问：同一趟把这一段走到的每个动作过五问（同时 / 重复 / 一次几条 / 失败处置 / 可见性），问出来的情形写成语句，登记 story usage propose（没有就 --none）。交稿前按第八十四批自检措辞——文职不再单独校这一批`, `node tools/story.js usage ${rel(root)} ${slice.id} propose <R-xxx,… | --none>`, '点亮与五问一趟做完，人只坐一次（第八十九批）')
+      // 骨架遍只点亮故事用到的语句，五问（情形）是行为遍的事（第九十五批）
+      if (dark || (!story.usage?.proposedAt && (slice.pass ?? '应用') !== '骨架')) return step('业务分析', `一趟做完两件。① 点亮：按故事 ${storyRel} 每步的 needs 回 raw，写成正向陈述句、分层进 abstraction.md / practice.md、标 (层-种类)、发编号、回填每步 traces（还有 ${dark} 步没点亮）；② 五问：同一趟把这一段走到的每个动作过五问（同时 / 重复 / 一次几条 / 失败处置 / 可见性），问出来的情形写成语句，登记 story usage propose（没有就 --none）。交稿前按第八十四批自检措辞——文职不再单独校这一批`, `node tools/story.js usage ${rel(root)} ${slice.id} propose <R-xxx,… | --none>`, '点亮与五问一趟做完，人只坐一次（第八十九批）')
       if (ss.state === 'challenged') return step('路由', `核对人对故事的 ${ss.count} 处质疑：对照语句、裁定与手册逐条回应；人对了就落成裁定并派业务分析或讲解改，人误会了就解释；改完让人重看`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人质疑了故事的业务内容，先解决再认可')
       if (ss.state === 'notes') return step('路由', `读人在故事上留下的 ${ss.count} 条想法（同意但有话说的也算）：逐条回应；成立的落成裁定或派给业务分析、讲解、模型师`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人的想法要有人看、有人回')
     }
@@ -317,6 +332,10 @@ function computeNext(slice) {
     const mnP = path.join(root, 'reports', '_model-notes.json')
     const mnOpen = fs.existsSync(mnP) ? Object.entries(readJson(mnP)).flatMap(([f, ns]) => ns.filter((n) => !n.handled).map((n) => ({ f, ...n }))) : []
     if (mnOpen.length) return step('路由', `读人对模型的 ${mnOpen.length} 条意见（reports/_model-notes.json）：逐条回应；要改的派模型师，改完把 handled 置真`, null, '人在模型图上留了意见，先回应再推进')
+    // 一个模块分三遍建（第九十五批）：骨架遍只建字段与类型，行为遍补不变量与行为，应用遍才补命令、端口、walk
+    const passNow = slice.pass ?? '应用'
+    if (st.model.status === 'pending' && story && passNow === '骨架') return step('模型师', `骨架遍：按故事只建这一段碰到的实体、聚合根、值对象的字段与类型（props 带 traces），补 module.json 的 members 与 idRefs；不建不变量、行为、CREATE 的守卫、error、event、领域服务、命令、端口，不填 walk；choices 只列「一个事实放在哪个聚合上」这类形状的选择。范围到本模块边界为止。交稿前按 agents/common/wording.md 自检措辞`, `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '骨架遍：形状一次定全，不带行为、不写代码（第九十五批）')
+    if (st.model.status === 'pending' && story && passNow === '行为') return step('模型师', `行为遍：在骨架遍定好的字段上补不变量、行为（含 CREATE 及其守卫）、error、领域服务；第一轮只建主线的守卫，分岔看故事 gaps 标的轮次；不建 event、命令、查询、端口，不填 walk。交稿前按 agents/common/wording.md 自检措辞`, `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '行为遍：核心逻辑定下来，仍然不写代码——到应用遍才一次写出原型（第九十五批）')
     if (st.model.status === 'pending') return step('模型师', story ? (story.basedOn ? `只建这一版新增那段所需的最少模型（上一版 ${story.basedOn} 的模型已在）；给每一步填 walk——老步骤也要重走，保证老路没被新东西弄断；做过的选择列进 choices。人还没走故事，他走时质疑或裁定不同再回流；交稿前按 agents/common/wording.md 自检措辞` : '按故事建走通它所需的最少模型；写完给每一步填 walk，把做过的选择列进 choices（每条带 current 与 recommended）。人还没走故事，他走时质疑或裁定不同再回流；交稿前按 agents/common/wording.md 自检措辞') : '在范围内建模 / 改模', `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, story ? '模型建在人走故事之前，人一坐看全（第八十九批）' : '范围已定，模型阶段尚未开始')
     if (ss?.state === 'no-walk') return step('模型师', `走故事：给 ${ss.count} 步填 walk（命令 / 事件 / 查询、动了哪个聚合、变了什么；走不通的填 gap），把做过的选择列进 choices（每条带 current 与 recommended）`, storyRel, '模型建好后先在故事上走一遍')
     // 文职只跑一趟：人审之前，是最后一个动文字的人；校完把裁决按对照接回，再 slice proofread 记一笔
@@ -337,6 +356,7 @@ function computeNext(slice) {
     if (ss?.state === 'unapplied') return step('路由', `把 ${ss.count} 张裁定卡写回裁定文件与切片 log`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '裁定已填但未写回')
     if (ss?.state === 'rework') return step('模型师', `按回流改模型（裁定 ${ss.rework} 项、走不通 ${ss.gaps} 处）；改完更新 choices 的 current、清掉 gap，重跑校验 ①；改了文字自己按第八十四批自检`, validateCmd(false), '人的裁定与模型现状不同，或故事走不通')
     if (s1.state === 'unjudged') return step('模型校验', `填写 ${s1.unjudged} 条判断（verdict / confidence / reason）`, `reports/validate-1.json`, '判断清单待校验角色逐条判断')
+    if (s1.state === 'unreviewed') wordingReminders(r1, '模型校验')
     if (s1.state === 'unreviewed') return step('人', `在「审模型」页审阅 ${s1.unreviewed} 条判断 / 需确认项；审完干净就算模型确认，不用再点一次`, `node tools/review.js ${rel(path.join(root, 'reports', 'validate-1.json'))}`, '人过目后模型即确认（第八十九批）')
     if (!s1.applied) return step('路由', '把裁决写回 decisions[] 与切片 log', `node tools/slice.js apply ${rel(root)} ${rel(path.join(root, 'reports', 'validate-1.json'))} --slice ${slice.id}`, '裁决已填但未写回')
     if (s1.state === 'rework') return step('模型师', `按回流清单修改模型（${s1.rework} 项），改完重跑校验 ①`, validateCmd(false), '人的裁决里有要改的项')
@@ -354,6 +374,10 @@ function computeNext(slice) {
     return step('人', '合并（门禁）', null, '套上改名逐字节比过、一字不差，且测试照旧全绿：行为没变，说法改齐了')
   }
   const isStory = slice.kind === 'story' || !!story
+  // 一个模块分三遍建（第九十五批）：骨架遍不写代码，模型确认就收；行为遍只写领域那一半（计划种类 core），不走故事；应用遍全套
+  const passHere = slice.pass ?? '应用'
+  // 前两遍只有业务与模型、一行代码都不写（2026-09-15 傍晚项目所有者推掉了「第二遍过完写代码」）；模型确认了这一遍就收口，等模块内别的段落也过了再推下一遍
+  if (isStory && (passHere === '骨架' || passHere === '行为')) return step('开发指挥', `${slice.id} 的${passHere}遍收口：这一遍只有业务与模型，不写代码。等本模块的其他段落也过了${passHere}遍，再把它们逐条推到${passHere === '骨架' ? '行为' : '应用'}遍`, `node tools/slice.js pass ${rel(root)} ${slice.id} ${passHere === '骨架' ? '行为' : '应用'}`, `${passHere}遍纯建模，按模块收口；代码到应用遍一次写出（第九十五批）`)
   // 修改切片改的是原型阶段的代码：写码的是原型角色，pre-pr 查 A / B / D / S
   const protoLike = isStory || isChange
   const coderRole = protoLike ? '原型' : '编码'
@@ -393,6 +417,7 @@ function computeNext(slice) {
   if (s2.state === 'none') return step('模型校验', '跑校验 ②（解码 + lint + 比对）', validateCmd(true), '编码完成，还没有本切片的方向 ② 报告')
   if (s2.state === 'blocked') return step('人', `处理差异：方向 ② 有 ${s2.errors} 个错误、${s2.warnings} 个警告——代码错回编码，模型错回模型师`, `reports/validate-2.md`, '差异回流由人判定回到哪一侧')
   if (s2.state === 'unjudged') return step('模型校验', `填写 ${s2.unjudged} 条语义等价判断`, `reports/validate-2.json`, '文字差异待判断')
+  if (s2.state === 'unreviewed') wordingReminders(r2, '模型校验')
   if (s2.state === 'unreviewed') return step('人', `审阅 ${s2.unreviewed} 条`, `node tools/review.js ${rel(path.join(root, 'reports', 'validate-2.json'))}`, '人过目')
   if (!s2.applied) return step('路由', '把裁决写回', `node tools/slice.js apply ${rel(root)} ${rel(path.join(root, 'reports', 'validate-2.json'))} --slice ${slice.id}`, '裁决已填但未写回')
   if (s2.state === 'rework') return step('人', `按回流清单决定改模型还是改代码（${s2.rework} 项）`, `reports/validate-2.md`, '语义不等价的项由人定改哪一侧')
@@ -412,6 +437,27 @@ function computeNext(slice) {
   if (isChange) return step('人', `在原型上重走这条修改动到的段落（${(slice.touches ?? []).join('、')}）：node tools/proto.js serve ${rel(root)} --code ${rel(codebase)}；老路没断、这件事改对了就收口`, null, '修改切片改的是已走通的段落，重走一遍才算没弄断')
   if (isStory) return step('人', `在原型上走一遍故事「${story?.title ?? slice.title}」：node tools/proto.js serve ${rel(root)} --code ${rel(codebase)}，按故事走、随手改输入试规则、试 U-xxx 说的连点 / 同时 / 成批；对了就合并；不对的在故事页或模型图上留意见`, null, '原型是人对模型的最后一道检查')
   return step('人', '切片完成，合并', null, '模型、代码、校验、审查都已完成')
+}
+/** 把段落推到下一遍（第九十五批，seed/slices.md「一个模块分三遍建」）：模型关重新开、编码与校验关归零、上一遍的计划存档；故事与点亮的语句留着。只许往前走 */
+if (cmd === 'pass') {
+  const id = args[2], to = args[3]
+  if (!id || !PASSES.includes(to)) die(`用法：slice pass <项目目录> <切片id> <${PASSES.join('|')}>`)
+  const slice = readJson(slicePath(id))
+  if (slice.kind !== 'story' && !fs.existsSync(path.join(root, 'slices', `${id}.story.json`))) die(`${id} 不是段落切片，没有遍可推`)
+  const from = slice.pass ?? '应用'
+  if (PASSES.indexOf(to) <= PASSES.indexOf(from)) die(`${id} 现在在${from}遍，只许往前推（${PASSES.join(' → ')}）；要退回去先跟项目所有者说，再手改切片记录`)
+  if (slice.stages.model.status !== 'done') die(`${id} 的${from}遍模型还没确认（${slice.stages.model.status}），这一遍没走完不推下一遍`)
+  // 上一遍的计划存档，不盖（第八十九批「保存不盖改动」）
+  const planP = path.join(root, 'plans', `${id}.json`), planMd = path.join(root, 'plans', `${id}.md`)
+  if (fs.existsSync(planP)) { fs.renameSync(planP, path.join(root, 'plans', `${id}.${from}.json`)); if (fs.existsSync(planMd)) fs.renameSync(planMd, path.join(root, 'plans', `${id}.${from}.md`)) }
+  const was = { model: slice.stages.model.confirmedAt, code: slice.stages.code.at }
+  slice.pass = to
+  slice.stages.model = { status: 'pending', confirmedAt: null }
+  slice.stages.code = { status: 'pending', at: null }
+  slice.stages.validate = { status: 'pending', decodedVersion: null, reportAt: null }
+  appendLog(slice, 'slice', `从${from}遍推到${to}遍：${from}遍的模型 ${was.model ?? '—'} 确认${was.code ? `、代码 ${was.code} 写完` : ''}；模型关重新开，故事与语句留着${fs.existsSync(path.join(root, 'plans', `${id}.${from}.json`)) ? `，计划存成 plans/${id}.${from}.json` : ''}`)
+  writeJson(slicePath(id), slice)
+  console.log(`${id} 推到${to}遍：模型关重新开，${to === '行为' ? '模型师补不变量、行为、error、领域服务；仍然不写代码' : '模型师补命令、查询、端口、walk；模型确认后一次写出全套原型（领域、应用、内存适配器、测试），人在原型上走故事'}。下一步看 slice next`)
 }
 if (cmd === 'next') {
   const slice = loadSlice(args[2] ?? die('用法：slice next <项目目录> <切片id> [--json]'))
@@ -552,4 +598,4 @@ if (cmd === 'log') {
   console.log(`已记录到 ${id}`)
 }
 
-if (!['new', 'candidate', 'next', 'proofread', 'advance', 'apply', 'log'].includes(cmd)) die(`未知子命令：${cmd}`)
+if (!['new', 'candidate', 'pass', 'next', 'proofread', 'advance', 'apply', 'log'].includes(cmd)) die(`未知子命令：${cmd}`)

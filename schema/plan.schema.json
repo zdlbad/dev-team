@@ -26,7 +26,7 @@
         "shell",
         "full"
       ],
-      "description": "proto：段落切片的原型（领域 + 应用 + 内存适配器）；shell：实现切片的生产外壳；full：老式切片，两者都有"
+      "description": "proto：段落切片的原型（领域 + 应用 + 内存适配器），只在应用遍算——骨架遍与行为遍不写代码、不进计划（第九十五批）；shell：实现切片的生产外壳；full：老式切片，两者都有"
     },
     "role": {
       "enum": [
@@ -171,6 +171,13 @@
               "null"
             ],
             "description": "人确认了这一步的关键逻辑（分步确认）；全部步骤都确认了 plan.confirmedAt 才有值"
+          },
+          "confirmedKeyLogic": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "人确认那一刻这一步的关键逻辑原文。此后 keyLogic 与它对不上，说明角色事后改过文字，这一步的确认不算数（plan check 报、plan done 拦、计划页请人重看）"
           },
           "humanNotes": {
             "type": "array",
