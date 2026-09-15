@@ -27,10 +27,10 @@ const args = process.argv.slice(2)
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d }
 const port = Number(opt('--port', 4870))
 
-// 工作台上人点得到的每一页
-const PAGES = ['/', '/p/scene/', '/p/scene/questions', '/p/story/', '/p/story/story', '/p/story/model', '/p/story/glossary', '/p/review/', '/p/codemodel/', '/p/prepr/', '/p/proto/', '/plan', '/delta']
+// 工作台上人点得到的每一页（顶上那一排页签，加上页签里点得进去的几页）
+const PAGES = ['/', '/p/scene/', '/p/scene/questions', '/slices', '/journal', '/source', '/p/story/', '/p/story/story', '/p/story/model', '/p/story/glossary', '/p/review/', '/p/codemodel/', '/p/prepr/', '/p/proto/', '/plan', '/delta']
 // 页面一打开就取的数据：这几条不通，页面就是空的
-const DATA = ['/state', '/p/scene/data', '/p/story/data', '/p/story/data-map', '/p/review/data', '/p/codemodel/data', '/p/proto/data', '/p/proto/tree']
+const DATA = ['/state', '/todo', '/p/scene/data', '/p/story/data', '/p/story/data-map', '/p/review/data', '/p/codemodel/data', '/p/proto/data', '/p/proto/tree']
 
 function get(p) {
   return new Promise((resolve) => {
@@ -85,6 +85,9 @@ function scriptErrors(html) {
   for (const p of DATA) {
     const r = await get(p)
     if (r.error || r.code !== 200) { console.log(`  ✘ ${p.padEnd(26)} ${r.error ?? '状态 ' + r.code}`); bad++; continue }
+    // 子服务还没起来时，工作台回的是一页「这一页要有什么才有」的说明（HTML），不是数据。
+    // 那不算坏，是这一关还没走到——报告还没写出来、原型还没编译。别报成假警报（2026-09-15 三条都是这样）
+    if (/text\/html/.test(String(r.headers?.['content-type'] ?? ''))) { console.log(`  · ${p.padEnd(26)} 这一页还没起来（报告或原型还没有），跳过`); continue }
     try { JSON.parse(r.body) } catch { console.log(`  ✘ ${p.padEnd(26)} 不是能解析的 JSON`); bad++; continue }
     console.log(`  ✔ ${p.padEnd(26)} ${String(r.body.length).padStart(7)} 字符`)
   }

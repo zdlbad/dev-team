@@ -492,11 +492,16 @@ if (cmd === 'pass') {
   if (PASSES.indexOf(to) <= PASSES.indexOf(from)) die(`${id} 现在在${from}，只许往前推（${PASSES.join(' → ')}）；要退回去先跟项目所有者说，再手改切片记录`)
   if (slice.stages.model.status !== 'done') die(`${id} 的${from === '骨架' ? '骨架初稿' : '走查'}还没定（${slice.stages.model.status}），没定不推下一步`)
   const was = slice.stages.model.confirmedAt
+  // 骨架初稿里记下的「这一步接不住」到走查就该失效：那几条正是走查要长出不变量与领域服务来接的。
+  // 留着的话，走查一给落点，校验器就报「记成只作背景，模型里却给了落点」（第九十七批）。
+  const dropped = slice.backgroundTraces ?? []
+  if (dropped.length) delete slice.backgroundTraces
   slice.pass = to
   slice.stages.model = { status: 'pending', confirmedAt: null }
-  appendLog(slice, 'slice', `骨架初稿 ${was ?? '—'} 定了，推到业务走查：模型关重新开，点亮的语句留着，走查场景由讲解写`)
+  appendLog(slice, 'slice', `骨架初稿 ${was ?? '—'} 定了，推到业务走查：模型关重新开，点亮的语句留着，走查场景由讲解写${dropped.length ? `；骨架接不住的 ${dropped.length} 条（${dropped.map((b) => b.id).join('、')}）登记作废，走查要给它们落点` : ''}`)
   writeJson(slicePath(id), slice)
   console.log(`${id} 推到业务走查：讲解出场景，模型师拿初稿走、长出聚合行为，他在场。下一步看 slice next`)
+  if (dropped.length) console.log(`  骨架接不住的 ${dropped.length} 条登记作废，逐条看一遍：走查长得出落点的就让它长，落点其实在应用层（段落切片）的重新登记回 backgroundTraces：\n${dropped.map((b) => `    ${b.id}：${b.why}`).join('\n')}`)
 }
 /** 业务分析模块点亮完，开发指挥把编号登记进模块切片（第九十七批）：骨架初稿照这些语句起草 */
 if (cmd === 'lit') {

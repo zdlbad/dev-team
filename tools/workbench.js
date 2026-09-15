@@ -4,11 +4,12 @@
  *
  * 用法：node tools/workbench.js <项目目录> [--code <代码库>] [--port 4870]
  *
- * 页签（2026-09-13 项目所有者要直白的名字，「审阅」「审查」太像）：谁在干什么（scene）· 等你答（scene 的 /questions：攒着的问题列一页，问卷模式用）· 切片（现算：段落 / 修改 / 候选三栏，第八十六批）· 日志（现算：journal/<日期>.jsonl 按派工分块，角色做了什么、花了多久，给人复盘）· 走故事（story）· 模型图（story 的 /model）· 这段改了什么（model-delta，按当前段落现算）
+ * 页签（2026-09-13 项目所有者要直白的名字，「审阅」「审查」太像）：谁在干什么（scene）· 等你答（scene 的 /questions：攒着的问题列一页，问卷模式用）· 切片（现算：段落 / 修改 / 候选三栏，第八十六批）· 日志（现算：journal/<日期>.jsonl 按派工分块，角色做了什么、花了多久，给人复盘）· 读原文（导读/<切片>-原文选读.md）· 走故事（story；当前是模块切片时这一页装的是业务走查，页签名字跟着改）· 模型图（story 的 /model）· 这段改了什么（model-delta，按当前段落现算）
  *      · 审模型（review，读 reports/validate-1.json，校验器对模型的判断）· 审代码对模型（codemodel，读 reports/validate-2.json，方向 ② 留给人的判断）· 审代码（review，读 reports/pre-pr-*.json，pre-pr 审查的发现）· 编码计划（plans/<当前段落>.md 现渲染）· 试原型（proto，给了 --code 且 src/proto/main.ts 在才起）
  * 它自己把这几个服务拉起来：每个现挑一个空闲端口、只听 127.0.0.1、不许它们自己弹浏览器；页面统统从工作台这一个口代理出去（/p/<页面>/…），
  * 所以人只需要开 http://localhost:4870 这一个地址，别的口不用管也看不见。进程退出时把自己拉起来的一并关掉。
- * 当前段落读 reports/_scene.json；页签上「等你」的标记也从那里来，每 5 秒刷一次。
+ * 当前是哪一段先读 reports/_scene.json，看板没写就从 slices/ 里挑没收口的、最近动过的那条；
+ * 页签上「等你」的数按文件实数（报告、计划、故事、切片上的门），每 5 秒刷一次。
  *
  * 由来：2026-09-13 验收项目所有者：「现在有好几种 html 的 interface，统一一下做成一个工作台；dev-team 一开工应该就要 host 起来，人可以随时查。」
  */
@@ -59,7 +60,47 @@ const logDir = path.join(root, 'reports', '_workbench')
 fs.mkdirSync(logDir, { recursive: true })
 
 const scene = () => { try { return JSON.parse(fs.readFileSync(path.join(root, 'reports', '_scene.json'), 'utf8')) } catch { return {} } }
-const currentSlice = () => scene().slice || null
+/** slices/ 里的切片，按文件改动时间从旧到新 */
+function allSlices() {
+  const dir = path.join(root, 'slices')
+  if (!fs.existsSync(dir)) return []
+  return fs.readdirSync(dir)
+    .filter((f) => f.endsWith('.json') && !f.endsWith('.story.json') && !f.startsWith('_'))
+    .map((f) => { try { const s = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); s._mtime = fs.statSync(path.join(dir, f)).mtimeMs; return s } catch { return null } })
+    .filter(Boolean)
+    .sort((a, b) => a._mtime - b._mtime)
+}
+/** 收口了没：模块切片走完业务走查、模型标 done 就算完；别的切片三关都 done 才算 */
+const sliceClosed = (s) => (s.kind === 'module'
+  ? (s.pass ?? '骨架') === '行为' && s.stages?.model?.status === 'done'
+  : ['model', 'code', 'validate'].every((k) => s.stages?.[k]?.status === 'done'))
+/**
+ * 这条切片上那道等他拍板的门（第九十七批）：模块切片的「初稿定了」、段落切片的「出原型」。
+ * 「切片」页拿它画按钮，顶上的待办数也拿它数——门开着就是在等他按，不该要他自己想起来去翻那一页。
+ */
+function gateOf(s) {
+  if (s.kind === 'module' && (s.pass ?? '骨架') === '骨架' && s.stages?.model?.status === 'in-progress' && s.stages?.model?.proofreadAt) {
+    return { kind: 'draft-ok', ask: '看过「模型图」页了？初稿允许不准，走查时再改精。', button: '初稿定了', why: '骨架初稿等你说「就按这个走」' }
+  }
+  if (s.kind === 'story' && s.stages?.model?.status === 'done' && !s.protoGo && s.stages?.code?.status === 'pending') {
+    return { kind: 'proto-go', ask: '模型确认了。看过整个模型，这一段现在出原型？', button: '出原型', why: '模型确认了，等你说出不出原型' }
+  }
+  return null
+}
+/**
+ * 现在在哪一条切片上。先认现场看板（开发指挥 `scene set --slice` 写的），看板没写就自己从 slices/ 里挑：
+ * 没收口的里面最近动过的那条，都收口了就挑最近动过的那条。
+ * 由来：2026-09-15 k-001 整轮下来看板的 slice 一直是 null，于是走故事、读原文、编码计划、这段改了什么
+ * 四页统统说「还没指到哪一段」，顶上待办数恒为 0——看板漏记一笔，给人看的页面不该跟着瞎。
+ */
+function currentSlice() {
+  const fromScene = scene().slice
+  if (fromScene) return fromScene
+  const all = allSlices()
+  if (!all.length) return null
+  const open = all.filter((s) => !sliceClosed(s))
+  return (open.length ? open : all).slice(-1)[0].id
+}
 /**
  * 顶上每个页签还有几件等他的事（2026-09-15 项目所有者：「页面顶端给我一些待办事项的 count 提示」）。
  * 数的就是那一页自己会列出来的：没答的问题、报告里没填人裁决的条目、计划里没确认的步、故事里没过的步与卡。
@@ -77,7 +118,7 @@ function todo() {
     if ((r.judgments ?? []).some((x) => !x.verdict)) return 0
     return [...(r.judgments ?? []), ...(r.confirms ?? [])].filter((x) => !x.human?.verdict).length
   }
-  const sc = scene(), sid = sc.slice || null
+  const sc = scene(), sid = currentSlice()
   const t = { ask: 0, story: 0, review: 0, codemodel: 0, prepr: 0, plan: 0, slices: 0 }
   const why = {}
   const put = (k, n, text) => { t[k] = n; if (n) why[k] = text(n) }
@@ -92,12 +133,17 @@ function todo() {
   const pr = prs.find((x) => x.slice === sid) ?? prs[0] ?? null
   put('prepr', waiting(pr), (n) => `${n} 条代码审查的发现等你审${other(pr)}`)
 
-  // 故事：模型建好、walk 填上了才轮到他坐下（之前是讲解与模型师的活）
+  // 故事 / 业务走查：模型建好、walk 填上了才轮到他坐下（之前是讲解与模型师的活）。
+  // 模块切片的骨架初稿一步都没有，可模型师把形状上的选择留在了同一个文件里，那几张卡是留给他裁的——
+  // 跟「初稿定了」那道门同时轮到他（文职校完），照数（2026-09-15 k-001 五张卡摆在那儿，工作台还说「没有等你的事」）。
+  const cur = sid ? readSafe(`slices/${sid}.json`) : null
   const story = sid ? readSafe(`slices/${sid}.story.json`) : null
-  if (story && (story.steps ?? []).some((s) => s.walk)) {
-    const steps = (story.steps ?? []).filter((s) => !s.review?.verdict).length
+  const walked = (story?.steps ?? []).some((s) => s.walk)
+  const draftGate = cur ? gateOf(cur)?.kind === 'draft-ok' : false
+  if (story && (walked || draftGate)) {
+    const steps = walked ? (story.steps ?? []).filter((s) => !s.review?.verdict).length : 0
     const cards = (story.choices ?? []).filter((c) => !c.ruling).length
-    const usage = story.usage?.proposedAt && !story.usage?.confirmedAt ? 1 : 0
+    const usage = walked && story.usage?.proposedAt && !story.usage?.confirmedAt ? 1 : 0
     put('story', steps + cards + usage, () => [steps && `${steps} 步没过`, cards && `${cards} 张裁定卡没裁`, usage && '五问的语句没确认'].filter(Boolean).join('、'))
   }
 
@@ -109,12 +155,15 @@ function todo() {
     put('plan', unconfirmed + stale, () => [unconfirmed && `${unconfirmed} 步没确认`, stale && `${stale} 步确认之后关键逻辑被改过`].filter(Boolean).join('、'))
   }
 
-  // 候选修改是攒着的，不是等他现在办：单独一个灰徽章，不进「等你」的总数
+  // 「切片」页上那两道门（第九十七批）：门开着是真在等他按，进总数。
+  const gates = allSlices().map((s) => ({ s, g: gateOf(s) })).filter((x) => x.g)
+  // 候选修改是攒着的，不是等他现在办：没有门开着的时候这个徽章是灰的，不进「等你」的总数
   const cand = readSafe('slices/_candidates.json')
-  t.slices = ((cand?.items ?? []).filter((x) => (x.status ?? 'open') === 'open')).length
-  if (t.slices) why.slices = `${t.slices} 件候选修改攒着，等这一段收口后挑`
-  const total = t.ask + t.story + t.review + t.codemodel + t.prepr + t.plan
-  return { tabs: t, soft: ['slices'], total, why, slice: sid }
+  const nCand = ((cand?.items ?? []).filter((x) => (x.status ?? 'open') === 'open')).length
+  t.slices = gates.length + nCand
+  if (t.slices) why.slices = [...gates.map((x) => `${x.s.id}：${x.g.why}，按「${x.g.button}」`), nCand && `${nCand} 件候选修改攒着，等这一段收口后挑`].filter(Boolean).join('；')
+  const total = t.ask + t.story + t.review + t.codemodel + t.prepr + t.plan + gates.length
+  return { tabs: t, soft: gates.length ? [] : ['slices'], total, why, slice: sid }
 }
 
 // ---------- 子服务 ----------
@@ -159,27 +208,54 @@ async function ensure(name, argvOf, cwd, seconds) {
   else adoptLater(name, p)
   return INNER[name] ?? null
 }
+/**
+ * 靠文件起的那四页：报告与原型多半是工作台起来**之后**才有的——校验器跑完才写 validate-1.json，
+ * pre-pr 交稿才写 pre-pr-*.json，原型编译过了才有 main.ts。
+ * 从前只在起工作台那一刻看一眼文件在不在，不在就整整一个会话都没有那一页：2026-09-15 真出过，
+ * validate-1.json 中午就写好了，工作台起得更早，他一下午点「审模型」看到的都是「还没有报告」。
+ * 现在每 5 秒回头看一次，文件出现了就把那一页补起来。起过一次的不再起（没起来的交给 adoptLater 接）。
+ */
+const LATE = ['review', 'codemodel', 'prepr', 'proto']
+const tried = new Set()
+async function lateSpec(name) {
+  const rp = (f) => { const x = path.join(root, 'reports', f); return fs.existsSync(x) ? x : null }
+  const asReview = (f) => f && { of: (p) => [path.join(tools, 'review.js'), f, '--port', String(p), '--no-open'] }
+  if (name === 'review') return asReview(rp('validate-1.json'))
+  // 方向 ②：代码解码回来对模型，校验器留给人的判断（多半是「模型文字与代码注释是不是同一个意思」）
+  if (name === 'codemodel') return asReview(rp('validate-2.json'))
+  if (name === 'prepr') return asReview(rp('pre-pr-proto.json') ?? rp('pre-pr-shell.json'))
+  if (name === 'proto') {
+    if (!codebase || !fs.existsSync(path.join(codebase, 'src', 'proto', 'main.ts'))) return null
+    const hostPort = await freePort()
+    return { of: (p) => [path.join(tools, 'proto.js'), 'serve', root, '--code', codebase, '--port', String(p), '--proto-port', String(hostPort), '--story-base', '/p/story', '--no-open'], seconds: 30 }
+  }
+  return null
+}
+async function startLate(name) {
+  if (tried.has(name)) return
+  const spec = await lateSpec(name)
+  if (!spec) return
+  tried.add(name)
+  await ensure(name, spec.of, undefined, spec.seconds)
+}
 async function startAll() {
   await ensure('scene', (p) => [path.join(tools, 'scene.js'), root, 'serve', '--port', String(p)])
-  await ensure('story', (p) => [path.join(tools, 'story.js'), 'serve', root, ...(currentSlice() ? [currentSlice()] : []), '--port', String(p), '--no-open'])
-  const report = path.join(root, 'reports', 'validate-1.json')
-  if (fs.existsSync(report)) await ensure('review', (p) => [path.join(tools, 'review.js'), report, '--port', String(p), '--no-open'])
-  // 方向 ②：代码解码回来对模型，校验器留给人的判断（多半是「模型文字与代码注释是不是同一个意思」）
-  const report2 = path.join(root, 'reports', 'validate-2.json')
-  if (fs.existsSync(report2)) await ensure('codemodel', (p) => [path.join(tools, 'review.js'), report2, '--port', String(p), '--no-open'])
-  const prepr = ['pre-pr-proto.json', 'pre-pr-shell.json'].map((x) => path.join(root, 'reports', x)).find((x) => fs.existsSync(x))
-  if (prepr) await ensure('prepr', (p) => [path.join(tools, 'review.js'), prepr, '--port', String(p), '--no-open'])
-  if (codebase && fs.existsSync(path.join(codebase, 'src', 'proto', 'main.ts'))) {
-    const hostPort = await freePort()
-    await ensure('proto', (p) => [path.join(tools, 'proto.js'), 'serve', root, '--code', codebase, '--port', String(p), '--proto-port', String(hostPort), '--story-base', '/p/story', '--no-open'], undefined, 30)
-  }
+  // 故事服务起的时候带哪一段：那一段得真有故事文件。没有就不带——story.js 找不到故事会直接退，
+  // 而「模型图」「词汇表」两页也住在它里面，不能为了一个还没写故事的切片把那两页一起拖没（2026-09-16 在样例上真踩到）
+  const s0 = currentSlice()
+  const withStory = s0 && fs.existsSync(path.join(root, 'slices', `${s0}.story.json`)) ? [s0] : []
+  await ensure('story', (p) => [path.join(tools, 'story.js'), 'serve', root, ...withStory, '--port', String(p), '--no-open'])
+  for (const n of LATE) await startLate(n)
+  const t = setInterval(() => { for (const n of LATE) if (!tried.has(n)) startLate(n).catch((e) => console.log(`${n}：补起来没成——${e.message}`)) }, 5000)
+  t.unref()
 }
 // 页签背后那一页没起来时，页面上直说为什么，别让人对着一个连不上的空白框
+// 报告一写出来工作台自己会把这一页补起来（每 5 秒看一次），所以话里不要他重启，只要他等几秒再点一次
 const MISSING = {
-  review: '审模型这一页要 <code>reports/validate-1.json</code>——校验器跑过这一段才有。',
-  codemodel: '审代码对模型这一页要 <code>reports/validate-2.json</code>——代码写出来、校验器跑过方向 ② 才有。',
-  prepr: '审代码这一页要 <code>reports/pre-pr-*.json</code>——pre-pr 审查交稿后才有。',
-  proto: '试原型这一页要代码库里有 <code>src/proto/main.ts</code>——这一段进了编码阶段才有；刚重启的话它可能还在编译，过半分钟再点一次这个页签。',
+  review: '审模型这一页要 <code>reports/validate-1.json</code>——校验器跑过这一段才有。报告一写出来这一页几秒后自己就起来了，不用重启工作台。',
+  codemodel: '审代码对模型这一页要 <code>reports/validate-2.json</code>——代码写出来、校验器跑过方向 ② 才有。报告一写出来这一页几秒后自己就起来了。',
+  prepr: '审代码这一页要 <code>reports/pre-pr-*.json</code>——pre-pr 审查交稿后才有。报告一写出来这一页几秒后自己就起来了。',
+  proto: '试原型这一页要代码库里有 <code>src/proto/main.ts</code>——这一段进了编码阶段才有。它出现之后工作台会自己起这一页，原型要先编译，过半分钟再点一次这个页签。',
 }
 function stopAll() { for (const { child } of children) { try { child.kill() } catch { /* 已退出 */ } } }
 process.on('SIGINT', () => { stopAll(); process.exit(0) })
@@ -226,7 +302,9 @@ function mdToHtml(md) {
 function planPage(slice) {
   if (!slice) return '<p>还没指到哪一段。</p>'
   const f = path.join(root, 'plans', `${slice}.md`)
-  if (!fs.existsSync(f)) return `<p>${esc(slice)} 还没有编码计划（模型确认后由开发指挥 <code>plan build</code> 算出）。</p>`
+  // 模块切片不写代码（第九十七批），plan build 对它是直接拒的——别拿段落切片那句「模型确认后算出」骗他等
+  if (!fs.existsSync(f) && slice.startsWith('k-')) return `<p>${esc(slice)} 是模块切片，不写代码：这一条只建模型（骨架初稿 + 业务走查）。模型定了之后按故事线切段落，代码与计划是段落切片的事。</p>`
+  if (!fs.existsSync(f)) return `<p>${esc(slice)} 还没有编码计划（模型确认、你说了出原型之后，由开发指挥 <code>plan build</code> 算出）。</p>`
   let plan = null
   try { plan = JSON.parse(fs.readFileSync(path.join(root, 'plans', `${slice}.json`), 'utf8')) } catch { /* 没有 json 就只给表 */ }
   const tree = plan ? planTree(plan) : ''
@@ -347,18 +425,29 @@ function slicesPage() {
   const last = (s) => { const l = (s.log || []).slice(-1)[0]; return l ? `${esc(l.ts)} ${esc(l.text)}` : '' }
   // 模块切片（第九十七批）：只有模型这一关，标着在骨架初稿还是业务走查
   const passLabel = (s) => (s.kind === 'module' ? `<span class="st ${s.stages?.model?.status === 'done' ? 'done' : 'in-progress'}">${(s.pass ?? '骨架') === '骨架' ? '骨架初稿' : '业务走查'}</span>` : '')
-  // 两道要人拍板的门就在卡上：模块的「初稿定了」（文职校过、他看过模型图）、段落的「出原型」（模型确认了、还没算计划）
+  // 两道要人拍板的门就在卡上：模块的「初稿定了」（文职校过、他看过模型图）、段落的「出原型」（模型确认了、还没算计划）。
+  // 门开没开由 gateOf 一处说了算，顶上的待办数数的也是它
   const gate = (s) => {
-    if (s.kind === 'module' && (s.pass ?? '骨架') === '骨架' && s.stages?.model?.status === 'in-progress' && s.stages?.model?.proofreadAt) return `<div class="gt"><span>看过「模型图」页了？初稿允许不准，走查时再改精。</span><button class="cst" data-gate="draft-ok" data-slice="${esc(s.id)}">初稿定了</button><span class="cmsg"></span></div>`
-    if (s.kind === 'story' && s.stages?.model?.status === 'done' && !s.protoGo && s.stages?.code?.status === 'pending') return `<div class="gt"><span>模型确认了。看过整个模型，这一段现在出原型？</span><button class="cst" data-gate="proto-go" data-slice="${esc(s.id)}">出原型</button><span class="cmsg"></span></div>`
+    const g = gateOf(s)
+    if (g) return `<div class="gt"><span>${esc(g.ask)}</span><button class="cst" data-gate="${g.kind}" data-slice="${esc(s.id)}">${esc(g.button)}</button><span class="cmsg"></span></div>`
     if (s.kind === 'story' && s.protoGo) return `<div class="meta">出原型：${esc(s.protoGo.at)}${s.protoGo.note ? `　${esc(s.protoGo.note)}` : ''}</div>`
     return ''
   }
-  const card = (s) => `<div class="sc${s.id === cur ? ' cur' : ''}${closed(s) ? ' closed' : ''}"><div class="sh"><span class="id">${esc(s.id)}</span><b>${esc(s.title)}</b>${s.id === cur ? '<span class="now">现在在这一段</span>' : ''}${closed(s) ? '<span class="okd">已收口</span>' : ''}<span class="sp"></span>${s.kind === 'module' ? passLabel(s) : stg(s)}</div>${s.intent ? `<div class="it">${esc(s.intent)}</div>` : ''}${s.origin ? `<div class="it">来源：${esc(s.origin)}${(s.touches || []).length ? `　动到 ${s.touches.map(esc).join('、')}` : ''}</div>` : ''}<div class="meta">${(s.scope?.modules || []).map(esc).join('、') || '（范围未定）'} · 编号 ${(s.traces || []).length} 条 · 日志 ${(s.log || []).length} 条</div>${gate(s)}<div class="last" title="${last(s)}">最近：${last(s)}</div></div>`
+  // 模型师起草时把形状上的选择留在走查文件里，那几张卡是留给他裁的——卡上提一句，
+  // 别让他只看见一个「初稿定了」按钮、不知道还有几张卡在「走故事」页等着（2026-09-15 k-001 五张卡没人提醒）
+  const choices = (s) => {
+    if (s.kind !== 'module') return ''
+    let st = null
+    try { st = JSON.parse(fs.readFileSync(path.join(dir, `${s.id}.story.json`), 'utf8')) } catch { return '' }
+    const n = (st.choices ?? []).filter((c) => !c.ruling).length
+    return n ? `<div class="meta">形状上的选择 ${n} 张没裁——在「走故事」页裁</div>` : ''
+  }
+  const card = (s) => `<div class="sc${s.id === cur ? ' cur' : ''}${closed(s) ? ' closed' : ''}"><div class="sh"><span class="id">${esc(s.id)}</span><b>${esc(s.title)}</b>${s.id === cur ? '<span class="now">现在在这一段</span>' : ''}${closed(s) ? '<span class="okd">已收口</span>' : ''}<span class="sp"></span>${s.kind === 'module' ? passLabel(s) : stg(s)}</div>${s.intent ? `<div class="it">${esc(s.intent)}</div>` : ''}${s.origin ? `<div class="it">来源：${esc(s.origin)}${(s.touches || []).length ? `　动到 ${s.touches.map(esc).join('、')}` : ''}</div>` : ''}<div class="meta">${(s.scope?.modules || []).map(esc).join('、') || '（范围未定）'} · 编号 ${(s.traces || []).length} 条 · 日志 ${(s.log || []).length} 条</div>${choices(s)}${gate(s)}<div class="last" title="${last(s)}">最近：${last(s)}</div></div>`
   const modules = all.filter((s) => s.kind === 'module')
   const stories = all.filter((s) => ['story', 'initial', 'increment'].includes(s.kind))
   const changes = all.filter((s) => s.kind === 'change')
-  const others = all.filter((s) => !stories.includes(s) && !changes.includes(s))
+  // 模块切片已经在「模块」栏里了，别让它在「其他」栏再出现一遍
+  const others = all.filter((s) => !modules.includes(s) && !stories.includes(s) && !changes.includes(s))
   const candCard = (x) => `<div class="cc ${esc(x.status)}"><div class="sh"><span class="id">#${x.n}</span><b>${esc(x.text)}</b><span class="sp"></span><span class="st ${esc(x.status)}">${x.status === 'open' ? '等着开' : x.status === 'opened' ? '已开成 ' + esc(x.openedAs) : '不做'}</span></div><div class="it">来源：${esc(x.origin)}${(x.touches || []).length ? `　动到 ${x.touches.map(esc).join('、')}` : ''}　记于 ${esc(x.ts)}</div>${x.note ? `<div class="meta">${esc(x.note)}</div>` : ''}</div>`
   const openN = cands.items.filter((x) => x.status === 'open').length
   return `<div class="ptree"><div class="ph">切片是迭代的步伐。<b>段落</b>一段一个最小业务动作，按故事线的先后走；<b>修改</b>只改已走通的段落上被试原型、审阅或裁定点出的一件事，编号 m-xxx；审阅页、试原型页上点出的事先记成<b>候选</b>、不当场改——当前段落收口后再从候选里挑一件开（第八十六批）。</div></div>
@@ -419,6 +508,8 @@ ${byRole.size ? `<table class="jsum"><tr><th>角色</th><th>派了几趟</th><th
 function sourcePage(slice) {
   if (!slice) return '<p>还没指到哪一段。</p>'
   const f = path.join(root, '导读', `${slice}-原文选读.md`)
+  // 原文选读是段落切片的事：讲解写故事那一趟顺手摘（第九十三批）。模块切片没有这一步，照实说
+  if (!fs.existsSync(f) && slice.startsWith('k-')) return `<p>${esc(slice)} 是模块切片，没有原文选读——这一条的底子是业务分析这一轮按模块点亮的语句，在「模型图」页上点开模块就看得见。原文选读是段落切片开工前讲解摘的。</p>`
   if (!fs.existsSync(f)) return `<p>${esc(slice)} 还没有原文选读。讲解写完故事后会从 <code>raw/</code> 里把这一段依据的原句摘出来放在 <code>导读/${esc(slice)}-原文选读.md</code>，给你先读。</p>`
   return `<article class="md">${mdToHtml(fs.readFileSync(f, 'utf8'))}</article>`
 }
@@ -491,7 +582,7 @@ header .sp{flex:1}header .now{color:var(--dim);font-size:12.5px;white-space:nowr
 main{flex:1;position:relative}iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--page,#fff)}
 </style></head><body>
 <header><h1>工作台<span>${esc(projectName)}</span></h1>
-<button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="slices">切片</button><button data-t="journal">日志</button><button data-t="source">读原文</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="plan">编码计划</button><button data-t="proto">试原型</button>
+<button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="slices">切片</button><button data-t="journal">日志</button><button data-t="source">读原文</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="delta">这段改了什么</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="plan">编码计划</button><button data-t="proto">试原型</button>
 <span class="sp"></span><span class="td" id="todo"></span><span class="now" id="now"></span><button id="theme" title="白天 / 黑夜">🌙</button><a id="open" href="#" target="_blank" title="在新窗口打开这一页">新窗口 ↗</a></header>
 <main><iframe id="f" src="/p/scene/"></iframe></main>
 <script>
@@ -502,6 +593,9 @@ function show(t){cur=t;for(const b of document.querySelectorAll('header button')
 for(const b of document.querySelectorAll('header button'))b.addEventListener('click',()=>show(b.dataset.t))
 async function poll(){try{const s=await (await fetch('/state')).json();slice=s.slice;who=s.who
   document.getElementById('now').textContent=(s.slice?s.slice+' · ':'')+(s.phase?s.phase+' · ':'')+(s.who?s.who+' · ':'')+(s.step||'')
+  // 模块切片上这一页装的是业务走查，不是故事线（第九十七批）——页签名字跟着当前切片走
+  const sb=document.querySelector('header button[data-t="story"]')
+  if(sb&&sb.firstChild&&sb.firstChild.nodeType===3)sb.firstChild.nodeValue=(slice||'').indexOf('k-')===0?'业务走查':'走故事'
 }catch{}}
 // 页签上的待办数：每一页还有几件等他的事，按文件实数（不是拿现场那句话套正则猜）。
 // badge 找不到那个页签就跳过——从前 badge('delta') 指着一个并不存在的页签，一抛错后面的「编码计划」就永远标不上。
@@ -599,7 +693,9 @@ const server = http.createServer((req, res) => {
     return res.end()
   }
   if (url === '/') return html(shell, '外壳')
-  if (url === '/state') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify(scene())) }
+  // 外壳拿 /state 决定每个页签的地址带哪一段。slice 报的是**算出来的**那一条（看板没写就从 slices/ 里挑），
+  // 不是看板里那个字段的原样——看板漏记一笔，页签不该跟着指不到地方
+  if (url === '/state') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ...scene(), slice: currentSlice() })) }
   if (url === '/todo') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify(todo())) }
   if (url === '/delta') return html(deltaPage(q.slice || currentSlice()) ?? wrap('<p>还没指到哪一段。</p>'))
   if (url === '/slices') return html(wrap(slicesPage()))

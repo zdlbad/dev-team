@@ -488,7 +488,7 @@ function renderTodo() {
   for (const c of data.choices) {
     if (c.ruling) continue
     if (c.step && st.some(s => s.n === c.step)) continue
-    rows.push({ href: '#card-' + c.id, label: '裁定 ' + c.id, why: '没裁（不挂在某一步上）', kind: 'card' })
+    rows.push({ href: '#card-' + c.id, label: '裁定 ' + c.id, why: st.length ? '没裁（不挂在某一步上）' : '没裁', kind: 'card' })
   }
   const order = { quiz: 0, card: 1, biz: 2, review: 3, challenge: 4 }
   rows.sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9))
@@ -527,7 +527,7 @@ function render() {
   const answered = st.filter(s => s.human).length, right = st.filter(s => s.human?.correct).length, quizzes = st.filter(s => s.quiz).length
   const ruled = data.choices.filter(c => c.ruling).length
   const total = st.reduce((n, s) => n + (s.traces||[]).length, 0), conf = st.reduce((n, s) => n + confirmedSet(s).size, 0)
-  let h = '<div class="persona"><b>' + esc(data.persona.name) + '</b>　' + linkTerms(data.persona.description) + '<div class="summary">已过 ' + done + '/' + st.length + ' 步，语句确认 ' + conf + '/' + total + '，质疑 ' + challenged + (quizzes ? '　·　预测 ' + answered + '/' + quizzes + '，答对 ' + right : '') + '　·　裁定 ' + ruled + '/' + data.choices.length + '</div>' + (data.basedOn ? '<div class="lineage">上一版：<a href="/story?slice=' + esc(data.basedOn) + '">' + esc(data.basedOn) + (base ? '「' + esc(base.title) + '」' : '') + '</a>　这一版加了：<b>' + esc(data.adds || '') + '</b>' + (base ? '　·　新步骤 ' + st.filter(s => !inherited(s)).length + ' 步，老步骤 ' + st.filter(inherited).length + ' 步（灰标）' : '') + '</div>' : '') + (data.previously ? '<div class="prev"><div class="t">前情提要 — 上一版结束时</div>' + linkTerms(data.previously.text) + (data.previously.facts && Object.keys(data.previously.facts).length ? '<div class="facts">' + Object.entries(data.previously.facts).map(([k, v]) => '<div class="fact"><b>' + esc(k) + '</b><span>' + fmt(v) + '</span></div>').join('') + '</div>' : '') + '</div>' : '') + '<div class="hint">每一步下面是它依据的业务语句，看懂一条勾一条；全勾了就是同意这一步。觉得不对点「质疑」写理由。带虚线的词点一下看名词目录。裁定挂在它发生的那一步下面。</div></div>'
+  let h = '<div class="persona"><b>' + esc(data.persona.name) + '</b>　' + linkTerms(data.persona.description) + '<div class="summary">已过 ' + done + '/' + st.length + ' 步，语句确认 ' + conf + '/' + total + '，质疑 ' + challenged + (quizzes ? '　·　预测 ' + answered + '/' + quizzes + '，答对 ' + right : '') + '　·　裁定 ' + ruled + '/' + data.choices.length + '</div>' + (data.basedOn ? '<div class="lineage">上一版：<a href="/story?slice=' + esc(data.basedOn) + '">' + esc(data.basedOn) + (base ? '「' + esc(base.title) + '」' : '') + '</a>　这一版加了：<b>' + esc(data.adds || '') + '</b>' + (base ? '　·　新步骤 ' + st.filter(s => !inherited(s)).length + ' 步，老步骤 ' + st.filter(inherited).length + ' 步（灰标）' : '') + '</div>' : '') + (data.previously ? '<div class="prev"><div class="t">前情提要 — 上一版结束时</div>' + linkTerms(data.previously.text) + (data.previously.facts && Object.keys(data.previously.facts).length ? '<div class="facts">' + Object.entries(data.previously.facts).map(([k, v]) => '<div class="fact"><b>' + esc(k) + '</b><span>' + fmt(v) + '</span></div>').join('') + '</div>' : '') + '</div>' : '') + (st.length ? '<div class="hint">每一步下面是它依据的业务语句，看懂一条勾一条；全勾了就是同意这一步。觉得不对点「质疑」写理由。带虚线的词点一下看名词目录。裁定挂在它发生的那一步下面。</div>' : '<div class="hint">这条切片还没有走查场景，这一页要你做的就是下面这几张卡：模型师起草骨架时在形状上拿不准的地方，每张给了几个答案与它现在的选法。带虚线的词点一下看名词目录。</div>') + '</div>'
   let lock = false
   st.forEach((s, i) => {
     const open = !s.quiz || s.human || revealed[i]
@@ -591,14 +591,22 @@ function render() {
     h += '</div></div>'
     if (s.quiz && !s.human && !revealed[i]) lock = true
   })
+  // 模块切片的骨架初稿还没有走查场景，一步都没有，要人裁的只有形状那几张卡。
+  // 它们照旧逻辑算「不挂在某一步上」，会被塞进右边栏——整页正中间反而空着。
+  // 2026-09-16 项目所有者看 k-001 时点名：「这个裁定卡被放到一边了」。没有步骤时就把卡摆在正中间。
+  const looseCards = data.choices.map((c, ci) => [c, ci]).filter(([c]) => !c.step || !st.some(s => s.n === c.step))
+  if (!st.length && looseCards.length) {
+    h += '<h2>要你裁的形状 —— ' + looseCards.length + ' 处</h2>'
+    for (const [c, ci] of looseCards) h += choiceCard(c, ci)
+  }
   if (data.leadsTo) h += '<div class="prev leads"><div class="t">往下接什么 — 不在本段展开</div>' + linkTerms(data.leadsTo) + '</div>'
   h += usageBlock()
   $('#story').innerHTML = h
   wireUsage()
   renderRail()
   let a = renderTodo()
-  const loose = data.choices.map((c, ci) => [c, ci]).filter(([c]) => !c.step || !st.some(s => s.n === c.step))
-  if (loose.length) { a += '<h2>裁定（不挂在某一步上）</h2>'; for (const [c, ci] of loose) a += choiceCard(c, ci) }
+  // 有步骤时，不挂在任何一步上的卡仍旧摆在边栏；一步都没有时它们已经在正中间了，别再摆一遍
+  if (st.length && looseCards.length) { a += '<h2>裁定（不挂在某一步上）</h2>'; for (const [c, ci] of looseCards) a += choiceCard(c, ci) }
   if (data.gaps?.length) a += '<h2>缺口 = 下一版故事的候选</h2><p class="summary">这条主线没走到的怪事，不用在这里答。勾的是「下一版先做哪个」：从这条故事起笔只加那一段，整条重新走通。没勾的不丢，自动跟到下一版的候选栏，一版做一个；勾多个就按顺序排。</p><ul class="gaps">' + data.gaps.map((g, gi) => '<li><label><input type="checkbox" data-gap="' + gi + '"' + ((data.gapPicks || []).includes(gi) ? ' checked' : '') + '> 滚成下一版</label>　' + linkTerms(g) + '</li>').join('') + '</ul>'
   a += '<h2>整条故事的想法</h2><textarea id="note" placeholder="整体上哪里不对、缺了什么、顺序不合理……">' + esc(data.note ?? '') + '</textarea>'
   $('#side').innerHTML = a
