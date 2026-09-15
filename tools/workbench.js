@@ -345,14 +345,24 @@ function slicesPage() {
   const stg = (s) => ['model', 'code', 'validate'].map((k) => { const st = s.stages?.[k]?.status ?? 'pending'; const label = { model: '模型', code: '编码', validate: '校验' }[k]; return `<span class="st ${st}">${label}${st === 'done' ? ' ✓' : st === 'in-progress' ? ' …' : ''}</span>` }).join('')
   const closed = (s) => ['model', 'code', 'validate'].every((k) => s.stages?.[k]?.status === 'done')
   const last = (s) => { const l = (s.log || []).slice(-1)[0]; return l ? `${esc(l.ts)} ${esc(l.text)}` : '' }
-  const card = (s) => `<div class="sc${s.id === cur ? ' cur' : ''}${closed(s) ? ' closed' : ''}"><div class="sh"><span class="id">${esc(s.id)}</span><b>${esc(s.title)}</b>${s.id === cur ? '<span class="now">现在在这一段</span>' : ''}${closed(s) ? '<span class="okd">已收口</span>' : ''}<span class="sp"></span>${stg(s)}</div>${s.intent ? `<div class="it">${esc(s.intent)}</div>` : ''}${s.origin ? `<div class="it">来源：${esc(s.origin)}${(s.touches || []).length ? `　动到 ${s.touches.map(esc).join('、')}` : ''}</div>` : ''}<div class="meta">${(s.scope?.modules || []).map(esc).join('、') || '（范围未定）'} · 编号 ${(s.traces || []).length} 条 · 日志 ${(s.log || []).length} 条</div><div class="last" title="${last(s)}">最近：${last(s)}</div></div>`
+  // 模块切片（第九十七批）：只有模型这一关，标着在骨架初稿还是业务走查
+  const passLabel = (s) => (s.kind === 'module' ? `<span class="st ${s.stages?.model?.status === 'done' ? 'done' : 'in-progress'}">${(s.pass ?? '骨架') === '骨架' ? '骨架初稿' : '业务走查'}</span>` : '')
+  // 两道要人拍板的门就在卡上：模块的「初稿定了」（文职校过、他看过模型图）、段落的「出原型」（模型确认了、还没算计划）
+  const gate = (s) => {
+    if (s.kind === 'module' && (s.pass ?? '骨架') === '骨架' && s.stages?.model?.status === 'in-progress' && s.stages?.model?.proofreadAt) return `<div class="gt"><span>看过「模型图」页了？初稿允许不准，走查时再改精。</span><button class="cst" data-gate="draft-ok" data-slice="${esc(s.id)}">初稿定了</button><span class="cmsg"></span></div>`
+    if (s.kind === 'story' && s.stages?.model?.status === 'done' && !s.protoGo && s.stages?.code?.status === 'pending') return `<div class="gt"><span>模型确认了。看过整个模型，这一段现在出原型？</span><button class="cst" data-gate="proto-go" data-slice="${esc(s.id)}">出原型</button><span class="cmsg"></span></div>`
+    if (s.kind === 'story' && s.protoGo) return `<div class="meta">出原型：${esc(s.protoGo.at)}${s.protoGo.note ? `　${esc(s.protoGo.note)}` : ''}</div>`
+    return ''
+  }
+  const card = (s) => `<div class="sc${s.id === cur ? ' cur' : ''}${closed(s) ? ' closed' : ''}"><div class="sh"><span class="id">${esc(s.id)}</span><b>${esc(s.title)}</b>${s.id === cur ? '<span class="now">现在在这一段</span>' : ''}${closed(s) ? '<span class="okd">已收口</span>' : ''}<span class="sp"></span>${s.kind === 'module' ? passLabel(s) : stg(s)}</div>${s.intent ? `<div class="it">${esc(s.intent)}</div>` : ''}${s.origin ? `<div class="it">来源：${esc(s.origin)}${(s.touches || []).length ? `　动到 ${s.touches.map(esc).join('、')}` : ''}</div>` : ''}<div class="meta">${(s.scope?.modules || []).map(esc).join('、') || '（范围未定）'} · 编号 ${(s.traces || []).length} 条 · 日志 ${(s.log || []).length} 条</div>${gate(s)}<div class="last" title="${last(s)}">最近：${last(s)}</div></div>`
+  const modules = all.filter((s) => s.kind === 'module')
   const stories = all.filter((s) => ['story', 'initial', 'increment'].includes(s.kind))
   const changes = all.filter((s) => s.kind === 'change')
   const others = all.filter((s) => !stories.includes(s) && !changes.includes(s))
   const candCard = (x) => `<div class="cc ${esc(x.status)}"><div class="sh"><span class="id">#${x.n}</span><b>${esc(x.text)}</b><span class="sp"></span><span class="st ${esc(x.status)}">${x.status === 'open' ? '等着开' : x.status === 'opened' ? '已开成 ' + esc(x.openedAs) : '不做'}</span></div><div class="it">来源：${esc(x.origin)}${(x.touches || []).length ? `　动到 ${x.touches.map(esc).join('、')}` : ''}　记于 ${esc(x.ts)}</div>${x.note ? `<div class="meta">${esc(x.note)}</div>` : ''}</div>`
   const openN = cands.items.filter((x) => x.status === 'open').length
   return `<div class="ptree"><div class="ph">切片是迭代的步伐。<b>段落</b>一段一个最小业务动作，按故事线的先后走；<b>修改</b>只改已走通的段落上被试原型、审阅或裁定点出的一件事，编号 m-xxx；审阅页、试原型页上点出的事先记成<b>候选</b>、不当场改——当前段落收口后再从候选里挑一件开（第八十六批）。</div></div>
-<div class="cols"><section><h2>段落 <span class="n">${stories.length}</span></h2>${stories.map(card).join('') || '<p class="none">还没有段落。</p>'}</section>
+<div class="cols"><section>${modules.length ? `<h2>模块 <span class="n">${modules.length}</span></h2>${modules.map(card).join('')}` : ''}<h2>段落 <span class="n">${stories.length}</span></h2>${stories.map(card).join('') || '<p class="none">还没有段落。</p>'}</section>
 <section><h2>修改 <span class="n">${changes.length}</span></h2>${changes.map(card).join('') || '<p class="none">还没有修改切片。</p>'}${others.length ? `<h2>其他 <span class="n">${others.length}</span></h2>${others.map(card).join('')}` : ''}</section>
 <section><h2>候选 <span class="n">${openN} 等着开${cands.items.length > openN ? ` / 共 ${cands.items.length}` : ''}</span></h2>${cands.items.slice().reverse().map(candCard).join('') || '<p class="none">没有候选。审阅或试原型时点出的事，开发指挥用 <code>slice candidate add</code> 记在这里。</p>'}</section></div>`
 }
@@ -433,6 +443,7 @@ body{margin:0;padding:16px 24px;font:14px/1.6 system-ui,"Segoe UI","Microsoft Ya
 .sc,.cc{border:1px solid #e6e8eb;border-radius:8px;padding:8px 12px;margin:6px 0;background:#fff}.sc.cur{border-color:#1f6feb;box-shadow:0 0 0 2px #dbe7ff}.sc.closed{opacity:.75}.cc.opened,.cc.dropped{opacity:.6}
 .sh{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.sh .id{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:#fff;background:#1f6feb;border-radius:999px;padding:0 8px}.cc .sh .id{background:#8c959f}.sh .sp{flex:1}.sh .now{font-size:11px;color:#b45309;border:1px solid #f3d27a;background:#fff8e1;border-radius:4px;padding:0 6px}.sh .okd{font-size:11px;color:#1a7f37}
 .st{font-size:11px;padding:0 6px;border-radius:4px;border:1px solid #d0d7de;color:#57606a;margin-left:4px}.st.done{color:#1a7f37;border-color:#a7d9b3;background:#eaf7ed}.st.in-progress,.st.open{color:#b45309;border-color:#f3d27a;background:#fff8e1}.st.opened{color:#1a7f37;border-color:#a7d9b3}
+.sc .gt{margin-top:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px;color:#57606a}.sc .gt .cst{font:inherit;padding:3px 12px;border-radius:6px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;cursor:pointer}.sc .gt .cst:disabled{opacity:.5}.sc .gt .cmsg{font-size:12.5px}
 .sc .it,.cc .it{font-size:13px;margin:4px 0 0}.sc .meta,.cc .meta{font-size:12px;color:#57606a;margin-top:2px}.sc .last{font-size:12px;color:#8c959f;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .jnav{margin:0 0 10px;font-size:13px}.jnav a{margin-right:10px;color:#0969da;text-decoration:none}.jnav a.on{font-weight:700;color:#1f2328;border-bottom:2px solid #1f6feb}
 .jsum{border-collapse:collapse;font-size:12.5px;margin:0 0 12px}.jsum th,.jsum td{border:1px solid #e6e8eb;padding:3px 10px;text-align:left}.jsum th{background:#f6f8fa}
@@ -445,7 +456,23 @@ body{margin:0;padding:16px 24px;font:14px/1.6 system-ui,"Segoe UI","Microsoft Ya
 .md blockquote{margin:8px 0;padding:8px 14px;border-left:3px solid #8a6d00;background:#fffdf5;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12.5px;line-height:1.55}
 .gate{margin:0 0 14px;padding:10px 14px;border-radius:6px;border:1px solid #e6e8eb;background:#f6f8fa}.gate.ok{border-color:#a7d9b3;background:#eaf7ed}.gate.ask{border-color:#f3d27a;background:#fff8e1}.gate.wait{color:#57606a}.gate button{font:inherit;margin-left:10px;padding:4px 14px;border-radius:6px;border:1px solid #8a6d00;background:#ffd76a;cursor:pointer}.gate button:disabled{opacity:.5;cursor:default}#confirmMsg{margin-left:10px}
 .md pre{background:#f6f8fa;border:1px solid #e6e8eb;border-radius:6px;padding:10px 12px;overflow:auto;font-size:12.5px;line-height:1.5}.md code{background:#f3f4f6;padding:0 4px;border-radius:3px;font-size:12.5px}
-</style></head><body>${body}</body></html>`
+</style></head><body>${body}
+<script>
+// 「切片」页两道门的按钮（第九十七批）：初稿定了 / 出原型。点了就 POST 给工作台，工作台跑 slice.js 那一条命令；成了刷新，没成把原话写在旁边
+document.querySelectorAll('[data-gate]').forEach(function (b) {
+  b.addEventListener('click', async function () {
+    b.disabled = true
+    var m = b.nextElementSibling
+    if (m) m.textContent = '记上…'
+    try {
+      var r = await fetch('/slice/' + b.dataset.gate + '?slice=' + encodeURIComponent(b.dataset.slice), { method: 'POST' })
+      var t = await r.text()
+      if (r.ok) location.reload()
+      else { if (m) m.textContent = '没成：' + t; b.disabled = false }
+    } catch (e) { if (m) m.textContent = '没成：' + e.message; b.disabled = false }
+  })
+})
+</script></body></html>`
 
 // ---------- 外壳 ----------
 const shell = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>工作台 · ${esc(projectName)}</title>
@@ -607,6 +634,17 @@ const server = http.createServer((req, res) => {
       planCmd('comment', slice, [q.step, text], '记下了') // plan.js 自己把这一笔记进日志
     })
     return
+  }
+  // 「切片」页上的两道门（第九十七批）：模块切片「初稿定了」= slice advance model done；段落「出原型」= slice proto-go。跟计划页一样直接跑命令行那一个
+  if ((url === '/slice/draft-ok' || url === '/slice/proto-go') && req.method === 'POST') {
+    const slice = q.slice
+    if (!/^[sk]-[0-9]{3,}$/.test(slice ?? '')) { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('没指到哪一条切片') }
+    const argv = url === '/slice/draft-ok' ? ['advance', root, slice, 'model', 'done', '初稿定了（项目所有者在切片页按的）'] : ['proto-go', root, slice, '项目所有者在切片页按了「出原型」']
+    const r = spawnSync(process.execPath, [path.join(tools, 'slice.js'), ...argv], { encoding: 'utf8', cwd: root })
+    const out = ((r.stdout ?? '') + (r.stderr ?? '')).trim()
+    console.log(`页面上 slice ${argv[0]} ${slice} → ${r.status === 0 ? '成' : '拒'}：${out.split('\n')[0]}`)
+    res.writeHead(r.status === 0 ? 200 : 409, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' })
+    return res.end(out || (r.status === 0 ? '记下了' : '没成'))
   }
   if (url === '/plan/state') {
     const slice = q.slice || currentSlice()

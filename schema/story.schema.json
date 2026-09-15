@@ -17,7 +17,8 @@
   "properties": {
     "slice": {
       "type": "string",
-      "pattern": "^s-[0-9]{3,}$"
+      "pattern": "^[sk]-[0-9]{3,}$",
+      "description": "s-xxx：段落的故事；k-xxx：模块切片的业务走查场景（第九十七批），形状相同、不出题、不点亮段落"
     },
     "title": {
       "type": "string",
@@ -174,6 +175,12 @@
                   "type": "string"
                 },
                 "description": "通过端口问了谁什么，一条一句"
+              },
+              "leftTo": {
+                "enum": [
+                  "应用"
+                ],
+                "description": "模块切片的业务走查里（第九十七批）：这一步不是聚合的行为能做到的——建立聚合、搜索聚合这类事归应用层的命令与查询，走查时只记下，留给段落切片在应用层带出来"
               },
               "throws": {
                 "type": "array",

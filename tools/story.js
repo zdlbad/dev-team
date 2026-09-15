@@ -53,7 +53,11 @@ function voided(c) {
   return c.ruling?.choice === '作废' || /^本卡作废/.test(c.ruling?.note ?? '')
 }
 /** 故事走到哪。顺序就是切片周期里的顺序。 */
-function storyState(story) {
+/**
+ * 故事走到哪一步。`quizRequired`：段落故事人走之前要有题；模块切片的业务走查不出题（第九十七批）。
+ * 五问补出的语句（usage）第九十六批起不再是每段必过的一道门：登记了才要人确认，没登记就往下走。
+ */
+function storyState(story, { walkRequired = true, quizRequired = true } = {}) {
   if (story.basedOn && (!story.adds || /^（.*）$/.test(story.adds.trim()))) return { state: 'adds-missing', count: 1 }
   if (!story.steps.length) return { state: 'no-steps' }
   const challenged = story.steps.filter((s) => s.review?.verdict === 'challenge').length
@@ -61,12 +65,11 @@ function storyState(story) {
   const notes = story.steps.filter((s) => s.review?.note && !s.review.handled).length + (story.note && !story.noteHandled ? 1 : 0)
   if (notes) return { state: 'notes', count: notes }
   if (!story.approved) return { state: 'unapproved' }
-  // 理解一致之后、建模之前：业务分析按五问（同时 / 重复 / 一次几条 / 失败处置 / 可见性）补出本段还缺的情形，人确认
-  if (!story.usage?.confirmedAt) return story.usage?.proposedAt ? { state: 'usage-proposed', count: (story.usage.proposed ?? []).length } : { state: 'usage-pending' }
-  const noWalk = story.steps.filter((s) => !s.walk)
+  if (story.usage?.proposedAt && !story.usage.confirmedAt) return { state: 'usage-proposed', count: (story.usage.proposed ?? []).length }
+  const noWalk = walkRequired ? story.steps.filter((s) => !s.walk) : []
   if (noWalk.length) return { state: 'no-walk', count: noWalk.length }
   const hasQuiz = story.steps.some((s) => s.quiz)
-  if (!hasQuiz) return { state: 'no-quiz' }
+  if (quizRequired && !hasQuiz) return { state: 'no-quiz' }
   const pendingQuiz = story.steps.filter((s) => s.quiz && !s.human).length
   const pendingChoice = story.choices.filter((c) => !c.ruling).length
   if (pendingQuiz || pendingChoice) return { state: 'awaiting-human', quiz: pendingQuiz, choices: pendingChoice }
@@ -90,7 +93,9 @@ const story = id ? readJson(storyPath(id)) : null
 
 // ---------- state ----------
 if (cmd === 'state') {
-  const s = storyState(story)
+  let kind = 'story'
+  try { kind = readJson(slicePath(id)).kind ?? 'story' } catch {}
+  const s = storyState(story, { quizRequired: kind !== 'module' })
   if (args.includes('--json')) console.log(JSON.stringify(s))
   else console.log(`${id}「${story.title}」：${s.state}${Object.entries(s).filter(([k]) => k !== 'state').map(([k, v]) => ` ${k}=${v}`).join('')}`)
 }
@@ -1116,7 +1121,7 @@ load()
         try {
           const obj = JSON.parse(body)
           if (url === '/save') {
-            if (!/^s-[0-9]{3,}$/.test(obj.slice || '')) throw new Error('故事缺 slice')
+            if (!/^[sk]-[0-9]{3,}$/.test(obj.slice || '')) throw new Error('故事缺 slice')
             // 页面手里那份是从哪一版改起的？跟磁盘上现在这一版对不上，就说明这中间别人改过（角色、命令行、另一台机器）。
             // 直接写会把那些改动整个盖掉，而且一声不响。宁可拒绝，让人刷新后在新版本上重做这一下。
             const now = storyRev(obj.slice)

@@ -73,8 +73,9 @@ const posix = (p) => p.replaceAll('\\', '/')
 
 /** 段落切片走到哪一遍（第九十五批，seed/slices.md「一个模块分三遍建」）：骨架遍与行为遍只有业务与模型、一行代码都不写、不进编码计划；
  *  应用遍（或没写 pass 的老切片）一次写出全套原型（2026-09-15 傍晚项目所有者推掉了「第二遍过完写代码」：「一边写模型一边写代码 审代码 太慢了」） */
-const pass = slice.pass ?? '应用'
-if ((pass === '骨架' || pass === '行为') && cmd === 'build') die(`切片 ${sliceId} 在${pass}遍：只有业务与模型、不写代码，不进编码计划（第九十五批）。模块内的段落都过了${pass}遍再 slice pass ${sliceId} ${pass === '骨架' ? '行为' : '应用'}`)
+if (slice.kind === 'module') die(`切片 ${sliceId} 是模块切片：只有业务与模型（骨架初稿、业务走查），不写代码、不进编码计划（第九十七批）。代码由这个模块的段落切片在应用层带出来`)
+// 出原型是一道门（第九十七批）：段落的模型确认之后，项目所有者先看一遍整个模型，说「出原型」才算计划、写原型
+if (slice.kind === 'story' && cmd === 'build' && !slice.protoGo && !fs.existsSync(planPath)) die(`切片 ${sliceId} 的模型确认了，但项目所有者还没说出原型：先请他看模型图，他说了再 node tools/slice.js proto-go <项目> ${sliceId}`)
 /** 计划种类：故事 → 原型；实现 → 外壳；老式 → 全部 */
 const planKind = slice.kind === 'story' || (story && slice.kind !== 'implementation') ? 'proto' : slice.kind === 'implementation' ? 'shell' : 'full'
 const roleName = planKind === 'proto' ? '原型' : '编码'

@@ -17,8 +17,8 @@
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^[sm]-[0-9]{3,}$",
-      "description": "s-xxx：段落 / 实现 / 改说法切片；m-xxx：修改切片（第八十六批）"
+      "pattern": "^[skm]-[0-9]{3,}$",
+      "description": "s-xxx：段落 / 实现 / 改说法切片；k-xxx：模块切片（第九十七批）；m-xxx：修改切片（第八十六批）"
     },
     "title": {
       "type": "string",
@@ -27,21 +27,37 @@
     "pass": {
       "enum": [
         "骨架",
-        "行为",
-        "应用"
+        "行为"
       ],
-      "description": "段落切片现在走到哪一遍（第九十五批，seed/slices.md「一个模块分三遍建」）：骨架＝实体 / 聚合根 / 值对象的字段与类型，不带守卫、不写代码；行为＝不变量、行为、error、领域服务，过完写领域代码；应用＝命令、查询、端口、适配器、walk，人在原型上走故事。不写＝应用遍，老切片照旧一遍建全"
+      "description": "模块切片走到哪一步（第九十七批，seed/slices.md「模型怎么建」）：骨架＝骨架初稿，一次起草这个模块全部主要聚合、实体、值对象的字段与类型，不带守卫、不建 error 与 event，允许不准，项目所有者看模型图定；行为＝业务走查，讲解出场景、模型师拿初稿走、给聚合补方法、不变量、领域服务、error，过程中改精聚合。只有模块切片有这个字段"
+    },
+    "protoGo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "at"
+      ],
+      "properties": {
+        "at": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "description": "出原型这道门（第九十七批）：段落切片的模型确认之后，项目所有者看过整个模型、说了「出原型」，slice proto-go 记在这里；没有它 plan build 不算计划"
     },
     "kind": {
       "enum": [
         "initial",
         "increment",
         "story",
+        "module",
         "implementation",
         "refactor",
         "change"
       ],
-      "description": "initial / increment：老式按主题的切片；story：建模切片（一条故事，到模型确认为止，不编码）；implementation：实现切片（若干条已确认的故事的模型 → 代码）；refactor：只改说法或结构、一个字的业务行为都不变（改名、挪位置）。refactor 没有业务意图，所以不走故事、不走裁定卡、也不算编码计划——它的门禁是「测试照旧全绿 + 把改名套在改前的解码结果上与改后逐字节一致」（tools/rename-check.js），不是跟模型 0 差异。见 seed/slices.md「开发范围怎么切」；change：修改切片（编号 m-xxx）——已走通的段落上，原型、审阅或裁定点出的一件事要改（业务行为或模型结构，不是改说法）；先记候选、当前段落收口后再开，一个只改一件事，周期见 seed/slices.md「修改切片」"
+      "description": "module：模块切片（编号 k-xxx，第九十七批）——一个模块的模型：骨架初稿（一次起草全部主要聚合、实体、值对象，允许不准）→ 业务走查长出聚合行为；只有业务与模型，不写代码，代码由段落切片在应用层带出来；initial / increment：老式按主题的切片；story：建模切片（一条故事，到模型确认为止，不编码）；implementation：实现切片（若干条已确认的故事的模型 → 代码）；refactor：只改说法或结构、一个字的业务行为都不变（改名、挪位置）。refactor 没有业务意图，所以不走故事、不走裁定卡、也不算编码计划——它的门禁是「测试照旧全绿 + 把改名套在改前的解码结果上与改后逐字节一致」（tools/rename-check.js），不是跟模型 0 差异。见 seed/slices.md「开发范围怎么切」；change：修改切片（编号 m-xxx）——已走通的段落上，原型、审阅或裁定点出的一件事要改（业务行为或模型结构，不是改说法）；先记候选、当前段落收口后再开，一个只改一件事，周期见 seed/slices.md「修改切片」"
     },
     "codebase": {
       "type": "string",
@@ -112,6 +128,10 @@
                 "null"
               ],
               "description": "模型阶段开工（in-progress）时的 git 提交；model-delta 以它为基线算这一段的增量"
+            },
+            "litAt": {
+              "type": "string",
+              "description": "模块切片（第九十七批）：业务分析模块点亮完、开发指挥 slice lit 登记编号的日期；有它模型师才起草骨架初稿"
             },
             "proofreadAt": {
               "type": [
