@@ -11,7 +11,7 @@
   raw/rulings.md              人在对话中拍板的事，按批次累积，每条标层（开发指挥写）
   business/00-overview.md         粗读的产物：这门生意、钱的路径、模块候选；给人读，不进解析
   business/<Module>/abstraction.md   第一层：手册层面的抽象业务（按段落点亮）
-  business/<Module>/practice.md   第二层：这家公司的做法，含五问问出来的情形
+  business/<Module>/practice.md   第二层：这家公司的做法，含情形语句
   glossary.json               词汇表
   stories/                    故事线索引：段落先后、一句衔接、每段到第几轮（开发指挥写）
   导读/                       讲解给人的东西：原文选读、导读课、沙盘
@@ -32,7 +32,7 @@
 
 | 角色 | 阶段 | 唯一写入目标 | 不得写 |
 |---|---|---|---|
-| 业务分析 | 一 | `business/00-overview.md`、`business/<Module>/abstraction.md`、`business/<Module>/practice.md`（含五问问出来的公司事实）、词汇表 | 模型、代码、故事 |
+| 业务分析 | 一 | `business/00-overview.md`、`business/<Module>/abstraction.md`、`business/<Module>/practice.md`（含情形语句）、词汇表 | 模型、代码、故事 |
 | 讲解 | 一（衔接业务到模型） | 故事（人物、步骤、`needs`、题目、缺口）、`导读/` | 业务描述、词汇表、模型 |
 | 模型师 | 一 | 模块划分、两层模型；故事的 `walk` 与 `choices`；`reports/_model-notes.json` 的 `handled` | 业务描述（提交问题）、词汇表（提交新词）、代码 |
 | 文职 | 一（人审模型前总校一趟） | 业务语句的正文与模型元素给人读的文字——只改字不改意 | 编号、标签、追溯、结构、故事、题目、卡、词汇表、代码 |
@@ -42,6 +42,6 @@
 | 模型校验 | 三 | 校验报告里判断的 `verdict` / `confidence` / `reason` | 一切工件 |
 | pre-pr 审查 | 三 | 审查报告里的 `judgments[]` / `cleanAngles[]` | 一切工件 |
 | 解读 | 零 | `raw/legacy-reading.md`、词汇表的别名、模型草稿、解读说明 | 代码、`business/` |
-| 开发指挥 | 贯穿 | 切片记录、候选修改清单、故事线索引、编码计划的骨架、模型文件的 `decisions[]`（`slice apply`）、`raw/rulings.md`、五问补出的编号登记、现场看板与日志 | 业务描述、模型、代码、契约、报告 |
+| 开发指挥 | 贯穿 | 切片记录、候选修改清单、故事线索引、编码计划的骨架、模型文件的 `decisions[]`（`slice apply`）、`raw/rulings.md`、情形语句的编号登记（`story usage`）、模块点亮的编号登记（`slice lit`）、出原型（`slice proto-go`）、现场看板与日志 | 业务描述、模型、代码、契约、报告 |
 
 人在每个阶段末拍板，并可直接编辑任何工件。校验只产报告，不改任何工件。
