@@ -60,6 +60,62 @@ fs.mkdirSync(logDir, { recursive: true })
 
 const scene = () => { try { return JSON.parse(fs.readFileSync(path.join(root, 'reports', '_scene.json'), 'utf8')) } catch { return {} } }
 const currentSlice = () => scene().slice || null
+/**
+ * 顶上每个页签还有几件等他的事（2026-09-15 项目所有者：「页面顶端给我一些待办事项的 count 提示」）。
+ * 数的就是那一页自己会列出来的：没答的问题、报告里没填人裁决的条目、计划里没确认的步、故事里没过的步与卡。
+ * **只在真轮到他的时候数**——口径照 slice.js 的 reportState：报告里还有错误、或校验角色还没填判断，那是角色的活，不是他的；
+ * 计划还有步没补关键逻辑，也是写码角色的活。免得页签上挂着数，他点进去发现没自己的事。
+ * 从前这些徽章是拿现场看板那句话套正则猜的，还有一处 badge('delta') 指着一个并不存在的页签——一抛错，
+ * 排在它后面的「编码计划」就永远标不上。现在按文件实数。
+ */
+function todo() {
+  const readSafe = (p) => { try { return JSON.parse(fs.readFileSync(path.join(root, p), 'utf8')) } catch { return null } }
+  // 一份校验 / pre-pr 报告里还有几条等他：错误未清或判断没填完，都还没轮到他
+  const waiting = (r) => {
+    if (!r) return 0
+    if ((r.errors ?? []).length + (r.warnings ?? []).length) return 0
+    if ((r.judgments ?? []).some((x) => !x.verdict)) return 0
+    return [...(r.judgments ?? []), ...(r.confirms ?? [])].filter((x) => !x.human?.verdict).length
+  }
+  const sc = scene(), sid = sc.slice || null
+  const t = { ask: 0, story: 0, review: 0, codemodel: 0, prepr: 0, plan: 0, slices: 0 }
+  const why = {}
+  const put = (k, n, text) => { t[k] = n; if (n) why[k] = text(n) }
+  const other = (r) => (r?.slice && sid && r.slice !== sid ? `（${r.slice} 的报告）` : '')
+
+  put('ask', (sc.questions ?? []).filter((q) => !q.answeredAt).length, (n) => `${n} 个问题等你答`)
+
+  const r1 = readSafe('reports/validate-1.json'), r2 = readSafe('reports/validate-2.json')
+  put('review', waiting(r1), (n) => `${n} 条模型判断等你审${other(r1)}`)
+  put('codemodel', waiting(r2), (n) => `${n} 条代码对模型的判断等你审${other(r2)}`)
+  const prs = ['reports/pre-pr-proto.json', 'reports/pre-pr-shell.json'].map(readSafe).filter(Boolean)
+  const pr = prs.find((x) => x.slice === sid) ?? prs[0] ?? null
+  put('prepr', waiting(pr), (n) => `${n} 条代码审查的发现等你审${other(pr)}`)
+
+  // 故事：模型建好、walk 填上了才轮到他坐下（之前是讲解与模型师的活）
+  const story = sid ? readSafe(`slices/${sid}.story.json`) : null
+  if (story && (story.steps ?? []).some((s) => s.walk)) {
+    const steps = (story.steps ?? []).filter((s) => !s.review?.verdict).length
+    const cards = (story.choices ?? []).filter((c) => !c.ruling).length
+    const usage = story.usage?.proposedAt && !story.usage?.confirmedAt ? 1 : 0
+    put('story', steps + cards + usage, () => [steps && `${steps} 步没过`, cards && `${cards} 张裁定卡没裁`, usage && '五问的语句没确认'].filter(Boolean).join('、'))
+  }
+
+  // 计划：关键逻辑补齐了才轮到他确认；已确认但事后被改过的那几步也要他重看（confirmedKeyLogic，第九十四批之后）
+  const plan = sid ? readSafe(`plans/${sid}.json`) : null
+  if (plan && !(plan.steps ?? []).some((s) => s.needsKeyLogic && !s.keyLogic)) {
+    const unconfirmed = (plan.steps ?? []).filter((s) => !s.confirmedAt).length
+    const stale = (plan.steps ?? []).filter((s) => s.confirmedAt && !s.doneAt && s.confirmedKeyLogic !== undefined && (s.keyLogic ?? null) !== (s.confirmedKeyLogic ?? null)).length
+    put('plan', unconfirmed + stale, () => [unconfirmed && `${unconfirmed} 步没确认`, stale && `${stale} 步确认之后关键逻辑被改过`].filter(Boolean).join('、'))
+  }
+
+  // 候选修改是攒着的，不是等他现在办：单独一个灰徽章，不进「等你」的总数
+  const cand = readSafe('slices/_candidates.json')
+  t.slices = ((cand?.items ?? []).filter((x) => (x.status ?? 'open') === 'open')).length
+  if (t.slices) why.slices = `${t.slices} 件候选修改攒着，等这一段收口后挑`
+  const total = t.ask + t.story + t.review + t.codemodel + t.prepr + t.plan
+  return { tabs: t, soft: ['slices'], total, why, slice: sid }
+}
 
 // ---------- 子服务 ----------
 const children = []
@@ -218,7 +274,11 @@ function planTree(plan) {
     const done = step ? (x.doneAt ? `<span class="done">✓ 已写 ${esc(x.doneAt.slice(5, 16).replace('T', ' '))}</span>` : '<span class="todo">未写</span>') : ''
     // 分步确认：每张卡一个按钮，按了就地变成「已确认 · 撤销」，不整页刷新；写完的步不能撤。旁边「有话说」能留话，写码角色开写前读
     // （2026-09-14 项目所有者：「单步确认按钮不好用，而且也无法撤销或者加 comment」）
-    const confirmBtn = !step ? '' : (x.confirmedAt
+    // 人确认的是当时那段关键逻辑，角色事后改了文字，确认就不算数（2026-09-15 s-003 真出过：十八步全确认之后十步被重写）
+    const stale = Boolean(x.confirmedAt) && !x.doneAt && x.confirmedKeyLogic !== undefined && (x.keyLogic ?? null) !== (x.confirmedKeyLogic ?? null)
+    const confirmBtn = !step ? '' : (stale
+      ? `<span class="todo">你 ${esc(x.confirmedAt)} 确认之后，关键逻辑被改过——上面是新的文字，看过再确认一次</span><button class="cst" data-confirm-step="${x.n}">这一步我确认</button>`
+      : x.confirmedAt
       ? `<span class="okd">✓ 你已确认 ${esc(x.confirmedAt)}</span>${x.doneAt ? '<span class="okd">（已写完，不能撤；有话在下面留）</span>' : `<button class="cst un" data-unconfirm-step="${x.n}">撤销</button>`}`
       : (x.needsKeyLogic && !x.keyLogic ? '<span class="todo">关键逻辑没补，还不能确认</span>' : `<button class="cst" data-confirm-step="${x.n}">这一步我确认</button>`)) + '<span class="cmsg"></span>'
     const notes = (x.humanNotes || []).map((h) => `<div class="hn"><span class="t">${esc(String(h.ts).slice(5, 16).replace('T', ' '))}</span>${esc(h.text)}</div>`).join('')
@@ -241,6 +301,9 @@ function planGateDiv(slice) {
   let plan = null
   try { plan = JSON.parse(fs.readFileSync(path.join(root, 'plans', `${slice}.json`), 'utf8')) } catch { return '' }
   const done = plan.steps.filter((x) => x.doneAt).length
+  // 人确认之后角色又改了关键逻辑的步：确认挂在变过的文字上，不算数（2026-09-15 s-003 真出过）
+  const stale = plan.steps.filter((x) => x.confirmedAt && !x.doneAt && x.confirmedKeyLogic !== undefined && (x.keyLogic ?? null) !== (x.confirmedKeyLogic ?? null))
+  if (stale.length) return `<div class="gate ask" id="gate"><b>等你重新确认 ${stale.length} 步：</b>第 ${stale.map((x) => x.n).join('、')} 步在你确认之后关键逻辑被改过，这几步的确认不算数了。卡上是新的文字，看过按那一步的「这一步我确认」。</div>`
   if (plan.confirmedAt) return `<div class="gate ok" id="gate">✓ 这份计划已于 ${esc(plan.confirmedAt)} 由你确认（${plan.steps.length} 步，已写完 ${done} 步）。想收回哪一步，按那张卡上的「撤销」；有话就在卡上「有话说」里留。</div>`
   const unfilled = plan.steps.filter((x) => x.needsKeyLogic && !x.keyLogic).length
   if (unfilled) return `<div class="gate wait" id="gate">这份计划还有 ${unfilled} 步关键逻辑没补，${esc(plan.role)}角色补完才能请你确认。</div>`
@@ -393,13 +456,16 @@ header{display:flex;align-items:center;gap:6px;padding:0 14px;height:44px;backgr
 header h1{font-size:14px;margin:0 14px 0 0;font-weight:600;white-space:nowrap}header h1 span{color:var(--dim);font-weight:400;margin-left:8px}
 header button{font:inherit;color:var(--dim);background:none;border:0;border-bottom:2px solid transparent;padding:0 12px;height:44px;cursor:pointer;white-space:nowrap}
 header button.on{color:#fff;border-bottom-color:var(--on)}
-header button#theme{font-size:15px;padding:0 8px;border:0;opacity:.75}header button#theme:hover{opacity:1}header button .b{display:inline-block;margin-left:6px;font-size:11px;padding:0 6px;border-radius:999px;background:var(--warn);color:#111}
+header button#theme{font-size:15px;padding:0 8px;border:0;opacity:.75}header button#theme:hover{opacity:1}header button .b{display:inline-block;margin-left:6px;font-size:11px;font-weight:700;padding:0 6px;border-radius:999px;background:var(--warn);color:#111}
+header button .b.soft{background:#475569;color:#cbd5e1;font-weight:400}
+header .td{font-size:12.5px;white-space:nowrap;padding:2px 10px;border-radius:999px;margin-right:10px}
+header .td.on{background:var(--warn);color:#111;font-weight:600}header .td.off{color:var(--dim)}
 header .sp{flex:1}header .now{color:var(--dim);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}header a{color:var(--dim);font-size:12px;margin-left:12px;text-decoration:none}header a:hover{color:#fff}
 main{flex:1;position:relative}iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--page,#fff)}
 </style></head><body>
 <header><h1>工作台<span>${esc(projectName)}</span></h1>
 <button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="slices">切片</button><button data-t="journal">日志</button><button data-t="source">读原文</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="plan">编码计划</button><button data-t="proto">试原型</button>
-<span class="sp"></span><span class="now" id="now"></span><button id="theme" title="白天 / 黑夜">🌙</button><a id="open" href="#" target="_blank" title="在新窗口打开这一页">新窗口 ↗</a></header>
+<span class="sp"></span><span class="td" id="todo"></span><span class="now" id="now"></span><button id="theme" title="白天 / 黑夜">🌙</button><a id="open" href="#" target="_blank" title="在新窗口打开这一页">新窗口 ↗</a></header>
 <main><iframe id="f" src="/p/scene/"></iframe></main>
 <script>
 let cur='scene';let slice=null;let who=null
@@ -409,13 +475,26 @@ function show(t){cur=t;for(const b of document.querySelectorAll('header button')
 for(const b of document.querySelectorAll('header button'))b.addEventListener('click',()=>show(b.dataset.t))
 async function poll(){try{const s=await (await fetch('/state')).json();slice=s.slice;who=s.who
   document.getElementById('now').textContent=(s.slice?s.slice+' · ':'')+(s.phase?s.phase+' · ':'')+(s.who?s.who+' · ':'')+(s.step||'')
-  const badge=(t,on)=>{const b=document.querySelector('header button[data-t="'+t+'"]');let x=b.querySelector('.b');if(on&&!x){x=document.createElement('span');x.className='b';x.textContent='等你';b.appendChild(x)}if(!on&&x)x.remove()}
-  badge('scene',s.who==='人')
-  badge('ask',(s.questions||[]).some(q=>!q.answeredAt))
-  // 审阅页有没填的判断、故事页有没过的步骤：粗略按现场阶段标
-  badge('review',s.who==='人'&&/审阅|判断/.test(s.step||'')&&!/方向 ?②|代码对模型/.test(s.step||''));badge('codemodel',s.who==='人'&&/方向 ?②|代码对模型/.test(s.step||''));badge('prepr',s.who==='人'&&/审查|pre-pr/.test(s.step||''));badge('story',s.who==='人'&&/走故事|预测|过卡|故事页|五问|语句/.test(s.step||''));badge('delta',s.who==='人'&&/增量|确认模型/.test(s.step||''));badge('plan',s.who==='人'&&/计划|链路|plan/.test(s.step||''))
 }catch{}}
-poll();setInterval(poll,5000)
+// 页签上的待办数：每一页还有几件等他的事，按文件实数（不是拿现场那句话套正则猜）。
+// badge 找不到那个页签就跳过——从前 badge('delta') 指着一个并不存在的页签，一抛错后面的「编码计划」就永远标不上。
+async function todo(){try{const d=await (await fetch('/todo')).json()
+  const soft=new Set(d.soft||[])
+  for(const b of document.querySelectorAll('header button[data-t]')){
+    const t=b.dataset.t,n=(d.tabs||{})[t]||0
+    let x=b.querySelector('.b')
+    if(n){if(!x){x=document.createElement('span');x.className='b';b.appendChild(x)}
+      x.textContent=n;x.classList.toggle('soft',soft.has(t))
+      b.title=(d.why||{})[t]||''}
+    else{if(x)x.remove();b.title=''}
+  }
+  const el=document.getElementById('todo')
+  el.textContent=d.total?d.total+' 件等你':'没有等你的事'
+  el.className='td '+(d.total?'on':'off')
+  el.title=Object.entries(d.why||{}).map(([k,v])=>v).join('\\n')
+  document.title=(d.total?'('+d.total+') ':'')+'工作台 · ${esc(projectName)}'
+}catch{}}
+poll();todo();setInterval(poll,5000);setInterval(todo,5000)
 // 白天 / 黑夜：存 cookie，服务器按它决定每张页面翻不翻面；没选过就先照系统偏好定一次
 const cookie=(k)=>((document.cookie.match('(?:^|; )'+k+'=([^;]*)')||[])[1]||'')
 function setTheme(v){document.cookie='wb-theme='+v+'; path=/; max-age=31536000';location.reload()}
@@ -494,6 +573,7 @@ const server = http.createServer((req, res) => {
   }
   if (url === '/') return html(shell, '外壳')
   if (url === '/state') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify(scene())) }
+  if (url === '/todo') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify(todo())) }
   if (url === '/delta') return html(deltaPage(q.slice || currentSlice()) ?? wrap('<p>还没指到哪一段。</p>'))
   if (url === '/slices') return html(wrap(slicesPage()))
   if (url === '/journal') return html(wrap(journalPage(q.date)))

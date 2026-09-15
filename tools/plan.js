@@ -47,9 +47,17 @@ function moduleNamesOf(model) {
   return names
 }
 function die(msg) { console.error(msg); process.exit(2) }
+/**
+ * 这一步的确认还算不算数。人确认的是当时那段关键逻辑；角色事后改了文字，确认就挂在变过的话上，不算数了。
+ * （2026-09-15 真出过：s-003 十八步全确认之后，原型按新规矩重写了十步的关键逻辑，计划照旧显示已确认。）
+ * 老计划的步骤没记过 confirmedKeyLogic，无从比对，不报——下次确认时补上。
+ */
+function staleConfirm(s) {
+  return Boolean(s.confirmedAt) && !s.doneAt && s.confirmedKeyLogic !== undefined && (s.keyLogic ?? null) !== (s.confirmedKeyLogic ?? null)
+}
 function writeJson(p, data) { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, JSON.stringify(data, null, 2) + '\n') }
-if (!['build', 'confirm', 'amend', 'done', 'check'].includes(cmd) || !root || !fs.existsSync(path.join(root, 'project.json')) || !sliceId) {
-  die('用法：node tools/plan.js <build|confirm|amend|done|check> <项目目录> <切片id> …（项目目录须含 project.json）')
+if (!['build', 'confirm', 'unconfirm', 'comment', 'amend', 'done', 'check'].includes(cmd) || !root || !fs.existsSync(path.join(root, 'project.json')) || !sliceId) {
+  die('用法：node tools/plan.js <build|confirm|unconfirm|comment|amend|done|check> <项目目录> <切片id> …（项目目录须含 project.json）')
 }
 const slicePath = path.join(root, 'slices', `${sliceId}.json`)
 if (!fs.existsSync(slicePath)) die(`切片不存在：${path.relative(process.cwd(), slicePath)}`)
@@ -63,6 +71,10 @@ const planMd = path.join(root, 'plans', `${sliceId}.md`)
 const rel = (p) => path.relative(process.cwd(), p) || '.'
 const posix = (p) => p.replaceAll('\\', '/')
 
+/** 段落切片走到哪一遍（第九十五批，seed/slices.md「一个模块分三遍建」）：骨架遍与行为遍只有业务与模型、一行代码都不写、不进编码计划；
+ *  应用遍（或没写 pass 的老切片）一次写出全套原型（2026-09-15 傍晚项目所有者推掉了「第二遍过完写代码」：「一边写模型一边写代码 审代码 太慢了」） */
+const pass = slice.pass ?? '应用'
+if ((pass === '骨架' || pass === '行为') && cmd === 'build') die(`切片 ${sliceId} 在${pass}遍：只有业务与模型、不写代码，不进编码计划（第九十五批）。模块内的段落都过了${pass}遍再 slice pass ${sliceId} ${pass === '骨架' ? '行为' : '应用'}`)
 /** 计划种类：故事 → 原型；实现 → 外壳；老式 → 全部 */
 const planKind = slice.kind === 'story' || (story && slice.kind !== 'implementation') ? 'proto' : slice.kind === 'implementation' ? 'shell' : 'full'
 const roleName = planKind === 'proto' ? '原型' : '编码'
@@ -343,7 +355,7 @@ function build(dry = false) {
     if (!o) continue
     if (o.keyLogic) s.keyLogic = o.keyLogic
     if (o.humanNotes?.length) s.humanNotes = o.humanNotes
-    if (o.confirmedAt && o.action === s.action && o.what === s.what && (o.keyLogic ?? null) === (s.keyLogic ?? null)) { s.confirmedAt = o.confirmedAt; kept++ }
+    if (o.confirmedAt && o.action === s.action && o.what === s.what && (o.keyLogic ?? null) === (s.keyLogic ?? null)) { s.confirmedAt = o.confirmedAt; s.confirmedKeyLogic = o.confirmedKeyLogic ?? o.keyLogic ?? null; kept++ }
   }
   const allConfirmed = steps.length > 0 && steps.every((s) => s.confirmedAt)
   const redo = steps.filter((s) => !s.confirmedAt).length
@@ -551,9 +563,10 @@ function loadContracts() {
 }
 
 // ---------- 给人看的 markdown ----------
-const KEY_LOGIC_MAX = 600 // 一步关键逻辑的字数提醒线（SKILL.md「节奏」）：超了只提示「看看有没有啰嗦」，不拒收——完整、直白的话不为凑字数压缩（2026-09-13 项目所有者）
+const KEY_LOGIC_MAX = 600 // 一步关键逻辑的字数提醒线（SKILL.md「节奏」）：超了只提示，不拒收。关键逻辑只写模型没说的四类（边界语义、实现决定、测试断言、改动的原因），守卫与抛错由审模型与方向 ② 管；到了这个数多半是在重复模型或写 agent 自己的推理（2026-09-15 项目所有者）
 function cellKeyLogic(s) {
   if (!s.keyLogic) return s.needsKeyLogic ? '**待补**' : '—'
+  if (/^\s*无\s*$/.test(s.keyLogic)) return '无'
   if (!s.keyLogic.includes('\n')) return s.keyLogic.replaceAll('|', '\\|')
   const first = s.keyLogic.split('\n').find((l) => l.trim()) ?? ''
   return `${first.replaceAll('|', '\\|')}（详见下方「关键逻辑」第 ${s.n} 步）`
@@ -568,7 +581,7 @@ function renderMd(plan) {
   for (const s of plan.steps) L.push(`| ${s.n} | ${LAYER[s.layer] ?? s.layer} | ${s.action === 'create' ? '新建' : '修改'} | ${s.file ? `\`${s.file}\`` : '—'} | ${s.what.replaceAll('|', '\\|')} | ${s.traces.join(' ') || '—'} | ${cellKeyLogic(s)} | ${s.doneAt ? s.doneAt.slice(5, 16).replace('T', ' ') : ''} |`)
   const multi = plan.steps.filter((s) => s.keyLogic && s.keyLogic.includes('\n'))
   if (multi.length) {
-    L.push('', '## 关键逻辑', '', `守卫按执行顺序一行一条，\`→ throw\` / \`→ return\` / \`→ raise\` 是结果，行尾 \`//\` 后是编号；超过 ${KEY_LOGIC_MAX} 字会提醒看看有没有啰嗦，但完整直白优先，不为凑字数压缩。`, '')
+    L.push('', '## 关键逻辑', '', `只写模型没说的四类：边界语义（\`<\` 还是 \`<=\`）、实现决定（拷贝、id、version、修不修剪）、测试断言什么、改动的原因与处理办法。守卫与抛错不写——审模型时已确认，方向 ② 自动核。新建写清单、改动写自然语言；四类都没有的步骤留空。超过 ${KEY_LOGIC_MAX} 字会提醒。`, '')
     for (const s of multi) L.push(`### 第 ${s.n} 步 · ${LAYER[s.layer] ?? s.layer} · ${s.file ? '\`' + s.file + '\`' : s.target}${s.keyLogic.length > KEY_LOGIC_MAX ? `　**${s.keyLogic.length} 字，看看有没有啰嗦**` : ''}`, '', '\`\`\`text', s.keyLogic.replace(/```/g, "'''"), '\`\`\`', '')
   }
   if (plan.already?.length) {
@@ -648,7 +661,7 @@ function confirm() {
   const over = targets.filter((s) => s.keyLogic && s.keyLogic.length > KEY_LOGIC_MAX)
   if (over.length) console.error(`提醒：有 ${over.length} 步关键逻辑超过 ${KEY_LOGIC_MAX} 字，看看有没有啰嗦（完整直白的话不必压缩）：`)
   for (const s of over) console.error(`  #${s.n} ${s.target}（${s.keyLogic.length} 字）`)
-  for (const s of targets) s.confirmedAt = today
+  for (const s of targets) { s.confirmedAt = today; s.confirmedKeyLogic = s.keyLogic ?? null } // 记下人确认的到底是哪段文字，事后被改就作废
   const left = plan.steps.filter((s) => !s.confirmedAt)
   if (stepArg) plan.log.push(`${today} 人确认第 ${stepArg} 步`)
   journal(root, { kind: 'confirm', who: '人', slice: sliceId, text: stepArg ? `确认编码计划第 ${stepArg} 步 ${targets[0].target}` : `确认编码计划剩下的 ${targets.length} 步` })
@@ -674,6 +687,7 @@ function unconfirm() {
   if (!s.confirmedAt) die(`第 ${n} 步本来就没确认`)
   if (s.doneAt) die(`第 ${n} 步已经写完了，撤销确认没有意义；对它有话就 plan comment 留下，写码角色按话改`)
   s.confirmedAt = null
+  s.confirmedKeyLogic = undefined
   plan.confirmedAt = null
   plan.log.push(`${today} 人撤销第 ${n} 步的确认`)
   journal(root, { kind: 'unconfirm', who: '人', slice: sliceId, text: `撤销编码计划第 ${n} 步 ${s.target} 的确认` })
@@ -701,6 +715,8 @@ function done() {
   if (!Number.isInteger(n) || n < 1) die('用法：plan done <项目目录> <切片id> <步骤号> [--已有 说明|说明]')
   const plan = loadPlan()
   if (!plan.confirmedAt) die('计划还没被人确认，不能开写')
+  const stale = plan.steps.filter(staleConfirm)
+  if (stale.length) die(`第 ${stale.map((s) => s.n).join('、')} 步的关键逻辑在人确认之后被改过，确认不算数了，不能开写；请他重看那几步再确认`)
   const s = plan.steps.find((x) => x.n === n)
   if (!s) die(`没有第 ${n} 步`)
   const earlier = plan.steps.filter((x) => x.n < n && !x.doneAt)
@@ -729,7 +745,10 @@ function check() {
     if (nowFp && nowFp !== plan.modelFingerprint) issues.push(`算完这份计划之后模型又改过：这份单子上要动哪些文件、按什么顺序都可能不作数了，要动的文件与顺序若一件没变，用 plan amend "<为什么>" 核对后换指纹（确认与完成记录都留着）；真变了才 plan build --force 重算再往下走`)
   }
   if (!plan.confirmedAt) issues.push('计划未经人确认')
-  for (const s of plan.steps.filter((x) => x.needsKeyLogic && !x.keyLogic)) issues.push(`#${s.n} ${s.target}：关键逻辑未补`)
+  // 关键逻辑只写模型没说的四类（边界语义、实现决定、测试断言、改动的原因），一步可能本来就没有；
+  // 但「考虑过、没有」与「忘了写」在文件里长得一样，所以要写一个「无」——留空仍然报（2026-09-15 项目所有者）
+  for (const s of plan.steps.filter((x) => x.needsKeyLogic && !x.keyLogic)) issues.push(`#${s.n} ${s.target}：关键逻辑没写——模型没说的那四类一条都不沾就写「无」，别留空`)
+  for (const s of plan.steps.filter(staleConfirm)) issues.push(`#${s.n} ${s.target}：人确认之后关键逻辑被改过，这一步的确认不算数了——请他重看一遍再确认（plan confirm ${plan.slice} ${s.n}）`)
   for (const s of plan.steps.filter((x) => x.keyLogic && x.keyLogic.length > KEY_LOGIC_MAX)) notes.push(`#${s.n} ${s.target}：关键逻辑 ${s.keyLogic.length} 字，超过 ${KEY_LOGIC_MAX} 字提醒线，看看有没有啰嗦（不拦）`)
   // 测试步骤不强制补关键逻辑，但空着就没人知道该断言什么——单独报一行，别让它悄悄溜过去
   for (const s of plan.steps.filter((x) => !x.needsKeyLogic && !x.keyLogic && x.layer === 'test')) issues.push(`#${s.n} ${s.target}：测试步骤的关键逻辑空着（不强制，但空着就没人知道该断言什么）`)

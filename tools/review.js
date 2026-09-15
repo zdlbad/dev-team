@@ -533,7 +533,7 @@ function fieldsHtml(el) {
 }
 function behaviorsHtml(el) {
   if (!el?.behaviors?.length) return ''
-  return el.behaviors.map(b => '<div class="card"><h4><code>' + esc(b.name) + '(' + b.input.map(p => esc(p.name)).join(', ') + ')' + (b.output ? ' → ' + esc(b.output) : '') + '</code> ' + chips(b.traces) + (b.throws.length ? ' <span class="arrow">→ 抛出</span> ' + errChips(b.throws) : '') + '</h4>'
+  return el.behaviors.map(b => '<div class="card"><h4><code>' + esc(b.name) + '(' + paramList(b.input, ', ') + ')' + (b.output ? ' → ' + esc(b.output) : '') + '</code> ' + chips(b.traces) + (b.throws.length ? ' <span class="arrow">→ 抛出</span> ' + errChips(b.throws) : '') + '</h4>'
     + (b.note ? '<div class="k" style="margin:2px 0 6px">' + esc(b.note) + '</div>' : '')
     + (b.rules.length ? '<div class="sub" style="margin-left:0">' + b.rules.map(r => '<div class="rule' + (hlId && r.traces.includes(hlId) ? ' hl' : '') + '">' + esc(r.text) + ' ' + chips(r.traces) + judgmentsFor(el.file, r.traces).map(jcard).join('') + '</div>').join('') + '</div>' : '') + '</div>').join('')
 }
@@ -546,13 +546,17 @@ function leftover(file, coveredIds) {
   const js = judgmentsFor(file).filter(i => !coveredIds.includes(data.judgments[i].target))
   return js.length ? '<div class="rule"><span class="lv">落在这个元素上、没对到哪一条</span>' + js.map(jcard).join('') + '</div>' : ''
 }
+/** 参数印成「名字: 类型」——人要看得出这一栏收的是数、是日子还是一行表格数据（2026-09-15 项目所有者点名）。
+ * 模型里每个 param 本来就带 type（标量只有 string / number / boolean / date，其余是模型里的名字）；没写类型的只印名字。 */
+function paramText(x) { return x.type ? x.name + ': ' + x.type : x.name }
+function paramList(list, sep) { return (list || []).map((x) => esc(paramText(x))).join(sep) }
 function storyLine(c) { return c.storySteps?.length ? '故事：' + esc(data.story?.title || data.slice || '') + ' 第 ' + c.storySteps.join('、') + ' 步' : '故事没有走到这个' + (c.kind === 'query-handler' ? '查询' : '命令') }
 function usecaseHtml(M, c) {
   const kindLabel = c.kind === 'query-handler' ? '查询' : c.kind === 'event-handler' ? '事件处理' : '命令'
   let h = '<div class="hd"><span class="k">' + esc(M.name) + ' › ' + kindLabel + '</span><h2>' + esc(c.name) + '</h2>' + chips(c.traces) + '</div>'
   if (c.code) h += '<div class="meta">代码：' + esc(c.code) + '</div>'
   h += '<div class="meta">' + (c.actor ? '执行者 ' + esc(c.actor) + ' · ' : '') + (c.trigger ? '触发于 ' + esc(c.trigger) + ' · ' : '') + storyLine(c) + (c.writes.length ? ' · 写 ' + c.writes.map(esc).join('、') : '') + (c.throws.length ? ' · 可能拒绝 ' + errChips(c.throws) : '') + (c.raises.length ? ' · 发出 ' + c.raises.map(esc).join('、') : '') + '</div>'
-  if (c.input.length) h += '<div class="meta">输入：' + c.input.map(p => '<code>' + esc(p.name) + '</code>').join('、') + '</div>'
+  if (c.input.length) h += '<div class="meta">输入：' + (c.input || []).map(p => '<code>' + esc(paramText(p)) + '</code>').join('、') + '</div>'
   const gj = judgmentsFor(c.file).filter(i => isId(data.judgments[i].target))
   if (gj.length) h += gj.map(jcard).join('')
   h += '<h3>每一步做什么、指到谁</h3><ol class="flow">'
@@ -590,14 +594,14 @@ function aggregateHtml(M, a) {
   }
   for (const v of [...a.valueObjects, ...a.entities]) h += '<h3>' + (a.valueObjects.includes(v) ? '值对象' : '实体') + ' ' + esc(v.name) + '</h3><div class="card" id="' + esc('f:' + v.file) + '">' + chips(v.traces) + rulesHtml(v, { flat: true }) + fieldsHtml(v) + fieldJudgmentsHtml(v) + behaviorsHtml(v) + leftover(v.file, [...v.rules.flatMap(x => x.traces), ...v.fields.flatMap(x => x.traces), ...v.behaviors.flatMap(b => [...b.traces, ...b.rules.flatMap(x => x.traces)])]) + '</div>'
   h += errorsHtml(a)
-  if (a.repositories.length) h += '<h3>仓储——能怎么查、怎么存</h3>' + a.repositories.map(rp => '<div class="card" id="' + esc('f:' + rp.file) + '"><h4>' + esc(rp.name) + '</h4>' + rp.methods.map(m => '<div class="rule"><code>' + esc(m.name) + '(' + m.input.map(p => esc(p.name)).join(', ') + ')' + (m.output ? ' → ' + esc(m.output) : '') + '</code> <span class="k">' + (m.kind === 'read' ? '读' : m.kind === 'write' ? '写' : esc(m.kind || '')) + '</span></div>').join('') + leftover(rp.file, []) + '</div>').join('')
+  if (a.repositories.length) h += '<h3>仓储——能怎么查、怎么存</h3>' + a.repositories.map(rp => '<div class="card" id="' + esc('f:' + rp.file) + '"><h4>' + esc(rp.name) + '</h4>' + rp.methods.map(m => '<div class="rule"><code>' + esc(m.name) + '(' + paramList(m.input, ', ') + ')' + (m.output ? ' → ' + esc(m.output) : '') + '</code> <span class="k">' + (m.kind === 'read' ? '读' : m.kind === 'write' ? '写' : esc(m.kind || '')) + '</span></div>').join('') + leftover(rp.file, []) + '</div>').join('')
   if (a.events.length) h += '<h3>事件</h3>' + a.events.map(e => '<div class="card" id="' + esc('f:' + e.file) + '"><h4>' + esc(e.name) + '</h4>' + chips(e.traces) + fieldsHtml(e) + fieldJudgmentsHtml(e) + leftover(e.file, e.fields.flatMap(x => x.traces)) + '</div>').join('')
   return h
 }
 function portHtml(M, p) {
   let h = '<div class="hd"><span class="k">' + esc(M.name) + ' › 端口 → ' + esc(p.target || '') + (p.kind ? '（' + esc(p.kind === 'module' ? '另一个模块' : p.kind === 'external-system' ? '外部系统' : p.kind) + '）' : '') + '</span><h2>' + esc(p.name) + '</h2>' + chips(p.traces) + '</div>'
   h += '<div class="meta">' + esc(M.name) + ' 经这个端口问 ' + esc(p.target || '别人') + '，只认答复，不读对方的记录。</div>'
-  h += p.operations.map(o => '<div class="card"><h4><code>' + esc(o.name) + '(' + o.input.map(x => esc(x.name)).join(', ') + ')' + (o.output ? ' → ' + esc(o.output) : '') + '</code> ' + chips(o.traces) + '</h4><div>' + esc(o.note) + '</div>' + judgmentsFor(p.file, o.traces).map(jcard).join('') + '</div>').join('')
+  h += p.operations.map(o => '<div class="card"><h4><code>' + esc(o.name) + '(' + paramList(o.input, ', ') + ')' + (o.output ? ' → ' + esc(o.output) : '') + '</code> ' + chips(o.traces) + '</h4><div>' + esc(o.note) + '</div>' + judgmentsFor(p.file, o.traces).map(jcard).join('') + '</div>').join('')
   h += leftover(p.file, p.operations.flatMap(o => o.traces))
   return h
 }

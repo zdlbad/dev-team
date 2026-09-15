@@ -17,6 +17,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { loadProject, walk, readJson } = require('./lib/project')
+const { densityIssues } = require('./lib/wording')
 
 const args = process.argv.slice(2)
 const cmd = args[0]
@@ -51,7 +52,17 @@ if (cmd === 'new') {
   const usage = business.filter((s) => s.kind === 'usage' && slice.traces.includes(s.id)).map((s) => ({ id: s.id, text: s.text }))
   const planP = path.join(root, 'plans', `${sliceId}.json`)
   const plan = fs.existsSync(planP) ? readJson(planP) : null
-  const files = plan ? plan.steps.filter((s) => s.file && !s.file.includes('*')).map((s) => s.file) : []
+  // 计划里带通配的步骤（adapter.*NoticeOfDecisionLookup.ts）按通配到代码库里解成真文件名；解不出来的照原样列着，审查角色看得见它是通配（2026-09-15 s-003 pre-pr 点出）
+  const expand = (f) => {
+    if (!f.includes('*')) return [f]
+    const dir = path.posix.dirname(f)
+    const re = new RegExp('^' + path.posix.basename(f).split('*').map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, (c) => '\\' + c)).join('.*') + '$')
+    const abs = path.join(codebase, dir)
+    if (!fs.existsSync(abs)) return [f]
+    const hits = fs.readdirSync(abs).filter((n) => re.test(n)).map((n) => path.posix.join(dir, n))
+    return hits.length ? hits : [f]
+  }
+  const files = plan ? plan.steps.filter((s) => s.file).flatMap((s) => expand(s.file)) : []
   const guides = Object.fromEntries(MODES[mode].map((a) => [a, ANGLES[a]]))
   const report = {
     direction: 3, mode, project: root, slice: sliceId, at: new Date().toISOString(), decodedVersion: null, guides,
@@ -67,7 +78,9 @@ if (cmd === 'new') {
     let prev = null
     try { prev = readJson(reportPath) } catch { prev = null }
     if (prev?.slice && (prev.slice !== sliceId || (prev.judgments ?? []).length || (prev.confirms ?? []).length)) {
-      const arch = path.join(root, 'reports', `pre-pr-${mode}.${prev.slice}.json`)
+      // 同一条切片审过不止一轮时存档名会撞：已占就加序号 .2 .3 …，从不覆盖（第八十九批「保存不盖改动」；2026-09-15 s-002 第一轮的存档被第三轮盖过一次）
+      let arch = path.join(root, 'reports', `pre-pr-${mode}.${prev.slice}.json`)
+      for (let i = 2; fs.existsSync(arch); i++) arch = path.join(root, 'reports', `pre-pr-${mode}.${prev.slice}.${i}.json`)
       fs.writeFileSync(arch, JSON.stringify(prev, null, 2) + '\n')
       console.log(`上一份报告（${prev.slice}，${(prev.judgments ?? []).length} 条发现）已存档：${path.relative(process.cwd(), arch)}`)
     }
@@ -80,7 +93,7 @@ if (cmd === 'new') {
 if (cmd === 'check') {
   if (!fs.existsSync(reportPath)) die(`报告不存在：${path.relative(process.cwd(), reportPath)}（先 prepr new）`)
   const r = readJson(reportPath)
-  const problems = []
+  const problems = [], reminders = []
   for (const [i, j] of (r.judgments ?? []).entries()) {
     const at = `judgments[${i}]`
     if (!MODES[mode].includes(j.check)) problems.push(`${at}：check 必须是本模式的角度之一：${MODES[mode].join(' / ')}`)
@@ -92,7 +105,10 @@ if (cmd === 'check') {
     if (!j.sides?.expected || !j.sides?.code) problems.push(`${at}：sides.expected（模型 / 契约 / 代码自己承诺的）与 sides.code（实际怎么写的）都要有`)
     if (!j.failure) problems.push(`${at}：failure 要写具体的失败场景（什么输入 / 什么先后顺序 → 什么错）`)
     if (!j.reason) problems.push(`${at}：reason 一句话`)
+    // 给人读的字：编号是佐证不是主语（agents/common/wording.md）。量到只提醒、不拦——改字是审查角色自己的活，不派文职（2026-09-15 项目所有者）
+    for (const [k, v] of [['sides.expected', j.sides?.expected], ['sides.code', j.sides?.code], ['failure', j.failure], ['reason', j.reason]]) for (const w of densityIssues(v)) reminders.push(`${at} ${k}：${w}`)
   }
+  if (reminders.length) { console.error(`措辞提醒 ${reminders.length} 条（不拦，写这条的人自己改——项目所有者读的时候「全都是标号，看不懂在说什么」）：`); for (const w of reminders) console.error('  · ' + w) }
   for (const a of MODES[mode]) if (!(r.judgments ?? []).some((j) => j.check === a) && !(r.cleanAngles ?? []).includes(a)) problems.push(`角度「${a}」既没有发现也没列进 cleanAngles——每个角度都要有结论`)
   const must = (r.judgments ?? []).filter((j) => j.importance === 'high').length
   r.conclusion = problems.length ? null : must ? 'not-clean' : 'clean'

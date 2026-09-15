@@ -25,10 +25,14 @@ function compile(codebase) {
   const rootDir = rootDirOf(codebase, tsconfig)
   const codebaseInBuild = path.join(buildDir, path.relative(rootDir, codebase))
   const tsc = require.resolve('typescript/bin/tsc')
-  const r = spawnSync(process.execPath, [tsc, '-p', tsconfig, '--noEmit', 'false', '--outDir', buildDir, '--rootDir', rootDir, '--module', 'commonjs', '--moduleResolution', 'node', '--esModuleInterop', '--declaration', 'false', '--sourceMap', 'false', '--skipLibCheck'], { encoding: 'utf8', cwd: codebase })
+  const r = spawnSync(process.execPath, [tsc, '-p', tsconfig, '--noEmit', 'false', '--noEmitOnError', '--outDir', buildDir, '--rootDir', rootDir, '--module', 'commonjs', '--moduleResolution', 'node', '--esModuleInterop', '--declaration', 'false', '--sourceMap', 'false', '--skipLibCheck'], { encoding: 'utf8', cwd: codebase })
+  // 编译不过就让构建目录里没有可跑的东西。tsc 默认即使报错也把能编的文件产出来，留着它，
+  // 下一个起原型或跑探针的人跑的就是那份半新半旧的坏代码，还以为是真结果
+  // （2026-09-15 s-003 第三轮 pre-pr，审查角色做变异测试时踩到，差点把坏版本的探针结果当成真的）
+  if (r.status !== 0) { fs.rmSync(buildDir, { recursive: true, force: true }); return { ok: false, output: (r.stdout + r.stderr).trim(), buildDir, codebaseInBuild, tsconfig } }
   fs.mkdirSync(buildDir, { recursive: true })
   fs.writeFileSync(path.join(buildDir, 'package.json'), '{ "type": "commonjs" }\n')
-  return { ok: r.status === 0, output: (r.stdout + r.stderr).trim(), buildDir, codebaseInBuild, tsconfig }
+  return { ok: true, output: (r.stdout + r.stderr).trim(), buildDir, codebaseInBuild, tsconfig }
 }
 
 module.exports = { compile, rootDirOf }
