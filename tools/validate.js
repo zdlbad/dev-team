@@ -543,7 +543,15 @@ for (const mf of model.moduleFiles) {
     const members = new Set([...entities, ...vos].filter((m) => m.module === mf.module && m.aggregateFolder === r.aggregateFolder).map((m) => m.data.name))
     for (const m of a.members) if (!members.has(m)) { if (scopeAggs) defer('module.members', `${mf.file}#${a.name}`, `粗版成员 ${m} 本段外未建`); else add(r1, 'error', 'module.members', `${mf.file}#${a.name}`, `members 中的 ${m} 没有实体 / 值对象文件`) }
     for (const m of members) if (!a.members.includes(m)) add(r1, 'error', 'module.members', `${mf.file}#${a.name}`, `members 缺少 ${m}`)
-    for (const ref of a.idRefs) if (!find(['aggregate-root'], ref.to, mf.module)) { if (scopeAggs && !scopeAggs.has(qualify(ref.to, mf.module))) defer('module.idRefs', `${mf.file}#${a.name}`, `idRef 指向的粗版聚合 ${ref.to} 本段外未建`); else add(r1, 'error', 'module.idRefs', `${mf.file}#${a.name}`, `idRef 指向不存在的聚合：${ref.to}`) }
+    for (const ref of a.idRefs) if (!find(['aggregate-root'], ref.to, mf.module)) {
+      const refMod = qualify(ref.to, mf.module).split('.')[0]
+      // 按模块一次建一个（第九十七批）：这个模块引用别的模块的聚合，而那个模块的模型还没建，是必然的，不是错。
+      // 只要它在 modules.json 里（战略设计划过），就单列出来记着；modules.json 里都没有才是真错。
+      const known = (model.modules?.data.modules ?? []).some((m) => m.name === refMod)
+      if (scopeAggs && !scopeAggs.has(qualify(ref.to, mf.module))) defer('module.idRefs', `${mf.file}#${a.name}`, `idRef 指向的粗版聚合 ${ref.to} 本段外未建`)
+      else if (scopeMods && !scopeMods.has(refMod) && known) defer('module.idRefs', `${mf.file}#${a.name}`, `idRef 指向 ${ref.to}，${refMod} 模块的模型还没建`)
+      else add(r1, 'error', 'module.idRefs', `${mf.file}#${a.name}`, `idRef 指向不存在的聚合：${ref.to}`)
+    }
   }
   if (!model.modules?.data.modules.some((m) => m.name === mf.module)) add(r1, 'error', 'modules.list', mf.file, `modules.json 未列出模块 ${mf.module}`)
 }
