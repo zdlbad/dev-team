@@ -262,13 +262,18 @@ function reportOf(direction, sliceId) {
 /** 报告的状态：从「机械错误」到「人已审完」逐层看 */
 function reportState(r) {
   if (!r) return { state: 'none' }
-  const blocking = r.errors.length + r.warnings.length
-  if (blocking) return { state: 'blocked', errors: r.errors.length, warnings: r.warnings.length }
+  // 只有错误挡路：错误必须修，是模型师（或编码）的活。
+  // 警告不挡——它的出路是「修掉，或由人驳回并留理由」，角色修不掉、也判它站得住的时候，只有人能放行。
+  // 从前警告和错误一起挡，2026-09-16 k-001 只剩 R-103 一条警告、校验角色判它站得住请人驳回，
+  // slice next 却一直派模型师去修、工作台待办数是 0，那六十条判断和那条警告谁也不提醒他去审。
+  // 现在警告跟判断一起轮到人：驳回就写进 decisions，选「要改」就退回模型师。
+  const warnings = r.warnings ?? []
+  if (r.errors.length) return { state: 'blocked', errors: r.errors.length, warnings: warnings.length }
   const unjudged = r.judgments.filter((j) => !j.verdict).length
   if (unjudged) return { state: 'unjudged', unjudged }
-  const unreviewed = [...r.judgments, ...r.confirms].filter((it) => !it.human?.verdict).length
+  const unreviewed = [...r.judgments, ...r.confirms, ...warnings].filter((it) => !it.human?.verdict).length
   if (unreviewed) return { state: 'unreviewed', unreviewed }
-  const rework = [...r.judgments.filter(needsWork), ...r.confirms.filter(needsWork)]
+  const rework = [...r.judgments.filter(needsWork), ...r.confirms.filter(needsWork), ...warnings.filter((w) => w.human?.verdict && w.human.verdict !== 'dismissed')]
   if (rework.length) return { state: 'rework', rework: rework.length, applied: !!r.applied }
   return { state: 'clean', applied: !!r.applied }
 }
@@ -333,7 +338,7 @@ function computeNext(slice) {
         if (st.model.status === 'pending') return step('模型师', `骨架初稿：按 ${mod} 点亮的概念与行为，一次性起草这个模块全部主要的聚合、实体、值对象——字段与类型（props 带 traces）、聚合清单的 members 与 idRefs。不带守卫，不建不变量、行为、error、event、领域服务、命令、查询、端口，不填 walk。允许不准，走查时再改精。choices 只列「这个事实放在哪个聚合上」这类形状的选择。交稿前按 agents/common/wording.md 自检措辞`, `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '骨架初稿按模块一次起草，形状先铺开（第九十七批）')
         if (!st.model.proofreadAt) return step('文职', `总校一趟：${mod} 这一轮点亮的语句与初稿里给人读的文字，只改字不改意；改完跑 validate --重新定基 接回裁决，再标记`, `node tools/slice.js proofread ${rel(root)} ${slice.id}`, '文职一趟，排在人看之前（第八十九批）')
         if (needV1) return step('开发指挥', '跑校验 ①（机械检查；骨架只查事实的落点，其余留给走查）', validateCmd(false), '初稿也要过机械检查')
-        if (s1.state === 'blocked') return step('模型师', `修正初稿：方向 ① 有 ${s1.errors} 个错误、${s1.warnings} 个警告`, validateCmd(false), '机械检查未过，先改再重跑')
+        if (s1.state === 'blocked') return step('模型师', `修正初稿：方向 ① 有 ${s1.errors} 个错误（警告不挡：修得掉就顺手修，修不掉的留给人驳回）`, validateCmd(false), '机械检查未过，先改再重跑')
         return step('人', `看 ${mod} 的骨架初稿：工作台「模型图」页看聚合、实体、值对象怎么分、字段全不全；哪个事实放错了聚合、哪个该拆该合当场说。看完说「就按这个走」，开发指挥在「切片」页按「初稿定了」（或跑右边的命令）；不准的地方走查时再改`, `node tools/slice.js advance ${rel(root)} ${slice.id} model done 初稿定了`, '初稿由他定、允许不准，不派校验角色逐条判（第九十七批）')
       }
       // 业务走查：讲解出场景，模型师拿初稿走、长出行为，他在场
@@ -346,12 +351,12 @@ function computeNext(slice) {
       if (ssM.state === 'no-walk') return step('模型师', `走查还有 ${ssM.count} 步没填 walk：动了哪个聚合、变了什么；不是聚合行为的标 leftTo: 应用`, storyRelM, '每一步都要走到')
       if (!st.model.proofreadAt) return step('文职', `总校一趟：走查场景与这一轮新建、改动的模型元素给人读的文字，只改字不改意；改完跑 validate --重新定基 接回裁决，再标记`, `node tools/slice.js proofread ${rel(root)} ${slice.id}`, '文职一趟，排在校验角色填判断之前（第八十九批）')
       if (needV1) return step('开发指挥', '跑校验 ①（机械检查 + 生成判断清单；这一步查事实、约束、公式、情形的落点）', validateCmd(false), '还没有本切片这一步的方向 ① 报告')
-      if (s1.state === 'blocked') return step('模型师', `修正模型：方向 ① 有 ${s1.errors} 个错误、${s1.warnings} 个警告`, validateCmd(false), '机械检查未过，先改再重跑')
+      if (s1.state === 'blocked') return step('模型师', `修正模型：方向 ① 有 ${s1.errors} 个错误（警告不挡：修得掉就顺手修，修不掉的留给人驳回）`, validateCmd(false), '机械检查未过，先改再重跑')
       if (['unapproved', 'usage-proposed', 'awaiting-human'].includes(ssM.state)) return step('人', `在「走故事」页走一遍 ${mod} 的业务走查：逐步同意或质疑（聚合这么分对不对、行为这么长对不对）；裁 ${story.choices.filter((c) => !c.ruling).length} 张卡`, `node tools/story.js serve ${rel(root)} ${slice.id}`, '走查是他在场的：模拟业务，看聚合行为长得对不对（第九十七批）')
       if (ssM.state === 'unapplied') return step('路由', `把 ${ssM.count} 张裁定卡写回裁定文件与切片 log`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '裁定已填但未写回')
       if (ssM.state === 'rework') return step('模型师', `按回流改模型（裁定 ${ssM.rework} 项、走不通 ${ssM.gaps} 处）；改完更新 choices 的 current、清掉 gap，重跑校验 ①`, validateCmd(false), '人的裁定与模型现状不同，或走查走不通')
       if (s1.state === 'unjudged') return step('模型校验', `填写 ${s1.unjudged} 条判断（verdict / confidence / reason）`, `reports/validate-1.json`, '判断清单待校验角色逐条判断')
-      if (s1.state === 'unreviewed') { wordingReminders(r1, '模型校验'); return step('人', `在「审模型」页审阅 ${s1.unreviewed} 条判断 / 需确认项；审完干净就算 ${mod} 的模型确认`, `node tools/review.js ${rel(path.join(root, 'reports', 'validate-1.json'))}`, '人过目后模型即确认（第八十九批）') }
+      if (s1.state === 'unreviewed') { wordingReminders(r1, '模型校验'); return step('人', `在「审模型」页审阅 ${s1.unreviewed} 条判断 / 需确认项 / 警告（警告驳回要写理由，不驳回就退回模型师）；审完干净就算 ${mod} 的模型确认`, `node tools/review.js ${rel(path.join(root, 'reports', 'validate-1.json'))}`, '人过目后模型即确认（第八十九批）') }
       if (!s1.applied) return step('路由', '把裁决写回 decisions[] 与切片 log', `node tools/slice.js apply ${rel(root)} ${rel(path.join(root, 'reports', 'validate-1.json'))} --slice ${slice.id}`, '裁决已填但未写回')
       if (s1.state === 'rework') return step('模型师', `按回流清单修改模型（${s1.rework} 项），改完重跑校验 ①`, validateCmd(false), '人的裁决里有要改的项')
       return step('路由', `${mod} 的模型确认：走查过完、方向 ① 干净、人审完，标 done`, `node tools/slice.js advance ${rel(root)} ${slice.id} model done`, '方向 ① 干净且人已审完')
@@ -384,7 +389,7 @@ function computeNext(slice) {
     const s1 = reportState(r1)
     // in-progress：看方向 ① 报告走到哪。机械检查开发指挥自己跑，校验角色只填判断
     if (s1.state === 'none' || (r1.slice && r1.slice !== slice.id)) return step('开发指挥', '跑校验 ①（机械检查 + 生成判断清单）', validateCmd(false), '模型阶段进行中，还没有本切片的方向 ① 报告；机械检查不用派人（第八十九批）')
-    if (s1.state === 'blocked') return step('模型师', `修正模型：方向 ① 有 ${s1.errors} 个错误、${s1.warnings} 个警告`, validateCmd(false), '机械检查未过，先改再重跑')
+    if (s1.state === 'blocked') return step('模型师', `修正模型：方向 ① 有 ${s1.errors} 个错误（警告不挡：修得掉就顺手修，修不掉的留给人驳回）`, validateCmd(false), '机械检查未过，先改再重跑')
     if (ss?.state === 'no-quiz' || (story && !story.steps.some((s) => s.quiz))) return step('讲解', `出题：给关键步骤加 quiz（预测再揭晓：数字或选择，不要作文），检查 choices 的措辞与金额例子`, storyRel, '人走故事前要有题')
     // 人一坐：理解一致、确认五问语句、预测、过卡，都在走故事页
     if (ss && ['unapproved', 'usage-proposed', 'awaiting-human'].includes(ss.state)) {
@@ -398,7 +403,7 @@ function computeNext(slice) {
     if (ss?.state === 'rework') return step('模型师', `按回流改模型（裁定 ${ss.rework} 项、走不通 ${ss.gaps} 处）；改完更新 choices 的 current、清掉 gap，重跑校验 ①；改了文字自己按第八十四批自检`, validateCmd(false), '人的裁定与模型现状不同，或故事走不通')
     if (s1.state === 'unjudged') return step('模型校验', `填写 ${s1.unjudged} 条判断（verdict / confidence / reason）`, `reports/validate-1.json`, '判断清单待校验角色逐条判断')
     if (s1.state === 'unreviewed') wordingReminders(r1, '模型校验')
-    if (s1.state === 'unreviewed') return step('人', `在「审模型」页审阅 ${s1.unreviewed} 条判断 / 需确认项；审完干净就算模型确认，不用再点一次`, `node tools/review.js ${rel(path.join(root, 'reports', 'validate-1.json'))}`, '人过目后模型即确认（第八十九批）')
+    if (s1.state === 'unreviewed') return step('人', `在「审模型」页审阅 ${s1.unreviewed} 条判断 / 需确认项 / 警告（警告驳回要写理由，不驳回就退回模型师）；审完干净就算模型确认，不用再点一次`, `node tools/review.js ${rel(path.join(root, 'reports', 'validate-1.json'))}`, '人过目后模型即确认（第八十九批）')
     if (!s1.applied) return step('路由', '把裁决写回 decisions[] 与切片 log', `node tools/slice.js apply ${rel(root)} ${rel(path.join(root, 'reports', 'validate-1.json'))} --slice ${slice.id}`, '裁决已填但未写回')
     if (s1.state === 'rework') return step('模型师', `按回流清单修改模型（${s1.rework} 项），改完重跑校验 ①`, validateCmd(false), '人的裁决里有要改的项')
     return step('路由', '模型确认：审模型页过完、干净，直接标 done（触及模块划分或聚合清单的变动仍要人单独说一声）', `node tools/slice.js advance ${rel(root)} ${slice.id} model done`, '方向 ① 干净且人已审完；第八十九批：不再让人单点一次')
@@ -459,7 +464,7 @@ function computeNext(slice) {
   const s2 = reportState(r2)
   if (!fs.existsSync(codebase)) return step('人', `代码库不存在：${codebase}`, null, '切片记录的 codebase 指向的目录不存在')
   if (s2.state === 'none') return step('模型校验', '跑校验 ②（解码 + lint + 比对）', validateCmd(true), '编码完成，还没有本切片的方向 ② 报告')
-  if (s2.state === 'blocked') return step('人', `处理差异：方向 ② 有 ${s2.errors} 个错误、${s2.warnings} 个警告——代码错回编码，模型错回模型师`, `reports/validate-2.md`, '差异回流由人判定回到哪一侧')
+  if (s2.state === 'blocked') return step('人', `处理差异：方向 ② 有 ${s2.errors} 个错误——代码错回编码，模型错回模型师`, `reports/validate-2.md`, '差异回流由人判定回到哪一侧')
   if (s2.state === 'unjudged') return step('模型校验', `填写 ${s2.unjudged} 条语义等价判断`, `reports/validate-2.json`, '文字差异待判断')
   if (s2.state === 'unreviewed') wordingReminders(r2, '模型校验')
   if (s2.state === 'unreviewed') return step('人', `审阅 ${s2.unreviewed} 条`, `node tools/review.js ${rel(path.join(root, 'reports', 'validate-2.json'))}`, '人过目')
@@ -631,7 +636,9 @@ if (cmd === 'apply') {
   }
   for (const w of report.warnings ?? []) {
     const h = w.human?.verdict
-    if (h !== 'dismissed') continue
+    if (!h) continue
+    // 人不驳回就是要改：退回去修，修好了重跑校验这条警告自己就没了
+    if (h !== 'dismissed') { rework.push(`[${w.check}] ${w.target}：警告，人要改——${w.text}${w.human.note ? `——${w.human.note}` : ''}`); continue }
     if (!w.human.note) skipped.push(`${w.target}：驳回警告必须写理由（note）`)
     else pushDecision(w, 'dismissed', w.human.note)
   }

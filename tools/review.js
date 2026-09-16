@@ -8,7 +8,7 @@
  * 写回的形状：条目增加 human: { verdict, note, at }
  *   - 待判断（judgments）：verdict = agree | disagree | pass | fail
  *   - 需人确认（confirms）：verdict = 选项序号 | accepted | dismissed
- *   - 警告（warnings）：verdict = fixed | dismissed
+ *   - 警告（warnings）：verdict = dismissed（驳回，要写理由）| fixed（要改，退回模型师；值沿用老名字）
  *
  * 两种看法（右上角切换）：
  *   · 按结构（缺省，报告带 project 时）：左边一棵模型树——模块 → 聚合（规则、字段、行为、值对象、错误、仓储）、命令、端口，
@@ -250,8 +250,8 @@ const confirmControls = (it, i) => {
     + '<input type="text" placeholder="备注（承认例外时必填理由）" data-k="confirms" data-i="'+i+'" data-f="note"></div>'
 }
 const warningControls = (it, i) =>
-  '<div class="row"><select data-k="warnings" data-i="'+i+'" data-f="verdict"><option value="">— 处理 —</option><option value="fixed">已修</option><option value="dismissed">驳回</option></select>'
-  + '<input type="text" placeholder="驳回理由" data-k="warnings" data-i="'+i+'" data-f="note"></div>'
+  '<div class="row"><select data-k="warnings" data-i="'+i+'" data-f="verdict"><option value="">— 处理 —</option><option value="dismissed">驳回（站得住，不改）</option><option value="fixed">要改（退回模型师）</option></select>'
+  + '<input type="text" placeholder="驳回必须写理由；要改就写改成什么" data-k="warnings" data-i="'+i+'" data-f="note"></div>'
 // 把页面上的下拉与备注框接到数据上：改一处就记一处、稍后自动保存；树上的数字跟着变
 function bindControls(root) {
   for (const el of root.querySelectorAll('[data-k]')) {
@@ -279,6 +279,8 @@ function introNode() {
     : '<b>这一页在问什么（审模型）：</b>校验器给你在故事里确认过的每一条业务语句生成一问「模型有没有把它表达出来」，给每个命令的每一步生成一问「这一步是不是只做编排」。')
     + '<b>谁答的：</b>校验角色先答（通过 / 不通过 + 理由）。<b>你只做一件事：</b>看他的理由站不站得住，同意或不同意。这些都是确认，不是新的业务问题——要你拍板的业务分岔在故事页的裁定卡上。<br>'
     + (function(){ var stale = js.filter(function(j){ return !j.human?.verdict && j.staleDecision && !j.staleDecision.reordered }).length; return open ? '<b>这次：</b>新的 ' + (open - stale) + ' 条、文字改了重浮的 ' + stale + ' 条（重浮的旁边写着上次你怎么裁，意思没变就照旧）。' : '' })()
+    // 警告也等他：角色修不掉的，驳回或退回只有他能定（2026-09-16 起警告不再挡着判断，跟判断一起交给人）
+    + (function(){ var w = (data.warnings || []).filter(function(x){ return !x.human?.verdict }).length; return w ? '<b style="color:#b45309">另有 ' + w + ' 条警告等你处理</b>（在「警告」那一节：站得住就驳回并写理由，不对就选「要改」退回模型师）。' : '' })()
     + '共 ' + js.length + ' 条，还有 <b>' + open + '</b> 条等你：校验角色高信心通过 ' + nHigh + ' 条（可以点右上角「其余高信心的一并同意」一次处理），' + '值得你看的 ' + nLow + ' 条（信心中 / 低' + (nFail ? '、不通过 ' + nFail + ' 条' : '') + '）。'
     + (mode === 'structure' ? '<b>按结构看：</b>左边是模型的树，红色数字是那一处还有几条等你；点一个命令，能看到它每一步指到哪个聚合的哪个方法、哪个仓储、哪个端口，规则挂在方法下面。' : (data.story ? '顺序按故事走：每一步的标题就是故事那句话，下面是这一步用到的业务在模型里对得上对不上。' : '顺序按重要度从高到低、信心从低到高。'))
     + '每次改动自动保存。'

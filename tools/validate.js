@@ -314,18 +314,27 @@ const pickText = (items, id, sep) => {
   const hidden = all.length - keep.length
   return keep.map((x) => one(x) + carriesOf(x, id)).join(sep) + (hidden ? `（另有 ${hidden} 处管的是别的编号，未列出）` : '')
 }
+/**
+ * 这个方法（或领域服务的操作）承不承载这条业务语句：自己挂着这个编号算，**里面哪一条规则挂着也算**。
+ * 规则可以各自标自己管哪几个编号（`rulesText` 就是按这个挑的），可认落点这一步早先只看方法自己那一层，
+ * 于是只写在规则上的追溯谁也看不见——语句被当成「没有落点」，再被种类归进「留给后面的遍」，一路无声绕过所有人。
+ * 2026-09-16 k-001 真出过：R-103（共付比例往高往低两种改法）、R-118、R-119（先动哪一本账）三条规则早就写好了，
+ * 却因为追溯只挂在规则上而没人判。
+ */
+const tracedHere = (m, id) => (m.traces ?? []).includes(id) || (m.rules ?? []).some((r) => typeof r !== 'string' && (r.traces ?? []).includes(id))
+
 function ruleLandings(id) {
   const out = []
   for (const el of domainObjects) {
     const objLabel = { 'aggregate-root': '聚合根', entity: '实体', 'value-object': '值对象' }[el.kind]
     for (const inv of el.data.aggregateInvariants ?? []) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, label: `聚合 ${el.data.name} 的规则`, text: `聚合 ${el.data.name} 的规则：${inv.text}${carriesOf(inv, id)}` })
     for (const inv of el.data.invariants) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, label: `${el.data.name} 的规则`, text: `${objLabel} ${el.data.name} 的规则：${inv.text}${carriesOf(inv, id)}${throwsText(inv.throws ?? [])}` })
-    for (const b of el.data.behaviors) if (b.traces.includes(id)) out.push({ kind: b.throws.length ? 'behavior-guard' : 'behavior', el, label: `${el.data.name}.${b.name}`, text: `${el.data.name}.${sig(b.name, b.input, b.output)}　${rulesText(b.rules, id)}${raisesText(b.raises)}${throwsText(b.throws)}` })
+    for (const b of el.data.behaviors) if (tracedHere(b, id)) out.push({ kind: b.throws.length ? 'behavior-guard' : 'behavior', el, label: `${el.data.name}.${b.name}`, text: `${el.data.name}.${sig(b.name, b.input, b.output)}　${rulesText(b.rules, id)}${raisesText(b.raises)}${throwsText(b.throws)}` })
 
     // 字段也是模型的落点：聚合上记着什么、每一栏干什么用，跟不变量一样在承载业务
     for (const f of el.data.fields ?? []) if ((f.traces ?? []).includes(id)) out.push({ kind: 'field', el, label: `${el.data.name} 的字段 ${f.name}`, text: `${objLabel} ${el.data.name} 的字段 ${f.name}: ${f.type}${f.nullable ? '（可空）' : ''}${f.note ? `　${f.note}` : ''}` })
   }
-  for (const s of services) for (const op of s.data.operations) if (op.traces.includes(id)) out.push({ kind: 'service', el: s, label: `领域服务 ${s.data.name}.${op.name}`, text: `领域服务 ${s.data.name}.${sig(op.name, op.input, op.output)}　${rulesText(op.rules, id)}${throwsText(op.throws)}` })
+  for (const s of services) for (const op of s.data.operations) if (tracedHere(op, id)) out.push({ kind: 'service', el: s, label: `领域服务 ${s.data.name}.${op.name}`, text: `领域服务 ${s.data.name}.${sig(op.name, op.input, op.output)}　${rulesText(op.rules, id)}${throwsText(op.throws)}` })
   for (const h of handlers) if (h.data.traces.includes(id)) out.push({ kind: 'event-handler', el: h, label: `事件处理 ${h.data.name}`, text: `事件处理 ${h.data.name}（触发：${h.data.trigger}）：${h.data.steps.map((s) => s.text).join(' → ')}` })
   for (const e of errors) if (e.data.traces.includes(id)) out.push({ kind: 'error', el: e, label: `错误 ${e.data.name}`, text: `错误 ${e.data.name}：${e.data.condition ? pickText(e.data.condition, id, '；') : '（无条件说明）'}` })
   // 端口也是落点：描述我方系统之外的业务流程（政府门户上收到转介）的事实落在边界上，不落聚合（agents/model/shapes.md；验收项目第六十八批）
@@ -333,7 +342,7 @@ function ruleLandings(id) {
   return out
 }
 // 种类 → 该落在哪种元素上（只是提醒，报警告）。消息里用文件里写的那个词（rawKind），旧标签的语句指纹才对得上以前的裁决：事实落字段或结构性的不变量；约束落不变量、守卫、错误；公式落计算；触发落事件处理
-const EXPECTED = { 事实: ['field', 'invariant', 'behavior', 'port'], 约束: ['invariant', 'behavior-guard', 'error', 'field'], 公式: ['behavior', 'behavior-guard', 'service', 'field'], 触发: ['event-handler', 'port'], 流程: ['behavior-guard', 'invariant', 'error', 'command', 'port'], 情形: ['behavior', 'behavior-guard', 'invariant', 'error', 'field', 'command'] }
+const EXPECTED = { 事实: ['field', 'invariant', 'behavior', 'port'], 约束: ['invariant', 'behavior-guard', 'error', 'field'], 公式: ['behavior', 'behavior-guard', 'service', 'field'], 触发: ['event-handler', 'port'], 流程: ['behavior-guard', 'invariant', 'error', 'command', 'port', 'service'], 情形: ['behavior', 'behavior-guard', 'invariant', 'error', 'field', 'command'] }
 // 本段只作背景的语句：故事里讲到它，可本段没有能承载它的动作（次序、核对这类要等后面的段落）。
 // 切片里写明编号与理由，校验器就不因「没有落点」报错——但记进 deferred 单列出来，谁也别忘了它还欠着。
 const background = new Map((sliceRec?.backgroundTraces ?? []).map((b) => [b.id, b.why]))

@@ -77,7 +77,7 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 2. 按 `role` 分派：
    - **人**：不做任何事。把 `action`、`command`、`why` 原样告诉人，停。 `action` 是模型确认时，先跑 `delta`，把增量页面的路径和「新增 / 改动 / 删除各几个文件」一并告诉人——人只确认增量，不重看整个模型。
    - **role 为「路由」**（工具里的旧叫法，就是开发指挥自己）：直接执行 `command`（写回裁决、标记状态、算编码计划），把输出告诉人，停。算出编码计划后把 `plans/<id>.md` 的路径告诉人。
-   - **模型校验**：先执行 `command`（校验器）。报告有错误或警告 → 告诉人，停。否则用 Agent 工具启动一个子 agent，提示词 = `node $DEV_TEAM/tools/brief.js 模型校验` 的输出 + 上下文块（见 `agents/common/discipline.md`）+ 任务「填写 `reports/validate-<n>.json` 里全部判断」。子 agent 完成后，起审阅页面（`review`），把它的小结与页面地址告诉人，停。
+   - **模型校验**：先执行 `command`（校验器）。报告有错误 → 退回模型师，停。只有警告不停（警告不挡判断，跟判断一起交给人：站得住的人驳回，不对的人退回）；否则用 Agent 工具启动一个子 agent，提示词 = `node $DEV_TEAM/tools/brief.js 模型校验` 的输出 + 上下文块（见 `agents/common/discipline.md`）+ 任务「填写 `reports/validate-<n>.json` 里全部判断」。子 agent 完成后，起审阅页面（`review`），把它的小结与页面地址告诉人，停。
    - **pre-pr 审查**：`brief.js pre-pr 审查`，同样方式启动子 agent，任务 = `action`（含模式 proto / shell）。子 agent 完成后跑 `prepr check`，起审阅页面，把发现数、必须改数、干净的角度与页面地址告诉人，停。
    - **业务分析 / 模型师 / 原型 / 接口 / 编码**：`brief.js <角色名>`，同样方式启动子 agent，任务 = `action`。子 agent 完成后，把它的「产出」与「问题清单」原样转给人，停。**不替人回答问题清单**，但先给每一条标层（见「裁定分流」）。四处特别的收尾：
      - 业务分析点亮完 → 把本段新点亮的编号、各归哪个模块、哪些步骤还是暗的告诉人，下一步是人走故事、理解一致。

@@ -59,7 +59,7 @@ reads:
 
 ```
 node $DEV_TEAM/tools/check-schema.js <项目目录>
-node $DEV_TEAM/tools/validate.js <项目目录> --slice <切片id>   # 须仍是 0 错误 0 警告；判断过期是预期的
+node $DEV_TEAM/tools/validate.js <项目目录> --slice <切片id>   # 须仍是 0 错误、警告不比改之前多；判断过期是预期的
 ```
 
 产出里**每一处改动一行：文件、编号或元素名、改前、改后**，人扫一眼就能回退任何一处；没改的说「无需改」并说一句为什么。
