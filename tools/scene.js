@@ -35,6 +35,7 @@ const path = require('path')
 const http = require('http')
 const os = require('os')
 const ME = os.hostname()
+const mel = require('./lib/time') // 打印给人看的钟点用墨尔本；写进文件的仍是 UTC 的 ISO 串
 
 const ROLES = ['人', '开发指挥', '业务分析', '讲解', '文职', '模型师', '原型', '接口', '编码', '模型校验', 'pre-pr 审查', '解读']
 const PHASES = ['业务', '模型', '编码', '校验']
@@ -468,10 +469,10 @@ function textView() {
   L.push(`谁在干　${s.who ?? '—'}${s.since ? `　（${ago(s.since)}）` : ''}`)
   if (s.note) L.push(`说明　　${s.note}`)
   const prog = (s.progress ?? []).slice(-6)
-  if (prog.length) { L.push('细步'); for (const e of prog) L.push(`  ${e.ts.slice(11, 16)}　${e.who ?? '—'}　${e.text}`) }
+  if (prog.length) { L.push('细步'); for (const e of prog) L.push(`  ${mel.hm(e.ts)}　${e.who ?? '—'}　${e.text}`) }
   L.push('')
   L.push('动态')
-  for (const e of (s.timeline ?? []).slice(-8)) L.push(e.kind === 'progress' ? `  ${e.ts.slice(5, 16).replace('T', ' ')}　${e.who ?? '—'}　　└ ${e.note}` : `  ${e.ts.slice(5, 16).replace('T', ' ')}　${e.who ?? '—'}　${e.step}`)
+  for (const e of (s.timeline ?? []).slice(-8)) L.push(e.kind === 'progress' ? `  ${mel.mdhm(e.ts)}　${e.who ?? '—'}　　└ ${e.note}` : `  ${mel.mdhm(e.ts)}　${e.who ?? '—'}　${e.step}`)
   return L.join('\n')
 }
 
@@ -548,6 +549,8 @@ td:nth-child(n+3),th:nth-child(n+3){white-space:nowrap;width:1%;padding-right:14
 </div>
 <script>
 const $=(s)=>document.querySelector(s)
+function hm(iso){var d=new Date(iso),p=function(n){return String(n).padStart(2,'0')};return p(d.getHours())+':'+p(d.getMinutes())}
+function mdhm(iso){var d=new Date(iso),p=function(n){return String(n).padStart(2,'0')};return p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())}
 function ago(iso){if(!iso)return '';const m=Math.floor((Date.now()-new Date(iso).getTime())/60000);if(m<1)return '刚刚';if(m<60)return m+' 分钟';const h=Math.floor(m/60);return h<24?h+' 小时':Math.floor(h/24)+' 天'}
 function esc(x){return String(x==null?'':x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 const PHASES=['业务','模型','编码','校验']
@@ -594,7 +597,7 @@ function render(d){
     +(s.since?' <span class="dim">· 已 '+ago(s.since)+'</span>':'')+(s.who==='人'?' <span class="dim">· 等你</span>':'')+'</div></div>'
   if(s.note)h+='<div class="row"><div class="k">说明</div><div class="v dim">'+esc(s.note)+'</div></div>'
   const pg=(s.progress||[]).slice().reverse().slice(0,12)
-  if(pg.length)h+='<div class="row"><div class="k">细步</div><div class="v"><div class="prog">'+pg.map(function(e){return '<div><span class="t">'+esc(e.ts.slice(11,16))+'</span><span class="r">'+esc(e.who||'—')+'</span><span>'+esc(e.text)+'</span></div>'}).join('')+'</div></div></div>'
+  if(pg.length)h+='<div class="row"><div class="k">细步</div><div class="v"><div class="prog">'+pg.map(function(e){return '<div><span class="t">'+esc(hm(e.ts))+'</span><span class="r">'+esc(e.who||'—')+'</span><span>'+esc(e.text)+'</span></div>'}).join('')+'</div></div></div>'
   h+='</div>'
 
   const line=cur&&cur.line?d.slices.filter(x=>x.line===cur.line):d.slices
@@ -606,7 +609,7 @@ function render(d){
   h+='</table></div>'
 
   const tl=(s.timeline||[]).slice().reverse().slice(0,14)
-  h+='<div class="card"><div class="tl">'+(tl.length?tl.map(e=>e.kind==='progress'?'<div class="sub"><span class="t">'+esc(e.ts.slice(5,16).replace('T',' '))+'</span><span class="r">'+esc(e.who||'—')+'</span><span class="dim">└ '+esc(e.note)+'</span></div>':'<div><span class="t">'+esc(e.ts.slice(5,16).replace('T',' '))+'</span><span class="r">'+esc(e.who||'—')+'</span><span>'+esc(e.step)+(e.note?' <span class="dim">· '+esc(e.note)+'</span>':'')+'</span></div>').join(''):'<div class="empty">还没有动态</div>')+'</div></div>'
+  h+='<div class="card"><div class="tl">'+(tl.length?tl.map(e=>e.kind==='progress'?'<div class="sub"><span class="t">'+esc(mdhm(e.ts))+'</span><span class="r">'+esc(e.who||'—')+'</span><span class="dim">└ '+esc(e.note)+'</span></div>':'<div><span class="t">'+esc(mdhm(e.ts))+'</span><span class="r">'+esc(e.who||'—')+'</span><span>'+esc(e.step)+(e.note?' <span class="dim">· '+esc(e.note)+'</span>':'')+'</span></div>').join(''):'<div class="empty">还没有动态</div>')+'</div></div>'
   $('#app').innerHTML=h
 
   $('#upd').textContent=s.updatedAt?('更新于 '+ago(s.updatedAt)+'前'):'还没人写过现场'
@@ -688,6 +691,8 @@ a{color:var(--hi)}
 <script>
 const $=(x)=>document.querySelector(x)
 function esc(x){return String(x==null?'':x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function hm(iso){var d=new Date(iso),p=function(n){return String(n).padStart(2,'0')};return p(d.getHours())+':'+p(d.getMinutes())}
+function mdhm(iso){var d=new Date(iso),p=function(n){return String(n).padStart(2,'0')};return p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())}
 function ago(iso){if(!iso)return '';const m=Math.floor((Date.now()-new Date(iso).getTime())/60000);if(m<1)return '刚刚';if(m<60)return m+' 分钟';const h=Math.floor(m/60);return h<24?h+' 小时':Math.floor(h/24)+' 天'}
 let busy=false
 const picked={},reopened={}
