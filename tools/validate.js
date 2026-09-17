@@ -784,3 +784,32 @@ function rebase() {
   if (!unproved.length && written) console.log("  全部证明得了：这一趟确实只改了说法，没有一处实质变化")
 }
 if (rebaseFile) rebase()
+
+// ---------- 坏字 ----------
+const { brokenChars } = require('./lib/wording')
+/**
+ * 每跑一趟校验顺带扫一遍坏字：一个中文字写坏了，它那几个字节各成一个替换字符，屏幕上是一串「�」。
+ * 不进报告、不拦——这不是模型与语句对不上，是文字本身坏了，谁写坏的照上下文把原字补回来。
+ * raw/ 不扫：原料是从 PDF 抽出来的，表格线与连字符本来就抽成坏字，那不是我们写的。
+ * 由来：2026-09-17 走查 k-002 里修掉七个，2026-09-18 改名时又扫出六个（「欠乐□的」「护士助□」
+ * 「HCP □用款」…）。两批都是人在页面上读出来的，那时工具一处都没查——走查正文不经过措辞检查。
+ */
+function scanBrokenChars() {
+  const skip = new Set(['node_modules', '.git', 'raw', 'archive', 'reports'])
+  const hits = []
+  const visit = (p) => {
+    const st = fs.statSync(p)
+    if (st.isDirectory()) {
+      if (skip.has(path.basename(p))) return
+      for (const n of fs.readdirSync(p)) visit(path.join(p, n))
+    } else if (/\.(json|md)$/.test(p)) {
+      for (const w of brokenChars(fs.readFileSync(p, 'utf8'))) hits.push(`${path.relative(root, p)}　${w}`)
+    }
+  }
+  visit(root)
+  if (hits.length) {
+    console.error(`坏字 ${hits.length} 处（不拦，写的人自己补回来）：`)
+    for (const h of hits) console.error('  · ' + h)
+  }
+}
+scanBrokenChars()

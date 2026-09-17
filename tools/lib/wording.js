@@ -11,6 +11,25 @@
 const MARK = /\[?[RGU]-\d{3,}\]?|(?<![\w.])s-\d{3,}\b|(?<!\d):\d{2,}\b|第\s?\d+\s?步|第[一二三四五六七八九十百零〇\d]+批|§\s?[\d.]+/g
 /** 指路：把读的人支到别处去，而不是把事情说出来 */
 const POINTER = /同第\s?\d+\s?步|见第\s?\d+\s?步|同上(?:一)?步?|如前所述|参见上文|见上文/g
+/** 坏字：一个中文字写坏了，它那几个字节各成一个替换字符，屏幕上是一串「�」 */
+const BROKEN = /�+/g
+
+/**
+ * 文字里的坏字，每处带前后十来个字，好让写的人照上下文把原字补回来。
+ * 由来：2026-09-17 走查 k-002 里修掉七个（「行□无忧」「录□人」…），2026-09-18 改名时又扫出六个
+ * （「欠乐□的」「护士助□」「HCP □用款」…）——两批都躲过了所有检查，因为当时一处都没查。
+ */
+function brokenChars(text) {
+  const s = String(text ?? '')
+  const out = []
+  BROKEN.lastIndex = 0
+  let m
+  while ((m = BROKEN.exec(s))) {
+    const ctx = s.slice(Math.max(0, m.index - 12), m.index + m[0].length + 12).replace(/[\n\r]/g, '␊')
+    out.push(`坏字：…${ctx}…　照上下文把原字补回来`)
+  }
+  return out
+}
 
 function marks(text) { return String(text ?? '').match(MARK) ?? [] }
 
@@ -18,7 +37,7 @@ function marks(text) { return String(text ?? '').match(MARK) ?? [] }
 function densityIssues(text) {
   const s = String(text ?? '').trim()
   if (!s) return []
-  const out = []
+  const out = brokenChars(s)
   const head = s.slice(0, 20)
   if (MARK.test(head)) out.push('开头先用一句人话说清是什么毛病，编号、行号、批次放后面当佐证')
   MARK.lastIndex = 0
@@ -32,4 +51,4 @@ function densityIssues(text) {
   return out
 }
 
-module.exports = { densityIssues, marks }
+module.exports = { densityIssues, marks, brokenChars }
