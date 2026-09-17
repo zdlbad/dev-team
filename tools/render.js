@@ -317,7 +317,7 @@ ul.inv{list-style:none;margin:0;padding:0}ul.inv li{padding:7px 0;border-top:1px
 .edge{fill:none;stroke-width:1.5}.edge.dim{opacity:.06}.edge-label{font-size:10px;fill:#374151;pointer-events:none;paint-order:stroke;stroke:#fff;stroke-width:3px}
 </style></head><body>
 <header><h1>模型 · ${esc(projectName)}</h1><div class="muted">${modules.length} 个模块 · ${els.length} 个模型文件 · 业务语句 ${business.length} 条 · 词汇 ${glossary.terms.length} 个${otherDir ? ` · ${baselineDir ? "与上一版比对（本段增量）：" : "与解码模型比对："}${findings.length ? `<b style="color:#fca5a5">${findings.length} 处差异</b>` : '<b style="color:#86efac">一致</b>'}` : ''}</div></header>
-<nav><button data-v="graph" class="on">关系图</button><button data-v="cards">卡片</button><button data-v="cov">业务覆盖</button>${otherDir ? '<button data-v="diff">差异</button>' : ''}<span class="sp"></span><label id="nav-hint">拖拽节点移动 · 滚轮缩放 · 拖空白平移 · 点节点看详情 · 双击空白重排</label></nav>
+<nav><button data-v="graph" class="on">关系图</button><button data-v="cards">卡片</button><button data-v="cov">业务覆盖</button>${otherDir ? '<button data-v="diff">差异</button>' : ''}<span class="sp"></span><button id="lay-toggle" title="按聚合分块：一个聚合一块，根在上、成员在下；分层：按命令→服务→聚合→成员→端口分列">布局：按聚合分块</button><label id="nav-hint">拖拽节点移动 · 滚轮缩放 · 拖空白平移 · 点节点看详情 · 双击空白重排</label></nav>
 <main>
 <section id="view-graph" class="view on"><div id="graph-wrap"><div class="legend" id="legend"></div><div id="graph-area"><div id="focus-bar" style="display:none">只显示所选节点及其邻居 <button id="focus-clear">显示全部</button></div><svg id="graph"></svg><div id="panel"><button class="close" id="panel-close">关闭</button><div id="panel-body"></div></div></div></div></section>
 <section id="view-cards" class="view">${otherDir ? `<p class="muted">${baselineDir ? "左边绿条 = 与上一版一致（本段没动）；红条 = 本段新增或改动，卡片底部列出「现在 ｜ 上一版」。" : "左边绿条 = 与代码一致；红条 = 有差异，卡片底部列出「模型 ｜ 代码」。"}</p>` : ''}${cardSections.join('')}</section>
@@ -358,7 +358,10 @@ const on = { node: Object.fromEntries(Object.keys(NODE_STYLE).map(k => [k, !NODE
 const svg = document.getElementById('graph')
 const NS = 'http://www.w3.org/2000/svg'
 const el = (t, a = {}) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); return e }
-const nodes = G.nodes.map(n => ({ ...n, w: (NODE_STYLE[n.kind] || NODE_STYLE.module).w, h: (NODE_STYLE[n.kind] || NODE_STYLE.module).h }))
+// 框宽跟着名字走：从前是死宽 110~160，ClassificationAmountForQuarter 这种长名字整截出框外（2026-09-17 项目所有者截图点名）
+const textW = s => { let w = 0; for (const ch of String(s)) w += ch.charCodeAt(0) > 255 ? 13 : 7.3; return w }
+const fitW = n => { const s = NODE_STYLE[n.kind] || NODE_STYLE.module, pad = s.shape === 'ellipse' || s.shape === 'diamond' ? 44 : 22; return Math.max(s.w, Math.ceil(textW(n.label) + pad), n.sub ? Math.ceil(textW(n.sub) + pad) : 0) }
+const nodes = G.nodes.map(n => ({ ...n, w: fitW(n), h: (NODE_STYLE[n.kind] || NODE_STYLE.module).h }))
 for (const n of nodes) if (n.kind === 'module') n.proxy = nodes.some(m => m.module === n.module && m.kind !== 'module')
 const byId = new Map(nodes.map(n => [n.id, n]))
 const edges = G.edges.filter(e => byId.has(e.from) && byId.has(e.to))
@@ -373,9 +376,71 @@ function visibleEdge(e) {
   return !focus || e.from === focus || e.to === focus
 }
 
+// ---- 按聚合分块（缺省）：一个聚合一块——根在上、成员在下排成网格；块在模块里一行行铺开 ----
+// 由来：2026-09-17 项目所有者「模型图的 UI 改进一下，这样子我比较难去看」——分层布局把二十几个值对象摞成一长条，
+// 名字截在框外、横向一大片空白，看不出谁属于哪个聚合。分层那一版留着，右上角可以切回去。
+let LAYOUT = 'agg'
+function layoutAgg() {
+  W = svg.clientWidth || 1400; H = svg.clientHeight || 800
+  const live = nodes.filter(n => !n.proxy && visibleNode(n))
+  const mods = [...new Set([...G.modules, ...live.map(n => n.module)])].filter(m => live.some(n => n.module === m))
+  const GAPX = 18, GAPY = 12, PAD = 14, BLOCK_GAP = 30, MOD_GAP = 66
+  const maxRowW = Math.max(900, Math.min(2200, W / 0.75))
+  let y0 = 46
+  for (const m of mods) {
+    const ns = live.filter(n => n.module === m)
+    const roots = ns.filter(n => n.kind === 'aggregate-root')
+    const blocks = []
+    const taken = new Set()
+    for (const r of roots) {
+      const mem = ns.filter(n => n !== r && n.agg === r.label && ['entity', 'value-object', 'error', 'event'].includes(n.kind))
+      mem.forEach(n => taken.add(n)); taken.add(r)
+      blocks.push({ head: r, members: mem })
+    }
+    const rest = ns.filter(n => !taken.has(n))
+    if (rest.length) blocks.push({ head: null, members: rest })
+    // 每一块自己算多大：成员排成一到三列的网格，列宽取那一列里最宽的
+    for (const b of blocks) {
+      const k = b.members.length
+      b.cols = k > 8 ? 3 : k > 3 ? 2 : 1
+      const colW = []
+      for (let c = 0; c < b.cols; c++) { let w = 0; for (let i = c; i < k; i += b.cols) w = Math.max(w, b.members[i].w); colW[c] = w }
+      b.colW = colW
+      b.rowH = Math.max(30, ...b.members.map(n => n.h), 0)
+      const rows = Math.ceil(k / b.cols) || 0
+      const innerW = colW.reduce((a, x) => a + x, 0) + GAPX * Math.max(0, b.cols - 1)
+      b.w = Math.max(innerW, b.head ? b.head.w : 0) + PAD * 2
+      b.h = (b.head ? b.head.h + GAPY : 0) + (rows ? rows * b.rowH + (rows - 1) * GAPY : 0) + PAD * 2 + 10
+    }
+    // 块在模块里一行行铺开，排满就换行
+    let x = 40, rowTop = y0 + 26, rowH = 0
+    for (const b of blocks) {
+      if (x > 40 && x + b.w > maxRowW) { x = 40; rowTop += rowH + BLOCK_GAP; rowH = 0 }
+      b.x = x; b.y = rowTop; rowH = Math.max(rowH, b.h); x += b.w + BLOCK_GAP
+    }
+    // 落位
+    for (const b of blocks) {
+      const headH = b.head ? b.head.h + GAPY : 0
+      if (b.head) { b.head.x = b.x + b.w / 2; b.head.y = b.y + PAD + b.head.h / 2 }
+      b.members.forEach((n, i) => {
+        const c = i % b.cols, r = Math.floor(i / b.cols)
+        let ox = b.x + PAD
+        for (let j = 0; j < c; j++) ox += b.colW[j] + GAPX
+        n.x = ox + b.colW[c] / 2
+        n.y = b.y + PAD + headH + r * (b.rowH + GAPY) + b.rowH / 2
+      })
+    }
+    y0 = rowTop + rowH + MOD_GAP
+  }
+  fit()
+}
 // ---- 分层布局：列固定；列内按邻居平均位置排序；拉开行距 ----
 let W = 1400, H = 800
 function layout() {
+  if (LAYOUT === 'agg') return layoutAgg()
+  return layoutLayered()
+}
+function layoutLayered() {
   W = svg.clientWidth || 1400; H = svg.clientHeight || 800
   const live = nodes.filter(n => !n.proxy)
   const mods = [...new Set([...G.modules, ...live.map(n => n.module)])]
@@ -543,6 +608,11 @@ svg.addEventListener('wheel', ev => {
   view.x = mx - (mx - view.x) * k / view.k; view.y = my - (my - view.y) * k / view.k; view.k = k; position()
 }, { passive: false })
 function relayout() { for (const n of nodes) n.fixed = false; layout(); position() }
+document.getElementById('lay-toggle').addEventListener('click', () => {
+  LAYOUT = LAYOUT === 'agg' ? 'layered' : 'agg'
+  document.getElementById('lay-toggle').textContent = LAYOUT === 'agg' ? '布局：按聚合分块' : '布局：分层'
+  relayout()
+})
 svg.addEventListener('dblclick', ev => { if (ev.target === svg || ev.target.classList.contains('hull')) relayout() })
 // ---- 详情面板与聚焦 ----
 const panel = document.getElementById('panel'), panelBody = document.getElementById('panel-body')
