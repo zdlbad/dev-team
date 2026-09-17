@@ -66,7 +66,7 @@ node tools/test.js <代码库> [<片段>…]                           # 测试�
 node tools/prepr.js new|check <项目> <id> --mode proto|shell    # pre-pr 审查：骨架 / 形状核对
 node tools/board.js <项目> [--md]                              # 状态看板（算出来的：每个切片走到哪）
 node tools/scene.js <项目> set --slice <id> --step "…" --who <角色> [--phase …] [--note …] [--done]
-node tools/scene.js <项目> progress "<一句>" [--who 角色]        # 细步：角色每做完一个小动作写一句
+node tools/scene.js <项目> progress <角色> "<一句>"             # 细步：角色每做完一个小动作写一句
 node tools/scene.js <项目> ask "<问题>" --who <角色> --doing … --context … --options "甲：…|乙：…" --lean … --confidence 高|中|低
 node tools/scene.js <项目> mode [逐个|问卷]                     # 问答模式：当场答 / 攒成问卷一次性答
 node tools/scene.js <项目> questions [--all] [--问卷]           # 等人回答的问题（--问卷 排成编号问卷）
