@@ -19,6 +19,7 @@ const http = require('node:http')
 const net = require('node:net')
 const { spawn, spawnSync } = require('node:child_process')
 const { flipHtml } = require('./lib/theme')
+const mel = require('./lib/time') // 给人看的时间一律墨尔本挂钟；文件里存的还是 UTC
 
 // 白天 / 黑夜（2026-09-13 项目所有者要的）。每张页面本来是深是浅不一样：
 // 现场页与外壳生来是深色，走故事、审模型、试原型、模型图、计划、增量生来是浅色。
@@ -351,7 +352,7 @@ function planTree(plan) {
     const step = x.kind === 'step'
     const badge = step ? `<span class="no">第 ${x.n} 步</span>` : `<span class="no prior">已做过 · ${x.by?.slice === plan.slice ? '上一版' : esc(x.by?.slice || '')} 第 ${x.by?.n ?? '?'} 步</span>`
     const act = step ? `<span class="act ${x.action}">${x.action === 'create' ? '新建' : '修改'}</span>` : ''
-    const done = step ? (x.doneAt ? `<span class="done">✓ 已写 ${esc(x.doneAt.slice(5, 16).replace('T', ' '))}</span>` : '<span class="todo">未写</span>') : ''
+    const done = step ? (x.doneAt ? `<span class="done">✓ 已写 ${esc(mel.mdhm(x.doneAt))}</span>` : '<span class="todo">未写</span>') : ''
     // 分步确认：每张卡一个按钮，按了就地变成「已确认 · 撤销」，不整页刷新；写完的步不能撤。旁边「有话说」能留话，写码角色开写前读
     // （2026-09-14 项目所有者：「单步确认按钮不好用，而且也无法撤销或者加 comment」）
     // 人确认的是当时那段关键逻辑，角色事后改了文字，确认就不算数（2026-09-15 s-003 真出过：十八步全确认之后十步被重写）
@@ -361,7 +362,7 @@ function planTree(plan) {
       : x.confirmedAt
       ? `<span class="okd">✓ 你已确认 ${esc(x.confirmedAt)}</span>${x.doneAt ? '<span class="okd">（已写完，不能撤；有话在下面留）</span>' : `<button class="cst un" data-unconfirm-step="${x.n}">撤销</button>`}`
       : (x.needsKeyLogic && !x.keyLogic ? '<span class="todo">关键逻辑没补，还不能确认</span>' : `<button class="cst" data-confirm-step="${x.n}">这一步我确认</button>`)) + '<span class="cmsg"></span>'
-    const notes = (x.humanNotes || []).map((h) => `<div class="hn"><span class="t">${esc(String(h.ts).slice(5, 16).replace('T', ' '))}</span>${esc(h.text)}</div>`).join('')
+    const notes = (x.humanNotes || []).map((h) => `<div class="hn"><span class="t">${esc(mel.mdhm(h.ts))}</span>${esc(h.text)}</div>`).join('')
     const talk = step ? `<details class="hc"${notes ? ' open' : ''}><summary>有话说${(x.humanNotes || []).length ? `（${x.humanNotes.length}）` : ''}</summary>${notes}<div class="hcf"><textarea rows="2" placeholder="对这一步想说的：哪里不对、要改成什么、为什么……${esc(plan.role)}角色开写前会读"></textarea><button class="cst hcb" data-comment-step="${x.n}">记下</button><span class="cmsg"></span></div></details>` : ''
     const tests = (x.tests || []).map((t) => `<div class="t"><span class="no">第 ${t.n} 步</span> 测试 <code>${esc(t.file)}</code> ${t.kind === 'step' ? (t.doneAt ? '<span class="done">✓</span>' : '<span class="todo">未写</span>') : '<span class="prior">已做过</span>'}${t.kind === 'step' ? kl(t) : ''}</div>`).join('')
     return `<div class="fc${step ? '' : ' prior'}"><div class="fh">${badge}${act}<code class="fn">${esc(x.base)}</code><span class="tg">${esc(x.target)}</span>${done}</div><div class="what">${esc(x.what || '')}${(x.traces || []).length ? ' <span class="tr">' + x.traces.map(esc).join(' ') + '</span>' : ''}</div>${kl(x)}${tests}${step ? '<div class="cf" data-step="' + x.n + '">' + confirmBtn + '</div>' + talk : ''}</div>`
@@ -398,6 +399,8 @@ function planGate(slice) {
   return div + `<script>(function(){
 var S=${JSON.stringify(slice)};
 function esc(t){return String(t).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+// 刚留下的这条话记几点：按浏览器本地时间写（人就在墨尔本），跟页面上别的钟点一致；存进文件的仍是 UTC
+function melNow(){var d=new Date(),p=function(n){return String(n).padStart(2,'0')};return p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())}
 async function post(u,body){var r=await fetch(u,{method:'POST',headers:{'content-type':'text/plain; charset=utf-8'},body:body||''});return {ok:r.ok,text:await r.text()}}
 async function refreshGate(){try{var s=await (await fetch('/plan/state?slice='+encodeURIComponent(S))).json();var g=document.getElementById('gate');if(g&&s.gateHtml){var d=document.createElement('div');d.innerHTML=s.gateHtml;g.replaceWith(d.firstElementChild)}}catch(e){}}
 function fail(m,t){m.innerHTML='<b style="color:#cf222e">没成：</b>'+esc(t)}
@@ -409,7 +412,7 @@ document.addEventListener('click',async function(e){
     if(r.ok){cf.innerHTML=b.dataset.confirmStep?'<span class="okd">✓ 你已确认 '+new Date().toISOString().slice(0,10)+'</span><button class="cst un" data-unconfirm-step="'+n+'">撤销</button><span class="cmsg"></span>':'<button class="cst" data-confirm-step="'+n+'">这一步我确认</button><span class="cmsg"></span>';refreshGate()}else{b.disabled=false;fail(m,r.text)}return}
   if(b.dataset.commentStep){var box=b.closest('.hcf'),ta=box.querySelector('textarea'),m=box.querySelector('.cmsg'),t=ta.value.trim();if(!t){m.textContent='先写一句';return}
     b.disabled=true;m.textContent='写着…';var r=await post('/plan/comment?slice='+encodeURIComponent(S)+'&step='+b.dataset.commentStep,t);
-    if(r.ok){var d=document.createElement('div');d.className='hn';d.innerHTML='<span class="t">'+new Date().toISOString().slice(5,16).replace('T',' ')+'</span>'+esc(t);box.parentNode.insertBefore(d,box);ta.value='';m.textContent='记下了';var k=box.parentNode.querySelectorAll('.hn').length;box.parentNode.querySelector('summary').textContent='有话说（'+k+'）'}else{fail(m,r.text)}b.disabled=false}
+    if(r.ok){var d=document.createElement('div');d.className='hn';d.innerHTML='<span class="t">'+melNow()+'</span>'+esc(t);box.parentNode.insertBefore(d,box);ta.value='';m.textContent='记下了';var k=box.parentNode.querySelectorAll('.hn').length;box.parentNode.querySelector('summary').textContent='有话说（'+k+'）'}else{fail(m,r.text)}b.disabled=false}
 });})()</script>`
 }
 /**
@@ -464,16 +467,26 @@ function slicesPage() {
  */
 function journalPage(date) {
   const dir = path.join(root, 'journal')
-  const days = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(f)).map((f) => f.slice(0, 10)).sort().reverse() : []
-  const day = date && days.includes(date) ? date : days[0]
+  // 日志文件按 UTC 日期分，可墨尔本比 UTC 早十到十一个小时：一个 UTC 文件里装的是墨尔本的两天，
+  // 墨尔本一天的事也散在两个文件里。给人看的「哪一天」按墨尔本算，所以把文件全读进来、按墨尔本日期重新分堆。
+  // （几天下来也就一两百 KB，读全份最省心；存进文件的仍是 UTC 的 ISO 串。）
+  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(f)) : []
+  const byDay = new Map()
+  for (const f of files) {
+    for (const line of fs.readFileSync(path.join(dir, f), 'utf8').split('\n')) {
+      if (!line.trim()) continue
+      try { const e = JSON.parse(line); const d = mel.date(e.ts); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d).push(e) } catch { /* 坏行跳过 */ }
+    }
+  }
+  const days = [...byDay.keys()].sort().reverse()
+  const day = date && byDay.has(date) ? date : days[0]
   const nav = `<div class="jnav">${days.map((d) => `<a href="/journal?date=${d}" class="${d === day ? 'on' : ''}">${d}</a>`).join('') || '<span>还没有日志</span>'}</div>`
   if (!day) return `<div class="ptree"><div class="ph">日志记的是角色们怎么配合：开发指挥几点派了谁做什么、角色每一句细步、几点交回、花了多久。scene.js 每写一笔看板就往 <code>journal/&lt;日期&gt;.jsonl</code> 追加一行，只追加不裁剪。</div></div>${nav}`
-  const entries = []
-  for (const line of fs.readFileSync(path.join(dir, day + '.jsonl'), 'utf8').split('\n')) { if (!line.trim()) continue; try { entries.push(JSON.parse(line)) } catch { /* 坏行跳过 */ } }
-  entries.sort((a, b) => a.ts.localeCompare(b.ts))
+  const entries = byDay.get(day)
+  entries.sort((a, b) => String(a.ts).localeCompare(String(b.ts)))
   const fmtMs = (ms) => { if (ms == null) return ''; const s = Math.round(ms / 1000); if (s < 60) return `${s} 秒`; const m = Math.floor(s / 60); return m < 60 ? `${m} 分 ${s % 60} 秒` : `${Math.floor(m / 60)} 小时 ${m % 60} 分` }
   const fmtK = (n) => (n == null ? '' : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n))
-  const hm = (ts) => ts.slice(11, 19)
+  const hm = (ts) => mel.hms(ts)
   const KIND = { set: '看板', ask: '发问', answer: '答', mode: '模式', handoff: '交接', progress: '细步', back: '交回', dispatch: '派工', confirm: '确认', unconfirm: '撤销确认', comment: '留话', review: '审阅' }
   // 分块
   const blocks = [], open = new Map()
@@ -491,10 +504,12 @@ function journalPage(date) {
     if (e.kind === 'back') { const r = byRole.get(e.who) ?? { n: 0, ms: 0, tokens: 0, tools: 0, steps: 0 }; r.n++; r.ms += e.elapsedMs ?? 0; r.tokens += e.tokens ?? 0; r.tools += e.tools ?? 0; r.steps += e.steps ?? 0; byRole.set(e.who, r) }
   }
   const stillOpen = [...open.keys()]
-  const sum = `<div class="ptree"><div class="ph">${esc(day)}（UTC）共 ${entries.length} 笔：派工 ${blocks.filter((b) => b.kind === 'block').length} 趟${stillOpen.length ? `（${stillOpen.map(esc).join('、')} 还没交回）` : ''}；等你拍板累计 ${fmtMs(waitMs) || '0 秒'}。每块是一趟派工：开发指挥几点派了谁做什么、角色每一句细步与上一句隔了多久、几点交回、这一趟多长、用了多少。复盘时看：一趟里细步之间的空档在哪、哪一趟来回最多。</div></div>
+  const sum = `<div class="ptree"><div class="ph">${esc(day)}（墨尔本 ${esc(mel.zone(entries[0]?.ts ?? new Date()))}，下面的钟点都是墨尔本时间）共 ${entries.length} 笔：派工 ${blocks.filter((b) => b.kind === 'block').length} 趟${stillOpen.length ? `（${stillOpen.map(esc).join('、')} 还没交回）` : ''}；等你拍板累计 ${fmtMs(waitMs) || '0 秒'}。每块是一趟派工：开发指挥几点派了谁做什么、角色每一句细步与上一句隔了多久、几点交回、这一趟多长、用了多少。<b>最近的排在最上面</b>，一趟里面的细步仍按先后读下去。复盘时看：一趟里细步之间的空档在哪、哪一趟来回最多。</div></div>
 ${byRole.size ? `<table class="jsum"><tr><th>角色</th><th>派了几趟</th><th>共多久</th><th>细步</th><th>tokens</th><th>工具次数</th></tr>${[...byRole].map(([w, r]) => `<tr><td>${esc(w)}</td><td>${r.n}</td><td>${fmtMs(r.ms)}</td><td>${r.steps || ''}</td><td>${fmtK(r.tokens) || ''}</td><td>${r.tools || ''}</td></tr>`).join('')}</table>` : ''}`
   const item = (it, prev) => `<div class="ji"><span class="t">${hm(it.ts)}</span><span class="gap">+${fmtMs(new Date(it.ts) - prev)}</span><span class="tx">${it.kind === 'ask' ? '<b>发问：</b>' : ''}${esc(it.text)}</span></div>`
-  const html = blocks.map((b) => {
+  // 最近的排在上面（2026-09-17 项目所有者要的）：一天下来几十笔，他要看的是刚刚发生了什么，不该每次滚到底。
+  // 一趟派工里面的细步仍按先后读下去——那是一趟活的经过，倒着读不成话；派工块自己按开工时间排。
+  const html = blocks.slice().reverse().map((b) => {
     if (b.kind === 'event') { const e = b.e; return `<div class="je k-${esc(e.kind)}${e.done ? ' done' : ''}"><span class="t">${hm(e.ts)}</span><span class="who">${esc(e.who ?? '—')}</span><span class="k">${KIND[e.kind] ?? esc(e.kind)}${e.kind === 'set' && e.done ? '（完）' : ''}</span><span class="tx">${esc(e.text)}${e.kind === 'set' && e.slice ? `<span class="sl">${esc(e.slice)} · ${esc(e.phase ?? '—')}</span>` : ''}${e.kind === 'set' && e.note ? `<span class="sl">结果：${esc(e.note)}</span>` : ''}</span></div>` }
     const st = b.start, en = b.end
     let prev = new Date(st.ts).getTime()
