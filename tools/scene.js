@@ -6,7 +6,8 @@
  * 用法：
  *   node tools/scene.js <项目> set --slice <id> --step "<这一步在做什么>" --who <角色>
  *                                  [--phase 业务|模型|编码|校验] [--note "<一句话>"] [--done]
- *   node tools/scene.js <项目> progress "<一句>" [--who 角色]   细步：角色每做完一个小动作写一句（新建了什么、把什么从 xxx 改成 xxx）；挂在当前这一步下面，页面 2 秒一刷
+ *   node tools/scene.js <项目> progress <角色> "<一句>"        细步：角色每做完一个小动作写一句（新建了什么、把什么从 xxx 改成 xxx）；挂在当前这一步下面，页面 2 秒一刷
+ *                                （角色名也可以改用 --who 写在后面；写在前面与 dispatch、back 一致）
  *   node tools/scene.js <项目> ask "<问题>" --who <角色> --doing "<在做什么>" --context "<上下文>"
  *                                --options "甲：…|乙：…" --lean "<你偏向哪个>" --confidence 高|中|低
  *                                                 角色遇到要人裁的事，当场发问然后停下交回开发指挥（第七十三批）
@@ -175,10 +176,21 @@ if (cmd === 'set') {
 // 角色（子 agent）每做完一个小动作写一句：新建了哪个错误、把哪条规则从什么改成什么、哪个测试绿了。
 // 大步（这一步在做什么、谁在干）仍由开发指挥 set；细步挂在当前大步下面，换一步就清空，动态里保留。
 if (cmd === 'progress') {
-  const text = args.slice(2).find((a) => !a.startsWith('--') && a !== opt('--who'))
-  if (!text) die('用法：scene progress <项目> "<一句：做了什么，具体到名字、从什么到什么>" [--who 角色]')
+  const whoOpt = opt('--who')
+  const rest = args.slice(2).filter((a) => !a.startsWith('--') && a !== whoOpt)
+  // 角色名写在正文前面也认。dispatch 与 back 都是「<角色> "<一句>"」，只有这里原先非得用 --who，
+  // 三个角色命令两种写法，派工的人最容易在这里写错——而且错得不响：角色名被当成正文照样记下，
+  // 一直到 back 才报「0 句细步」（2026-09-18 业务分析那一趟四句细步就这么全丢了）。
+  let who = whoOpt
+  let text = rest[0]
+  if (rest[0] && ROLES.includes(rest[0])) {
+    if (!rest[1]) die(`只写了角色名、没写细步正文。用法：scene progress <项目> ${rest[0]} "<一句：做了什么，具体到名字、从什么到什么>"`)
+    who = who ?? rest[0]
+    text = rest[1]
+  }
+  if (!text) die('用法：scene progress <项目> "<一句：做了什么，具体到名字、从什么到什么>" [--who 角色]；角色名写在正文前面也认')
   const s = readScene()
-  const who = opt('--who', s.who)
+  who = who ?? s.who
   if (who && !ROLES.includes(who)) die(`--who 要用 agents/README.md 的角色名：${ROLES.join('、')}`)
   const now = new Date().toISOString()
   const entry = { ts: now, who, text, machine: ME }
@@ -370,7 +382,11 @@ if (cmd === 'dispatch') {
   journal({ ts: now, kind: 'dispatch', who, by: '开发指挥', slice: s.slice, phase: s.phase, text })
   console.log(`派工已记：${who} · ${text}`)
   // 2026-09-17：角色不写细步，人就只看得见「开工了」。派工时提醒开发指挥把这句写进提示词。
-  console.log(`  提示词里要带上：每做完一组改动跑一次 scene progress（接活先一句、每改完一组文件一句、久了没产出也报一句）；交回时 scene back 会打印这一趟写了几句`)
+  // 2026-09-18：光提醒不够——开发指挥得自己现编命令，编错了还不响（业务分析那一趟四句细步全记成了「业务分析」）。
+  // 改成把两行命令连角色名一起印出来，直接抄进提示词。
+  console.log(`  提示词里把这两行原样带上（接活先一句、每改完一组文件一句、久了没产出也报一句）：`)
+  console.log(`    细步：node tools/scene.js ${args[0]} progress ${who} "<一句：做了什么，具体到名字、从什么到什么>"`)
+  console.log(`    交回：node tools/scene.js ${args[0]} back ${who} "<交回摘要，一句>"`)
   process.exit(0)
 }
 if (cmd === 'back') {
