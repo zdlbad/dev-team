@@ -272,7 +272,11 @@ function introNode() {
   const intro = document.createElement('div'); intro.className='intro'
   const js = data.judgments || []
   const nHigh = js.filter(j => j.verdict === 'pass' && j.confidence === 'high').length, nLow = js.filter(j => j.verdict && !(j.verdict === 'pass' && j.confidence === 'high')).length, nFail = js.filter(j => j.verdict === 'fail').length
-  const open = js.filter(j => !j.human?.verdict).length
+  // 「等你」只数校验角色已经答过的：他没答的那几条轮不到你看（你要做的是看他的理由站不站得住）。
+  // 从前这里数的是「人还没填的」，于是校验角色一条没答时，这一页也说「31 条等你」，而页签上的待办数说 0——
+  // 两处对不上，人点进来发现没自己的事（2026-09-17 k-002 真出过）
+  const open = js.filter(j => j.verdict && !j.human?.verdict).length
+  const pending = js.filter(j => !j.verdict).length
   intro.innerHTML = data.mode ? '<b>这一页在问什么（审代码）：</b>pre-pr 审查角色读写好的代码，按几个角度找毛病：用例流程走得对不对、有没有删掉或放松规则、测试测的是不是行为、读着顺不顺。每条发现标着轻重——必须改、应该改、说明——附上会出什么事。<b>你做的：</b>同意它的判断，或不同意写一句为什么；上一轮让改的这轮核过的列在旁边。' + (mode === 'code' ? '<b>按代码结构看：</b>左边是这一段的代码文件，红数字是那个文件上还有几条等你。' : '') + '每次改动自动保存。'
     : (String(data.direction) === '2'
     ? '<b>这一页在问什么（审代码对模型）：</b>解码器把写好的代码读回一份模型，跟模型师的模型逐条比；对不上的地方一条一问「是代码写错了，还是模型该跟着改」。目标是代码文件，按结构看时挂在它对应的模型元素下。没有条目就是代码与模型一字不差。'
@@ -281,6 +285,8 @@ function introNode() {
     + (function(){ var stale = js.filter(function(j){ return !j.human?.verdict && j.staleDecision && !j.staleDecision.reordered }).length; return open ? '<b>这次：</b>新的 ' + (open - stale) + ' 条、文字改了重浮的 ' + stale + ' 条（重浮的旁边写着上次你怎么裁，意思没变就照旧）。' : '' })()
     // 警告也等他：角色修不掉的，驳回或退回只有他能定（2026-09-16 起警告不再挡着判断，跟判断一起交给人）
     + (function(){ var w = (data.warnings || []).filter(function(x){ return !x.human?.verdict }).length; return w ? '<b style="color:#b45309">另有 ' + w + ' 条警告等你处理</b>（在「警告」那一节：站得住就驳回并写理由，不对就选「要改」退回模型师）。' : '' })()
+    // 校验角色还没答的：这一页先摆在这儿给你看，但还不是你的活——他答完才轮到你
+    + (pending ? '<b style="color:#b45309">这一页还没轮到你：</b>' + js.length + ' 条里有 ' + pending + ' 条校验角色还没答（下面那些空着「校验角色」一栏的）。他答完这一页才会在页签上给你挂待办数。' + (open ? '你现在能看的是已经答过的 ' + open + ' 条。' : '') + '<br>' : '')
     + '共 ' + js.length + ' 条，还有 <b>' + open + '</b> 条等你：校验角色高信心通过 ' + nHigh + ' 条（可以点右上角「其余高信心的一并同意」一次处理），' + '值得你看的 ' + nLow + ' 条（信心中 / 低' + (nFail ? '、不通过 ' + nFail + ' 条' : '') + '）。'
     + (mode === 'structure' ? '<b>按结构看：</b>左边是模型的树，红色数字是那一处还有几条等你；点一个命令，能看到它每一步指到哪个聚合的哪个方法、哪个仓储、哪个端口，规则挂在方法下面。' : (data.story ? '顺序按故事走：每一步的标题就是故事那句话，下面是这一步用到的业务在模型里对得上对不上。' : '顺序按重要度从高到低、信心从低到高。'))
     + '每次改动自动保存。'
@@ -374,7 +380,8 @@ function indexJudgments() {
   byFile = new Map()
   ;(data.judgments || []).forEach((it, i) => { for (const f of filesOf(it)) { if (!byFile.has(f)) byFile.set(f, []); byFile.get(f).push(i) } })
 }
-const openCount = (files) => { const seen = new Set(); for (const f of files) for (const i of byFile.get(f) || []) if (!data.judgments[i].human?.verdict) seen.add(i); return seen.size }
+// 树上的红数字与页首「等你」同一个口径：校验角色答过、人还没看的才算
+const openCount = (files) => { const seen = new Set(); for (const f of files) for (const i of byFile.get(f) || []) { const j = data.judgments[i]; if (j.verdict && !j.human?.verdict) seen.add(i) } return seen.size }
 function aggFiles(a) { return [a.root?.file, ...a.valueObjects.map(x => x.file), ...a.entities.map(x => x.file), ...a.errors.map(x => x.file), ...a.repositories.map(x => x.file), ...a.events.map(x => x.file)].filter(Boolean) }
 function modFiles(M) { return [...M.aggregates.flatMap(aggFiles), ...[...M.commands, ...M.queries, ...M.handlers, ...M.services, ...M.ports].map(x => x.file)] }
 // 一个元素的文字里有没有提到某个业务编号（高亮用）
@@ -668,7 +675,7 @@ function indexCode() {
   ;(data.confirms || []).forEach((it, i) => { const f = fileOfTarget(it.target); if (isCodeFile(f)) add(f, 'confirms', i) })
   codeFilesAll = [...new Set([...(data.codeFiles || []), ...byCode.keys()])].sort()
 }
-const openCode = (files) => files.reduce((n, f) => n + (byCode.get(f) || []).filter(({ k, i }) => !data[k][i].human?.verdict).length, 0)
+const openCode = (files) => files.reduce((n, f) => n + (byCode.get(f) || []).filter(({ k, i }) => { const it = data[k][i]; return (k !== 'judgments' || it.verdict) && !it.human?.verdict }).length, 0)
 function renderCodeTree() {
   const rootNode = { name: '', dirs: new Map(), files: [] }
   for (const f of codeFilesAll) { const parts = f.split('/'); let node = rootNode; for (const d of parts.slice(0, -1)) { if (!node.dirs.has(d)) node.dirs.set(d, { name: d, dirs: new Map(), files: [], path: (node.path ? node.path + '/' : '') + d }); node = node.dirs.get(d) } node.files.push({ name: parts[parts.length - 1], path: f }) }
