@@ -368,6 +368,8 @@ if (cmd === 'dispatch') {
   const now = new Date().toISOString()
   journal({ ts: now, kind: 'dispatch', who, by: '开发指挥', slice: s.slice, phase: s.phase, text })
   console.log(`派工已记：${who} · ${text}`)
+  // 2026-09-17：角色不写细步，人就只看得见「开工了」。派工时提醒开发指挥把这句写进提示词。
+  console.log(`  提示词里要带上：每做完一组改动跑一次 scene progress（接活先一句、每改完一组文件一句、久了没产出也报一句）；交回时 scene back 会打印这一趟写了几句`)
   process.exit(0)
 }
 if (cmd === 'back') {
@@ -387,6 +389,8 @@ if (cmd === 'back') {
   const steps = start ? all.filter((e) => e.kind === 'progress' && e.who === who && e.ts > start.ts).length : null
   journal({ ts: now, kind: 'back', who, slice: s.slice, phase: s.phase, text, outcome: opt('--outcome', '交回'), tokens: num('--tokens'), tools: num('--tools'), ms: num('--ms'), elapsedMs, steps, dispatchedAt: start?.ts ?? null })
   console.log(`交回已记：${who} · ${text}${elapsedMs != null ? `　从派到回 ${fmtMs(elapsedMs)}${steps != null ? `、写了 ${steps} 句细步` : ''}` : '　（没找到这一趟的派工记录）'}${num('--tokens') != null ? `、${fmtK(num('--tokens'))} tokens` : ''}${num('--tools') != null ? `、${num('--tools')} 次工具` : ''}`)
+  // 2026-09-17：一趟活一句细步都没有，人这段时间只看得见「开工了」。当场说出来，别等他问。
+  if (steps === 0 && elapsedMs != null && elapsedMs > 120000) console.log(`  这一趟 ${fmtMs(elapsedMs)} 里一句细步都没写，人只看得见开工。派下一趟时把「每改完一组跑 scene progress」写进提示词`)
   process.exit(0)
 }
 /** 把一天的日志按「派工」分块：块 = 从 dispatch 到同角色的 back；角色的 progress 挂进块里；别的事件平铺 */
