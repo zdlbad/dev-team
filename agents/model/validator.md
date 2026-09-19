@@ -19,6 +19,8 @@ reads:
 
 - `reports/validate-1.json`（方向 ①）、`reports/validate-2.json`（方向 ②）里每条判断的 `verdict`、`confidence`、`reason` 三个字段。**其它字段一律不动**，`human` 字段是人的，绝不填。
 
+**读判断用 look，不整份读报告**：`look <项目> judge --open` 列出还没填的，`look <项目> judge <编号>` 取一条的业务、模型两侧；落点的全文用 `look <项目> model <名字>.<方法>`。报告 json 有几百 KB，只在写回三个字段时用脚本按编号改，不 Read 整份（第一百六十五批）。
+
 ## 方法
 
 **方向 ①（模型 ↔ 业务）**
