@@ -14,6 +14,9 @@
  *                       --改 --来源 "<谁在哪儿点出的>" --动到 s-001,s-002：修改切片（id 用 m-xxx）——已走通的段落上被点出的一件事；正路是先记候选再 candidate open
  *   node tools/slice.js candidate <项目目录> add "<改什么，一句话>" --来源 "<试原型页 / 审阅页 / 裁定第几批>" [--动到 s-001,s-002] [--备注 "<一句>"]
  *   node tools/slice.js candidate <项目目录> list                列候选：审阅点出的事先记在这里，不当场改（第八十六批）
+ *   node tools/slice.js background <项目目录> <切片id> add <R-xxx> "<为什么本段落不了>" | remove <R-xxx> | list
+ *                                                          只作背景只改这一栏（候选 #9：角色整份写回切片会互相冲掉）
+ *   node tools/slice.js scene <项目目录> <模块切片id> [--title "…"]   建下一场走查（第一百五十批；上一场没锁死不让建）
  *   node tools/slice.js candidate <项目目录> open <序号> <m-xxx> [--modules …] [--aggregates …] [--use-cases …] [--traces …] [--动到 …]
  *   node tools/slice.js candidate <项目目录> drop <序号> "<为什么不做>"
  *   node tools/slice.js next <项目目录> <切片id>            算出下一步：谁上场、跑什么
@@ -91,7 +94,14 @@ function appendLog(slice, stage, text) {
   slice.log.push({ ts: today, stage, text })
 }
 if (!cmd || !root || !fs.existsSync(path.join(root, 'project.json'))) {
-  die('用法：node tools/slice.js <new|candidate|next|proofread|advance|apply|log> <项目目录> …（项目目录须含 project.json）')
+  // 用法行漏一个，那个命令对读的人就等于不存在：2026-09-18 开发指挥照这一行断定「没有 slice lit」，
+  // 还拿这句话去纠正业务分析两趟，而业务分析两趟都是对的。十个子命令一个不落地列全。
+  die('用法：node tools/slice.js <new|candidate|lit|pass|next|proofread|advance|apply|proto-go|log> <项目目录> …（项目目录须含 project.json）\n' +
+    '  new       开一条新切片　　　　　candidate 把审阅点出的事开成修改切片\n' +
+    '  lit       模块点亮完，把业务编号登记进模块切片　　pass      模块切片推到下一遍（骨架 → 行为）\n' +
+    '  next      问这条切片下一步做什么　proofread 校对\n' +
+    '  advance   推进某一阶段的状态　　 apply     把走查的裁定卡写进 raw/rulings.md\n' +
+    '  proto-go  出原型那道门　　　　　 log       往切片日志里记一笔')
 }
 
 // ---------- new ----------
@@ -161,13 +171,14 @@ if (cmd === 'new') {
   writeJson(slicePath(id), slice)
   console.log(`已建立切片 ${id}（${kind}）：${path.relative(process.cwd(), slicePath(id))}`)
   if (args.includes('--story') || kind === 'module') {
-    const sp = path.join(root, 'slices', `${id}.story.json`)
+    // 模块切片的走查一场一条（第一百五十批）：从第一场建起，文件名带场次；段落故事照旧一整条
+    const sp = path.join(root, 'slices', kind === 'module' ? `${id}.w1.story.json` : `${id}.story.json`)
     const bi = args.indexOf('--based-on'), basedOn = bi > 0 ? args[bi + 1] : null
     const baseP = basedOn ? path.join(root, 'slices', `${basedOn}.story.json`) : null
     if (basedOn && !fs.existsSync(baseP)) { console.error(`上一版故事不存在：${basedOn}`); process.exit(1) }
     const base = basedOn ? readJson(baseP) : null
     // 模块切片的故事文件装的是业务走查场景（第九十七批）：讲解在走查那一步写，不是故事线
-    const story = { slice: id, title: kind === 'module' ? `${opt('--module')} 业务走查` : title, persona: kind === 'module' ? { name: '（走查里出场的人）', description: '（讲解填：一句话）' } : base ? base.persona : { name: '（人物）', description: '（一句话：谁、分类、入册日）' }, steps: [], traces: [], choices: [], gaps: [], approved: null, log: [] }
+    const story = { slice: kind === 'module' ? `${id}.w1` : id, ...(kind === 'module' ? { scene: 1, premises: [], sealed: null } : {}), title: kind === 'module' ? `${opt('--module')} 业务走查 · 第一场` : title, persona: kind === 'module' ? { name: '（走查里出场的人）', description: '（讲解填：一句话）' } : base ? base.persona : { name: '（人物）', description: '（一句话：谁、分类、入册日）' }, steps: [], traces: [], choices: [], gaps: [], approved: null, log: [] }
     if (base) {
       story.basedOn = basedOn
       const picks = base.gapPicks ?? []
@@ -186,6 +197,42 @@ if (cmd === 'new') {
     writeJson(sp, story)
     console.log(kind === 'module' ? `已建业务走查的文件：${path.relative(process.cwd(), sp)}（讲解在骨架初稿定了之后写场景；下一步看 slice next）` : `已建故事骨架：${path.relative(process.cwd(), sp)}（${base ? `基于 ${basedOn}，上一版 ${base.steps.length} 步写成前情提要、不重复；` : ''}下一步：讲解写故事）`)
   } else console.log('下一步：人与模型师商定范围后，把 scope 与 traces 填进切片记录，再执行 slice next。')
+}
+
+// ---------- whole-look：最后一场之后他看过整张、说了定稿（第一百五十六批：模型定稿就可以出原型） ----------
+if (cmd === 'whole-look') {
+  const sid = args[2]
+  if (!root || !sid) die('用法：node tools/slice.js whole-look <项目目录> <模块切片id> [他的话]')
+  const sl = loadSlice(sid)
+  if (sl.kind !== 'module') die(sid + ' 不是模块切片')
+  const open = require('./lib/project').storiesOfSlice(root, sid).filter((s) => s.scene !== null && !s.sealed)
+  if (open.length) die('第 ' + open.map((s) => s.scene).join('、') + ' 场还没锁死，先把每一场审完')
+  sl.wholeLookAt = today
+  sl.stages.model.status = 'done'; sl.stages.model.confirmedAt = today
+  appendLog(sl, 'model', '看过整张，模型定稿（可以出原型）：' + (args.slice(3).join(' ') || '项目所有者说定稿'))
+  writeJson(slicePath(sid), sl)
+  console.log(sid + '：模型定稿（' + today + '），可以出原型')
+  process.exit(0)
+}
+
+// ---------- scene：模块切片建下一场走查（第一百五十批） ----------
+if (cmd === 'scene') {
+  const sid = args[2]
+  if (!root || !sid) die('用法：node tools/slice.js scene <项目目录> <模块切片id> [--title "<这一场演什么>"]')
+  const { storiesOfSlice } = require('./lib/project')
+  const all = storiesOfSlice(root, sid).filter((s) => s.scene !== null)
+  const open = all.filter((s) => !s.sealed)
+  if (open.length) die('第 ' + open.map((s) => s.scene).join('、') + ' 场还没审完锁死（story seal），一场走完再开下一场')
+  const n = (all.length ? all[all.length - 1].scene : 0) + 1
+  const p = path.join(root, 'slices', sid + '.w' + n + '.story.json')
+  const titleIdx = args.indexOf('--title')
+  const story = { slice: sid + '.w' + n, scene: n, premises: [], sealed: null, title: titleIdx > 0 ? args[titleIdx + 1] : '第 ' + n + ' 场', persona: { name: '（走查里出场的人）', description: '（讲解填：一句话）' }, steps: [], traces: [], choices: [], gaps: [], approved: null, log: [today + ' 建第 ' + n + ' 场：开演之前先把这一场靠着的前提写进 premises，摆给人确认'] }
+  writeJson(p, story)
+  // 新的一场从头走：讲解写这一场 → 模型师只建这一场碰到的 → 校验 → 他审（第一百五十六批）
+  const sl = loadSlice(sid)
+  if (sl.kind === 'module' && sl.stages?.model) { sl.stages.model.status = 'pending'; delete sl.stages.model.proofreadAt; appendLog(sl, 'model', '开第 ' + n + ' 场走查'); writeJson(slicePath(sid), sl) }
+  console.log('已建第 ' + n + ' 场走查：' + path.relative(process.cwd(), p) + '（讲解先写 premises 给人确认，再写步骤；步号从 1 编起）')
+  process.exit(0)
 }
 
 // ---------- candidate：候选修改（第八十六批：审阅点出的事先记下来，不当场改） ----------
@@ -271,9 +318,9 @@ function reportState(r) {
   if (r.errors.length) return { state: 'blocked', errors: r.errors.length, warnings: warnings.length }
   const unjudged = r.judgments.filter((j) => !j.verdict).length
   if (unjudged) return { state: 'unjudged', unjudged }
-  const unreviewed = [...r.judgments, ...r.confirms, ...warnings].filter((it) => !it.human?.verdict).length
+  const unreviewed = require('./lib/project').humanTodo(r).length
   if (unreviewed) return { state: 'unreviewed', unreviewed }
-  const rework = [...r.judgments.filter(needsWork), ...r.confirms.filter(needsWork), ...warnings.filter((w) => w.human?.verdict && w.human.verdict !== 'dismissed')]
+  const rework = [...r.judgments.filter(needsWork), ...r.confirms.filter(needsWork), ...warnings.filter((w) => w.human?.verdict && w.human.verdict !== 'dismissed'), ...(r.blocks ?? []).filter((b) => b.human?.verdict === 'fix')]
   if (rework.length) return { state: 'rework', rework: rework.length, applied: !!r.applied }
   return { state: 'clean', applied: !!r.applied }
 }
@@ -301,8 +348,10 @@ function computeNext(slice) {
   // 增量切片则要求指明动到哪些模块 / 聚合 / 用例。
   const scopeNamed = slice.scope.modules.length || slice.scope.aggregates.length || slice.scope.useCases.length
   // 故事切片：范围由故事定（业务理解一致后编号并入 traces），不要求先点名模块 / 聚合
-  const storyP = path.join(root, 'slices', `${slice.id}.story.json`)
-  const story = fs.existsSync(storyP) ? readJson(storyP) : null
+  // 一场一条的走查：眼下是还没锁死的最前一场（第一百五十批）
+  const cur = require('./lib/project').currentStory(root, slice.id)
+  const storyP = cur ? cur.file : path.join(root, 'slices', `${slice.id}.story.json`)
+  const story = cur ? cur.story : null
   // 修改切片（第八十六批）：不走故事、不走卡，只改被点出的那一件事；写码与审查的口径同段落切片（原型角色、A/B/D/S）
   const isChange = slice.kind === 'change'
   // 段落切片的范围由故事定（点亮回填 traces、理解一致后并入切片），不要求先点名模块 / 聚合，也不要求先有 traces——模型现在建在人走故事之前（第八十九批）
@@ -335,19 +384,20 @@ function computeNext(slice) {
       const needV1 = s1.state === 'none' || (r1?.slice && r1.slice !== slice.id)
       if (passNow === '骨架') {
         if (!st.model.litAt) return step('业务分析', `模块点亮：把 ${mod} 在原料里提到的概念性语句一轮点亮——事实（记着什么）、能力（谁能做到什么）、顺带约束；写成正向陈述句、分层、标 (层-种类)、发编号。不等故事，这一轮给骨架初稿当底子。交回时列出编号，开发指挥用 slice lit 登记`, `node tools/slice.js lit ${rel(root)} ${slice.id} <R-xxx,G-xxx,…>`, '骨架照点亮的语句起草，元素才有编号可追（他选甲，第九十七批）')
-        if (st.model.status === 'pending') return step('模型师', `骨架初稿：按 ${mod} 点亮的概念与行为，一次性起草这个模块全部主要的聚合、实体、值对象——字段与类型（props 带 traces）、聚合清单的 members 与 idRefs。不带守卫，不建不变量、行为、error、event、领域服务、命令、查询、端口，不填 walk。允许不准，走查时再改精。choices 只列「这个事实放在哪个聚合上」这类形状的选择。交稿前按 agents/common/wording.md 自检措辞`, `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '骨架初稿按模块一次起草，形状先铺开（第九十七批）')
+        if (st.model.status === 'pending') return step('模型师', `薄骨架（第一百五十六批）：在 model/${mod}/module.json 列出 ${mod} 有哪几个聚合，每个聚合根文件只写一句 aggregateNarrative 说它管什么；**不写字段**、不建守卫、不变量、行为、error、领域服务，不填 walk。允许不准，后面的场推翻它不算错。交稿前按 agents/common/wording.md 自检措辞`, `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '骨架初稿按模块一次起草，形状先铺开（第九十七批）')
         if (!st.model.proofreadAt) return step('文职', `总校一趟：${mod} 这一轮点亮的语句与初稿里给人读的文字，只改字不改意；改完跑 validate --重新定基 接回裁决，再标记`, `node tools/slice.js proofread ${rel(root)} ${slice.id}`, '文职一趟，排在人看之前（第八十九批）')
         if (needV1) return step('开发指挥', '跑校验 ①（机械检查；骨架只查事实的落点，其余留给走查）', validateCmd(false), '初稿也要过机械检查')
         if (s1.state === 'blocked') return step('模型师', `修正初稿：方向 ① 有 ${s1.errors} 个错误（警告不挡：修得掉就顺手修，修不掉的留给人驳回）`, validateCmd(false), '机械检查未过，先改再重跑')
-        return step('人', `看 ${mod} 的骨架初稿：工作台「模型图」页看聚合、实体、值对象怎么分、字段全不全；哪个事实放错了聚合、哪个该拆该合当场说。看完说「就按这个走」，开发指挥在「切片」页按「初稿定了」（或跑右边的命令）；不准的地方走查时再改`, `node tools/slice.js advance ${rel(root)} ${slice.id} model done 初稿定了`, '初稿由他定、允许不准，不派校验角色逐条判（第九十七批）')
+        return step('人', `看 ${mod} 的薄骨架：工作台「模型图」页看有哪几个聚合、各管什么（一句话），哪个该拆该合当场说。看完说「就按这个走」，开发指挥在「切片」页按「初稿定了」（或跑右边的命令）；字段、行为都等走查一场一场长出来`, `node tools/slice.js advance ${rel(root)} ${slice.id} model done 初稿定了`, '初稿由他定、允许不准，不派校验角色逐条判（第九十七批）')
       }
       // 业务走查：讲解出场景，模型师拿初稿走、长出行为，他在场
       const storyRelM = rel(storyP)
+      if ((!story || !story.steps.length) && story?.scene) return step('讲解', `写 ${mod} 业务走查的第 ${story.scene} 场到 ${storyRelM}：先把这一场靠着的前提写进 premises（编号 + 一句人话），摆给人确认了再写步骤；一场 5–30 步、步号从 1 编起、按日期排，每步 text 带金额与事实，traces 填已点亮的编号；跨场引用说事情不说步号（第一百五十批）。不是故事线、不出题；走不通的写 gaps`, null, '走查一场一条（第一百五十批）')
       if (!story || !story.steps.length) return step('讲解', `写 ${mod} 的业务走查场景到 ${storyRelM}：几个场景，每个场景一串按日期排的步骤，合起来把这个模块每个概念的建立、改动、查看、结束都走到；每步 text 带金额与事实，traces 填已点亮的编号，needs 可空。不是故事线、不点亮段落、不出题；走不通的写 gaps`, null, '走查场景是长出聚合行为的抓手（第九十七批）')
       const ssM = storyState(story, { quizRequired: false })
       if (ssM.state === 'challenged') return step('路由', `核对人对走查的 ${ssM.count} 处质疑：对照语句、裁定与手册逐条回应；人对了就落成裁定并派讲解或模型师改`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人质疑了走查的业务内容，先解决再往下')
       if (ssM.state === 'notes') return step('路由', `读人在走查上留下的 ${ssM.count} 条想法：逐条回应；成立的落成裁定或派给业务分析、讲解、模型师`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人的想法要有人看、有人回')
-      if (st.model.status === 'pending') return step('模型师', `拿骨架初稿走 ${storyRelM} 的每个场景：走到哪个动作，就给那个聚合补方法、不变量、领域服务和 error；每步填 walk（动了哪个聚合、变了什么）。建立聚合、搜索聚合这类事不是聚合的行为——walk 标 leftTo: 应用，只记下，留给段落切片在应用层带出来。走不通就改聚合、拆聚合，改了把 choices 的 current 更新。不建 event、命令、查询、端口。交稿前按 agents/common/wording.md 自检措辞`, `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '行为从走查里长出来，过程中精进聚合（第九十七批）')
+      if (st.model.status === 'pending') return step('模型师', `${story?.scene ? '走第 ' + story.scene + ' 场' : '走'}（${storyRelM}）：**只建或改这一场碰到的**字段、创建、方法、不变量、领域服务、error，后面的场才用到的一律不建；方法、创建、领域服务操作照 agents/model/modeler.md「方法怎么写」写七段（作用、入参、做法每步改哪几栏、规则、错误、事件、返回）；**前面的场建过的只改非改不可的**，顺手改措辞会让那一块白白重浮，交回时报「本想顺手改、忍住了」的几处。每步填 walk（调哪个方法、改了什么）；建立、搜索这类不是聚合行为，walk 标 leftTo: 应用。本场落不了的语句用 slice background add 登记，别整份改写切片文件。不建 event、命令、查询、端口（第一百五十六批）`, `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '行为从走查里长出来，过程中精进聚合（第九十七批）')
       if (ssM.state === 'no-walk') return step('模型师', `走查还有 ${ssM.count} 步没填 walk：动了哪个聚合、变了什么；不是聚合行为的标 leftTo: 应用`, storyRelM, '每一步都要走到')
       if (!st.model.proofreadAt) return step('文职', `总校一趟：走查场景与这一轮新建、改动的模型元素给人读的文字，只改字不改意；改完跑 validate --重新定基 接回裁决，再标记`, `node tools/slice.js proofread ${rel(root)} ${slice.id}`, '文职一趟，排在校验角色填判断之前（第八十九批）')
       if (needV1) return step('开发指挥', '跑校验 ①（机械检查 + 生成判断清单；这一步查事实、约束、公式、情形的落点）', validateCmd(false), '还没有本切片这一步的方向 ① 报告')
@@ -356,9 +406,12 @@ function computeNext(slice) {
       if (ssM.state === 'unapplied') return step('路由', `把 ${ssM.count} 张裁定卡写回裁定文件与切片 log`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '裁定已填但未写回')
       if (ssM.state === 'rework') return step('模型师', `按回流改模型（裁定 ${ssM.rework} 项、走不通 ${ssM.gaps} 处）；改完更新 choices 的 current、清掉 gap，重跑校验 ①`, validateCmd(false), '人的裁定与模型现状不同，或走查走不通')
       if (s1.state === 'unjudged') return step('模型校验', `填写 ${s1.unjudged} 条判断（verdict / confidence / reason）`, `reports/validate-1.json`, '判断清单待校验角色逐条判断')
-      if (s1.state === 'unreviewed') { wordingReminders(r1, '模型校验'); return step('人', `在「审模型」页审阅 ${s1.unreviewed} 条判断 / 需确认项 / 警告（警告驳回要写理由，不驳回就退回模型师）；审完干净就算 ${mod} 的模型确认`, `node tools/review.js ${rel(path.join(root, 'reports', 'validate-1.json'))}`, '人过目后模型即确认（第八十九批）') }
+      if (s1.state === 'unreviewed') { wordingReminders(r1, '模型校验'); return step('人', `在「审模型」页审这一场：按模型看——新的与重浮的方法块点「写得对 / 要改」；按业务看——只裁推上来的判断；警告驳回要写理由，不驳回就退回模型师。一共 ${s1.unreviewed} 项`, `node tools/review.js ${rel(path.join(root, 'reports', 'validate-1.json'))}`, '人过目后模型即确认（第八十九批）') }
       if (!s1.applied) return step('路由', '把裁决写回 decisions[] 与切片 log', `node tools/slice.js apply ${rel(root)} ${rel(path.join(root, 'reports', 'validate-1.json'))} --slice ${slice.id}`, '裁决已填但未写回')
       if (s1.state === 'rework') return step('模型师', `按回流清单修改模型（${s1.rework} 项），改完重跑校验 ①`, validateCmd(false), '人的裁决里有要改的项')
+      // 一场一条（第一百五十、一百五十六批）：这一场的模型审完了——先把这一场锁死，再开下一场；都走完了看一次整张，定稿
+      if (story?.scene && !story.sealed) return step('开发指挥', `第 ${story.scene} 场的走查与模型都审完了：锁死这一场，往后不再动它`, `node tools/story.js seal ${rel(root)} ${slice.id}.w${story.scene}`, '审完一场锁一场（第一百五十批）')
+      if (story?.scene && story.sealed && !slice.wholeLookAt) return step('人', `${mod} 已经走完 ${story.scene} 场。还有没走到的场景，开发指挥开下一场（右边的命令）；都走完了，就在「审模型」页「按模型看」的总览里点走查的每一步，看支撑它的聚合、方法、字段亮没亮——看完说「定稿」，模型就定了，可以出原型`, `node tools/slice.js scene ${rel(root)} ${slice.id}　或　node tools/slice.js whole-look ${rel(root)} ${slice.id} <他的话>`, '最后看一次整张（第一百五十六批）')
       return step('路由', `${mod} 的模型确认：走查过完、方向 ① 干净、人审完，标 done`, `node tools/slice.js advance ${rel(root)} ${slice.id} model done`, '方向 ① 干净且人已审完')
     }
     // 故事切片（第八十九批，2026-09-14 项目所有者选甲：「来回太多」——s-002 那一段派了 14 趟角色、人坐了 9 次）：
@@ -524,6 +577,34 @@ if (cmd === 'lit') {
   writeJson(slicePath(id), slice)
   console.log(`${id}：登记了 ${ids.length} 条编号，共 ${slice.traces.length} 条。下一步 slice next（模型师起草骨架初稿）`)
 }
+/**
+ * 只作背景（候选 #9）：只改切片记录里 backgroundTraces 这一栏，读、改、写在同一刻做完。
+ * 从前角色自己整份写回切片文件，几个角色轮流写，后一个把前一个刚加的冲掉——k-002 里业务分析补语句时冲掉了模型师登记的 4 条，没有任何提示。
+ */
+if (cmd === 'background') {
+  const id = args[2], op = args[3], tid = args[4]
+  if (!id || !['add', 'remove', 'list'].includes(op) || (op !== 'list' && !tid)) die('用法：slice background <项目目录> <切片id> add <R-xxx> "<为什么本段落不了：缺哪个动作、等哪一段>" | remove <R-xxx> | list')
+  const slice = loadSlice(id)
+  slice.backgroundTraces = slice.backgroundTraces ?? []
+  if (op === 'list') { for (const b of slice.backgroundTraces) console.log(b.id + '　' + b.why); console.log('共 ' + slice.backgroundTraces.length + ' 条'); process.exit(0) }
+  if (op === 'add') {
+    const why = args.slice(5).join(' ').trim()
+    if (!why) die('要写为什么本段落不了（缺哪个动作、等哪一段）——只写编号，日后没人知道它为什么在这儿')
+    const { business } = loadProject(root)
+    if (!business.some((s) => s.id === tid)) die(tid + ' 在 business/ 里不存在')
+    const had = slice.backgroundTraces.find((b) => b.id === tid)
+    if (had) had.why = why; else slice.backgroundTraces.push({ id: tid, why })
+    appendLog(slice, 'model', (had ? '改写只作背景的理由：' : '登记只作背景：') + tid)
+  } else {
+    const n = slice.backgroundTraces.length
+    slice.backgroundTraces = slice.backgroundTraces.filter((b) => b.id !== tid)
+    if (slice.backgroundTraces.length === n) die(tid + ' 不在只作背景里')
+    appendLog(slice, 'model', '撤掉只作背景：' + tid)
+  }
+  writeJson(slicePath(id), slice)
+  console.log(id + '：只作背景现在 ' + slice.backgroundTraces.length + ' 条')
+  process.exit(0)
+}
 /** 出原型这道门（第九十七批）：段落的模型确认后，项目所有者看过整个模型、说了「出原型」才算编码计划 */
 if (cmd === 'proto-go') {
   const id = args[2]
@@ -641,6 +722,14 @@ if (cmd === 'apply') {
     if (h !== 'dismissed') { rework.push(`[${w.check}] ${w.target}：警告，人要改——${w.text}${w.human.note ? `——${w.human.note}` : ''}`); continue }
     if (!w.human.note) skipped.push(`${w.target}：驳回警告必须写理由（note）`)
     else pushDecision(w, 'dismissed', w.human.note)
+  }
+  // 按模型看的块（第一百五十六批）：写得对 → 记进那个文件的 decisions[]（带这一块的指纹，下一场认得出没变）；要改 → 回流给模型师
+  for (const b of report.blocks ?? []) {
+    const h = b.human?.verdict
+    if (!h) continue
+    if (h === 'fix') { rework.push(`[方法要改] ${b.name}（${b.kind === 'create' ? '字段与创建' : b.kind === 'operation' ? '领域服务操作' : '行为'}）${b.human.note ? '——' + b.human.note : ''}`); continue }
+    if (!written.has(b.file)) written.set(b.file, [])
+    written.get(b.file).push({ target: b.id, check: '方法写得对不对', verdict: 'dismissed', note: b.human.note || '写得对', at: today, by: 'human', on: b.fp })
   }
   // 写入模型文件：同 target + check 的旧裁决被替换
   for (const [f, ds] of written) {

@@ -2,3 +2,6 @@ model-decoded/
 reports/*.md
 reports/*.html
 .viewer/
+
+# 走查页每次自动保存前留的一版（slices/.history/，最近 30 份滚着放），只为救人手填的勾，不进版本库
+slices/.history/

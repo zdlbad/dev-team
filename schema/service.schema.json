@@ -83,6 +83,13 @@
           "note": {
             "type": "string",
             "description": "给人读的说明：这个操作为什么住在领域服务里、哪些情形它管不了（例如并发）、真保证在哪儿。边界说明放这儿，规则句只说规则（第八十四、八十五批）"
+          },
+          "purpose": {
+            "$ref": "urn:dev-team:common#/$defs/purpose"
+          },
+          "simple": {
+            "type": "boolean",
+            "description": "同行为的 simple"
           }
         }
       }

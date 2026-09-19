@@ -75,18 +75,36 @@ function diffBlock(file) {
   return `<div class="diff"><div class="dt">与${other}的差异（${fs_.length}）</div><table><tr><th>位置</th><th>模型</th><th>${other}</th></tr>${rows}</table></div>`
 }
 const cardCls = (file) => (findingsOf(file).length ? 'card bad' : otherDir ? 'card ok' : 'card')
+/**
+ * 一个方法的七段（第一百五十六批）：作用、入参、做法（每一步改哪几栏）、规则、错误、事件、返回。
+ * 项目所有者读 Invoice.attachSupportingDocument：「模型方法这里说的没有条理」——五条规则用分号连成一串。
+ * 老写法（没有作用与做法）至少把规则一条一行摆开。
+ */
+function methodBlock(b, head, extra = '') {
+  const row = (k, v) => `<div class="m7"><span class="m7k">${k}</span><div>${v}</div></div>`
+  const L = []
+  if (b.purpose) L.push(row('作用', esc(b.purpose.text) + ' ' + chips(b.purpose.traces ?? [])))
+  if (extra) L.push(extra)
+  if ((b.input ?? []).some((i) => i.note)) L.push(row('入参', b.input.map((i) => `<code>${esc(i.name)}: ${esc(i.type)}</code>${i.note ? ' ' + esc(i.note) : ''}`).join('<br>')))
+  if (b.purpose && (b.steps ?? []).length) L.push(row('做法', '<ol>' + b.steps.map((s) => `<li>${esc(s.text)}${(s.changes ?? []).length ? ` <span class="chg">→ 改 ${esc(s.changes.join('、'))}</span>` : ''}</li>`).join('') + '</ol>'))
+  if ((b.rules ?? []).length) L.push(row('规则', '<ul>' + b.rules.map((r) => `<li>${esc(ruleText(r))}${typeof r === 'string' ? '' : ' ' + chips(r.traces ?? [])}</li>`).join('') + '</ul>'))
+  L.push(row('错误', (b.throws ?? []).length ? esc(b.throws.join('，')) : '无'))
+  L.push(row('事件', (b.raises ?? []).length ? esc(b.raises.map(raiseText).join('，')) : '无'))
+  L.push(row('返回', b.output ? `<code>${esc(b.output)}</code>` : '无'))
+  return `<li class="meth"><div class="mhd">${head}${b.simple ? ' <span class="muted">（简单方法）</span>' : ''}</div>${L.join('')}</li>`
+}
 function domainCard(el) {
   const d = el.data
   const inv = (list, label) => (list?.length ? `<div class="sec"><div class="sec-title">${label}</div><ul class="inv">${list.map((i) => `<li><div class="txt">${esc(i.text)}</div><div class="meta">${chips(i.traces)}${i.throws?.length ? `<span class="throws">抛出 ${esc(i.throws.join(', '))}</span>` : ''}</div></li>`).join('')}</ul></div>` : '')
   const behaviors = d.behaviors?.length
-    ? `<div class="sec"><div class="sec-title">行为</div><ul>${d.behaviors
-        .map((b) => `<li><code>${esc(b.name)}(${params(b.input)})${b.output ? ` → ${esc(b.output)}` : ''}</code> ${chips(b.traces)}${b.rules?.length ? `<div class="sub">规则：${b.rules.map(ruleText).map(esc).join('；')}</div>` : ''}${b.raises?.length ? `<div class="sub">发出：${b.raises.map(raiseText).map(esc).join('，')}</div>` : ''}${b.throws?.length ? `<div class="sub">抛出：${esc(b.throws.join('，'))}</div>` : ''}</li>`)
-        .join('')}</ul></div>`
+    ? `<div class="sec"><div class="sec-title">行为</div><ul class="meths">${d.behaviors.map((b) => methodBlock(b, `<code>${esc(b.name)}(${params(b.input)})${b.output ? ` → ${esc(b.output)}` : ''}</code> ${chips(b.traces)}`)).join('')}</ul></div>`
     : ''
+  // 创建（第一百五十八批）：怎么被建出来，与行为同一套七段
+  const create = d.create ? `<div class="sec"><div class="sec-title">创建</div><ul class="meths">${methodBlock(d.create, `<code>create(${params(d.create.input ?? [])})</code> ${chips(d.create.traces ?? [])}`)}</ul></div>` : ''
   return `<div class="${cardCls(el.file)}" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], d.name, d.traces)}
   ${d.aggregateNarrative ? `<p class="narr">${esc(d.aggregateNarrative)}</p>` : ''}
   ${d.fields?.length ? `<div class="sec"><div class="sec-title">字段</div>${fieldsTable(d.fields)}</div>` : ''}
-  ${inv(d.aggregateInvariants, '聚合级规则')}${inv(d.invariants, '规则')}${behaviors}${diffBlock(el.file)}</div>`
+  ${create}${inv(d.aggregateInvariants, '聚合级规则')}${inv(d.invariants, d.create ? '不变量' : '规则')}${behaviors}${diffBlock(el.file)}</div>`
 }
 function smallCard(el, body) {
   return `<div class="${cardCls(el.file)} small" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], el.data.name, el.data.traces)}${body}${diffBlock(el.file)}</div>`
@@ -114,7 +132,9 @@ function useCaseCard(el) {
 function serviceCard(el) {
   const d = el.data
   const ops = d.operations
-    .map((op) => `<li><code>${esc(op.name)}(${params(op.input)})${op.output ? ` → ${esc(op.output)}` : ''}</code> ${chips(op.traces)}<div class="sub">读：${esc(op.reads.join('，') || '无')}　写：${esc(op.writes.join('，') || '无')}</div>${op.rules?.length ? `<div class="sub">规则：${op.rules.map(ruleText).map(esc).join('；')}</div>` : ''}${steps(op.steps)}</li>`)
+    .map((op) => op.purpose
+      ? methodBlock(op, `<code>${esc(op.name)}(${params(op.input)})${op.output ? ` → ${esc(op.output)}` : ''}</code> ${chips(op.traces)}`, `<div class="m7"><span class="m7k">读 / 写</span><div>读 ${esc(op.reads.join('，') || '无')}；写 ${esc(op.writes.join('，') || '无')}</div></div>`)
+      : `<li><code>${esc(op.name)}(${params(op.input)})${op.output ? ` → ${esc(op.output)}` : ''}</code> ${chips(op.traces)}<div class="sub">读：${esc(op.reads.join('，') || '无')}　写：${esc(op.writes.join('，') || '无')}</div>${op.rules?.length ? `<div class="sub">规则：</div><ul class="sub">${op.rules.map((r) => `<li>${esc(ruleText(r))}</li>`).join('')}</ul>` : ''}${steps(op.steps)}</li>`)
     .join('')
   return `<div class="${cardCls(el.file)}" id="${esc(el.file)}"><div class="hd"><span class="kind">领域服务</span> <b>${esc(d.name)}</b> <span class="muted">协调：${esc(d.coordinates.join('，'))}</span></div><ul>${ops}</ul>${diffBlock(el.file)}</div>`
 }
@@ -288,6 +308,7 @@ section{margin-bottom:28px}h2{margin:18px 0 4px;font-size:17px}h3{margin:18px 0 
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-x:auto}.card.ok{border-left:4px solid var(--ok)}.card.bad{border-left:4px solid var(--bad)}
 .hd{margin-bottom:4px}.kind{display:inline-block;font-size:11px;background:#e5e7eb;color:#374151;border-radius:4px;padding:0 6px;margin-right:4px}
 .chip{display:inline-block;font-size:11px;background:var(--chip);color:var(--chip-t);border-radius:10px;padding:0 7px;margin-left:3px}
+.meths{list-style:none;padding-left:0}.meth{border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;margin:6px 0}.mhd{margin-bottom:4px}.m7{display:grid;grid-template-columns:4.5em 1fr;gap:6px;padding:3px 0;border-top:1px dashed #e5e7eb;font-size:13px}.m7k{color:#6b7280;font-weight:600}.m7 ol,.m7 ul{margin:0;padding-left:18px}.chg{color:#2563eb;font-size:12px}
 .sec{margin:4px 0}.sub{color:#374151;font-size:13px;margin-left:8px}.muted{color:var(--muted)}.muted2{color:#374151;font-size:13px}.narr{color:#374151;margin:4px 0;font-size:13px}
 ul{margin:2px 0 2px 18px;padding:0}ul.plain{list-style:none;margin-left:0}ol.steps{margin:4px 0 4px 20px;padding:0}.when{color:#b45309}
 code{background:#f3f4f6;padding:0 4px;border-radius:3px;font-size:12.5px}a{color:#1d4ed8;text-decoration:none}a:hover{text-decoration:underline}

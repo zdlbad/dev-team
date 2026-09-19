@@ -57,7 +57,8 @@ function walk(dir, out = []) {
   if (!fs.existsSync(dir)) return out
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name)
-    if (e.isDirectory()) walk(p, out)
+    // 点开头的目录不进（.git、slices/.history/ 那些保存前留的旧版）——备份是拷贝、不是工件
+    if (e.isDirectory()) { if (!e.name.startsWith('.')) walk(p, out) }
     else if (e.name.endsWith('.json')) out.push(p)
   }
   return out
