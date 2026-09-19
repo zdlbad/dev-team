@@ -11,6 +11,7 @@
  *                                                         业务分析按五问补完语句后，开发指挥登记本故事新增的编号（--none = 本故事没有新增）
  *   node tools/story.js usage   <项目目录> <切片id> confirm    人确认后：编号并入故事与切片的 traces，建模可以开始
  *   node tools/story.js state   <项目目录> <切片id> [--json]   故事走到哪（切片驱动也用它）
+ *   node tools/story.js seal    <项目目录> <走查id>            一场走查审完锁死（第一百五十批）：写 sealed，往后不再动；走查id 形如 k-003.w1
  *
  * 退出码：0 正常；2 用法或前置错误。
  */
@@ -37,6 +38,23 @@ function writeJson(p, data) {
 }
 function storyPath(sliceId) {
   return path.join(root, 'slices', `${sliceId}.story.json`)
+}
+// 页面每存一次，先把磁盘上那一版留一份，最近 30 份滚着放在 slices/.history/。
+// 走查页是自动保存的（改完 700 毫秒就写盘），人填的勾因此只在磁盘上——git 里一份都没有，
+// 谁拿 git checkout 之类的命令把工作树退回去，那些勾就再也回不来了。
+// 由来：2026-09-18 真出过，项目所有者填到第 111 步的勾被一句 git checkout 抹掉，一条都没救回来。
+function keepHistory(p, sliceId) {
+  try {
+    if (!fs.existsSync(p)) return
+    const dir = path.join(root, 'slices', '.history')
+    fs.mkdirSync(dir, { recursive: true })
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    fs.copyFileSync(p, path.join(dir, `${sliceId}.${stamp}.json`))
+    const mine = fs.readdirSync(dir).filter((f) => f.startsWith(sliceId + '.')).sort()
+    for (const f of mine.slice(0, Math.max(0, mine.length - 30))) fs.unlinkSync(path.join(dir, f))
+  } catch (e) {
+    console.log('留不下这一版的备份（不拦保存）：' + e.message)
+  }
 }
 function slicePath(sliceId) {
   return path.join(root, 'slices', `${sliceId}.json`)
@@ -92,6 +110,22 @@ if (id && !fs.existsSync(storyPath(id))) die(`故事不存在：${path.relative(
 const story = id ? readJson(storyPath(id)) : null
 
 // ---------- state ----------
+// ---------- seal：一场走查审完锁死（第一百五十批） ----------
+if (cmd === 'seal') {
+  if (!root || !id) die('用法：node tools/story.js seal <项目目录> <走查id，形如 k-003.w1>')
+  const p = storyPath(id)
+  if (!fs.existsSync(p)) die('没有这份走查：' + path.relative(process.cwd(), p))
+  const st = readJson(p)
+  if (st.sealed) { console.log('这一场 ' + st.sealed + ' 已经锁死了'); process.exit(0) }
+  const open = (st.steps ?? []).filter((s) => !s.review && !require('./lib/project').isIntroStep(s)).length
+  const cards = (st.choices ?? []).filter((c) => !c.ruling).length
+  if (open || cards) die('还不能锁死：' + [open ? open + ' 步没审' : '', cards ? cards + ' 张卡没裁' : ''].filter(Boolean).join('、'))
+  st.sealed = today
+  ;(st.log = st.log ?? []).push(today + ' 审完锁死；往后不再动这一场，真要改走修改切片')
+  writeJson(p, st)
+  console.log('已锁死 ' + id + '（' + today + '）')
+  process.exit(0)
+}
 if (cmd === 'state') {
   let kind = 'story'
   try { kind = readJson(slicePath(id)).kind ?? 'story' } catch {}
@@ -181,14 +215,24 @@ if (cmd === 'apply') {
   const confirmedP = path.join(root, 'business', '_confirmed.json')
   const confirmed = fs.existsSync(confirmedP) ? readJson(confirmedP) : {}
   let newlyConfirmed = 0
+  // 人勾过之后这一步又被改了：他勾的那个编号如今不在这一步的 traces 上，说明这一步已经不讲那件事了。
+  // 照单记下就是一条不实的确认——账本上写着他在第 N 步确认过，翻回去那一步一个字都没提。
+  // 这种悬着的勾不记，列出来请他重看那一步（2026-09-18：第一百三十八批把第 24 步的 R-197 换成了
+  // R-223，他早先勾的 R-197 就这么悬着，工具一句话都没说）。
+  const dangling = []
   for (const s of story.steps.filter((x) => x.review?.verdict === 'agree')) {
     for (const tid of (s.review.confirmed ?? s.traces)) {
+      if (s.review.confirmed && !(s.traces ?? []).includes(tid)) { dangling.push({ step: s.n, tid }); continue }
       confirmed[tid] = confirmed[tid] ?? []
       if (!confirmed[tid].some((c) => c.slice === id && c.step === s.n)) {
         confirmed[tid].push({ slice: id, story: story.title, step: s.n, at: s.review.at.slice(0, 10), ...(s.review.note ? { note: s.review.note } : {}) })
         newlyConfirmed++
       }
     }
+  }
+  if (dangling.length) {
+    console.error(`勾悬着的 ${dangling.length} 处（这一步后来改了，他勾的编号如今不在这一步上；没记进账本，请他重看这几步）：`)
+    for (const d of dangling) console.error(`  · 第 ${d.step} 步勾的 ${d.tid}，现在这一步挂的是 ${(story.steps.find((x) => x.n === d.step).traces ?? []).join('、') || '（没有落点）'}`)
   }
   if (newlyConfirmed) writeJson(confirmedP, Object.fromEntries(Object.entries(confirmed).sort()))
   const challenges = story.steps.filter((s) => s.review?.verdict === 'challenge')
@@ -410,7 +454,9 @@ function firstSeen() {
   for (const s of data.steps) for (const id of s.traces || []) if (at[id] == null) at[id] = s.n
   return at
 }
-function stepComplete(s) { const c = confirmedSet(s); return s.review?.verdict === 'agree' && (s.traces||[]).every(t => c.has(t)) }
+// 铺垫步（候选 #11）：没挂编号、模型这一侧没有动作、也不出题——没有要你勾的
+function isIntro(s) { return !(s.traces||[]).length && (!s.walk || s.walk.kind === 'none') && !s.quiz && !data.choices.some(c => c.step === s.n) }
+function stepComplete(s) { if (isIntro(s) && !s.review) return true; const c = confirmedSet(s); return s.review?.verdict === 'agree' && (s.traces||[]).every(t => c.has(t)) }
 /** 这一步还差什么：一句话一件事，索引、步骤条与折叠摘要都用它 */
 function stepTodo(s) {
   const out = []
@@ -420,7 +466,7 @@ function stepTodo(s) {
   if (s.quiz && !s.human) out.push({ kind: 'quiz', text: '一道题没答' })
   const cards = data.choices.filter(x => x.step === s.n && !x.ruling)
   if (cards.length) out.push({ kind: 'card', text: cards.length + ' 张卡没裁（' + cards.map(x => x.id).join('、') + '）' })
-  if (!s.review) out.push({ kind: 'review', text: '这一步没审过' })
+  if (!s.review && !isIntro(s)) out.push({ kind: 'review', text: '这一步没审过' })
   else if (s.review.verdict === 'challenge') out.push({ kind: 'challenge', text: '你在这里留了质疑' })
   return out
 }
@@ -586,7 +632,8 @@ function render() {
     }
     data.choices.forEach((c, ci) => { if (c.step === s.n) h += choiceCard(c, ci) })
     const rv = s.review?.verdict
-    h += '<div class="review"><div class="btns"><button class="agree' + (rv === 'agree' ? ' on' : '') + '" data-rev="agree" data-i="' + i + '">同意（勾全部）</button><button class="challenge' + (rv === 'challenge' ? ' on' : '') + '" data-rev="challenge" data-i="' + i + '">质疑</button>' + (stepComplete(s) ? '<span class="verdict ok">已过</span>' : '') + '</div>'
+    if (isIntro(s) && !s.review) h += '<div class="review" style="color:#57606a">铺垫：这一步没有要你勾的，看一眼过就行</div>'
+    h += '<div class="review"' + (isIntro(s) && !s.review ? ' style="display:none"' : '') + '><div class="btns"><button class="agree' + (rv === 'agree' ? ' on' : '') + '" data-rev="agree" data-i="' + i + '">同意（勾全部）</button><button class="challenge' + (rv === 'challenge' ? ' on' : '') + '" data-rev="challenge" data-i="' + i + '">质疑</button>' + (stepComplete(s) ? '<span class="verdict ok">已过</span>' : '') + '</div>'
     h += '<textarea data-rnote="' + i + '" placeholder="' + (rv === 'challenge' ? '质疑的理由（必填）' : '你的想法：哪里不对、哪里没讲清、旧系统是怎么做的……') + '">' + esc(s.review?.note ?? '') + '</textarea></div>'
     h += '</div></div>'
     if (s.quiz && !s.human && !revealed[i]) lock = true
@@ -1129,7 +1176,9 @@ load()
         try {
           const obj = JSON.parse(body)
           if (url === '/save') {
-            if (!/^[sk]-[0-9]{3,}$/.test(obj.slice || '')) throw new Error('故事缺 slice')
+            if (!/^[sk]-[0-9]{3,}(\.w[0-9]+)?$/.test(obj.slice || '')) throw new Error('故事缺 slice')
+            // 审完锁死的那一场不再动（第一百五十批）：真要改，走修改切片
+            try { const disk = readJson(storyPath(obj.slice)); if (disk.sealed) { res.writeHead(409, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('这一场 ' + disk.sealed + ' 已经审完锁死，不再改；真要改，记候选、开修改切片') } } catch { /* 新文件照存 */ }
             // 页面手里那份是从哪一版改起的？跟磁盘上现在这一版对不上，就说明这中间别人改过（角色、命令行、另一台机器）。
             // 直接写会把那些改动整个盖掉，而且一声不响。宁可拒绝，让人刷新后在新版本上重做这一下。
             const now = storyRev(obj.slice)
@@ -1142,6 +1191,7 @@ load()
             }
             const toWrite = { ...obj }
             delete toWrite._rev
+            keepHistory(storyPath(obj.slice), obj.slice)
             writeJson(storyPath(obj.slice), toWrite)
           }
           else {

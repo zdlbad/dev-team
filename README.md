@@ -59,6 +59,10 @@ node tools/story.js usage <项目> <id> propose <U-…|--none> | confirm   # 五
 node tools/slice.js next <项目> <id> [--json]                  # 下一步：谁、做什么、跑什么
 node tools/slice.js advance <项目> <id> <model|code|validate> <pending|in-progress|done> [说明]
 node tools/slice.js apply <项目> <报告 json> [--slice <id>]     # 裁决写回（校验报告进 decisions[]；pre-pr 只记 log）
+node tools/slice.js scene <项目> <k-xxx> [--title …]           # 模块切片建下一场走查（一场一条；上一场没锁死不让建）
+node tools/story.js seal <项目> <k-xxx.wN>                    # 一场走查审完锁死
+node tools/slice.js whole-look <项目> <k-xxx> [他的话]         # 每一场都锁死、看过整张：模型定稿，可以出原型
+node tools/slice.js background <项目> <id> add|remove|list …   # 只作背景只改这一栏
 node tools/plan.js build|confirm|done|check <项目> <id> …       # 编码计划：算链路 / 人确认 / 记完成 / 核对顺序与文件
 node tools/contract.js scaffold|check|confirm <项目> <id>       # 契约：骨架 / 核对 / 人确认
 node tools/proto.js serve|check <项目> --code <代码库>          # 原型：页面 / 对照模型

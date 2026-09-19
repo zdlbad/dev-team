@@ -117,6 +117,8 @@ const decFile = new Map() // 每一条裁决出自哪个文件（重新定基时
 const staleSeen = [] // 这一趟遇到的过期裁决：{ dec, text }
 const decStats = { 问过: 0, 压根没人裁过: 0, 指纹对上: 0, 挪位对上: 0, 没带指纹就认了: 0, 过期: 0 }
 /** 裁决对象的指纹：文字变了裁决即过期 */
+/** 按模型看：人点「写得对」记进 decisions[] 时用的检查项名 */
+const BLOCK_CHECK = '方法写得对不对'
 function fingerprint(text) {
   return require('node:crypto').createHash('sha1').update(String(text ?? '')).digest('hex').slice(0, 8)
 }
@@ -276,7 +278,8 @@ if (unlayered) add(r1, 'warning', 'label.unlayered', 'business/', `${unlayered} 
 // 模型分步建（第九十五、九十七批，seed/slices.md「模型怎么建」）：校验 ① 只查本步及之前该落的种类，还没到的种类不报错、单列「留给后面」。
 // 模块切片的骨架初稿只有字段，事实才有落点；业务走查加约束、公式、情形；段落切片（应用层，没有 pass）全查。
 const pass = sliceRec?.pass ?? '应用'
-const PASS_KINDS = { 骨架: new Set(['事实']), 行为: new Set(['事实', '约束', '公式', '情形']), 应用: null }
+// 第一百五十六批起骨架是薄的：只有聚合与一句说明、不写字段，这一步什么种类都还不落，全留给走查
+const PASS_KINDS = { 骨架: new Set(), 行为: new Set(['事实', '约束', '公式', '情形']), 应用: null }
 const NEXT_PASS = { 骨架: '业务走查', 行为: '应用层（段落切片）' }
 const passAllows = (kind) => !PASS_KINDS[pass] || !kind || PASS_KINDS[pass].has(kind)
 // 覆盖：能力 → 命令/查询（命令与查询是应用遍的东西）
@@ -322,6 +325,10 @@ const pickText = (items, id, sep) => {
  * 却因为追溯只挂在规则上而没人判。
  */
 const tracedHere = (m, id) => (m.traces ?? []).includes(id) || (m.rules ?? []).some((r) => typeof r !== 'string' && (r.traces ?? []).includes(id))
+  || (m.purpose?.traces ?? []).includes(id) || (m.steps ?? []).some((s) => (s.traces ?? []).includes(id))
+/** 第一百五十六批的写法：给校验看的原文带上作用与做法（每一步改哪几栏），它读得出方法到底做没做 */
+const methodText = (m) => (m.purpose ? `作用：${m.purpose.text}　` : '')
+  + ((m.steps ?? []).length && m.purpose ? `做法：${m.steps.map((s, i) => `${i + 1}. ${s.text}${(s.changes ?? []).length ? '（改 ' + s.changes.join('、') + '）' : ''}`).join(' ')}　` : '')
 
 function ruleLandings(id) {
   const out = []
@@ -329,12 +336,14 @@ function ruleLandings(id) {
     const objLabel = { 'aggregate-root': '聚合根', entity: '实体', 'value-object': '值对象' }[el.kind]
     for (const inv of el.data.aggregateInvariants ?? []) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, label: `聚合 ${el.data.name} 的规则`, text: `聚合 ${el.data.name} 的规则：${inv.text}${carriesOf(inv, id)}` })
     for (const inv of el.data.invariants) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, label: `${el.data.name} 的规则`, text: `${objLabel} ${el.data.name} 的规则：${inv.text}${carriesOf(inv, id)}${throwsText(inv.throws ?? [])}` })
-    for (const b of el.data.behaviors) if (tracedHere(b, id)) out.push({ kind: b.throws.length ? 'behavior-guard' : 'behavior', el, label: `${el.data.name}.${b.name}`, text: `${el.data.name}.${sig(b.name, b.input, b.output)}　${rulesText(b.rules, id)}${raisesText(b.raises)}${throwsText(b.throws)}` })
+    // 创建（第一百五十八批）：一件东西怎么被建出来，跟不变量一样是它自己守的规则
+    if (el.data.create && tracedHere(el.data.create, id)) out.push({ kind: 'create', el, label: `${el.data.name} 的创建`, text: `${objLabel} ${el.data.name} 的创建　${methodText(el.data.create)}${rulesText(el.data.create.rules, id)}${throwsText(el.data.create.throws ?? [])}` })
+    for (const b of el.data.behaviors) if (tracedHere(b, id)) out.push({ kind: b.throws.length ? 'behavior-guard' : 'behavior', el, label: `${el.data.name}.${b.name}`, text: `${el.data.name}.${sig(b.name, b.input, b.output)}　${methodText(b)}${rulesText(b.rules, id)}${raisesText(b.raises)}${throwsText(b.throws)}` })
 
     // 字段也是模型的落点：聚合上记着什么、每一栏干什么用，跟不变量一样在承载业务
     for (const f of el.data.fields ?? []) if ((f.traces ?? []).includes(id)) out.push({ kind: 'field', el, label: `${el.data.name} 的字段 ${f.name}`, text: `${objLabel} ${el.data.name} 的字段 ${f.name}: ${f.type}${f.nullable ? '（可空）' : ''}${f.note ? `　${f.note}` : ''}` })
   }
-  for (const s of services) for (const op of s.data.operations) if (tracedHere(op, id)) out.push({ kind: 'service', el: s, label: `领域服务 ${s.data.name}.${op.name}`, text: `领域服务 ${s.data.name}.${sig(op.name, op.input, op.output)}　${rulesText(op.rules, id)}${throwsText(op.throws)}` })
+  for (const s of services) for (const op of s.data.operations) if (tracedHere(op, id)) out.push({ kind: 'service', el: s, label: `领域服务 ${s.data.name}.${op.name}`, text: `领域服务 ${s.data.name}.${sig(op.name, op.input, op.output)}　${methodText(op)}${rulesText(op.rules, id)}${throwsText(op.throws)}` })
   for (const h of handlers) if (h.data.traces.includes(id)) out.push({ kind: 'event-handler', el: h, label: `事件处理 ${h.data.name}`, text: `事件处理 ${h.data.name}（触发：${h.data.trigger}）：${h.data.steps.map((s) => s.text).join(' → ')}` })
   for (const e of errors) if (e.data.traces.includes(id)) out.push({ kind: 'error', el: e, label: `错误 ${e.data.name}`, text: `错误 ${e.data.name}：${e.data.condition ? pickText(e.data.condition, id, '；') : '（无条件说明）'}` })
   // 端口也是落点：描述我方系统之外的业务流程（政府门户上收到转介）的事实落在边界上，不落聚合（agents/model/shapes.md；验收项目第六十八批）
@@ -342,7 +351,8 @@ function ruleLandings(id) {
   return out
 }
 // 种类 → 该落在哪种元素上（只是提醒，报警告）。消息里用文件里写的那个词（rawKind），旧标签的语句指纹才对得上以前的裁决：事实落字段或结构性的不变量；约束落不变量、守卫、错误；公式落计算；触发落事件处理
-const EXPECTED = { 事实: ['field', 'invariant', 'behavior', 'port'], 约束: ['invariant', 'behavior-guard', 'error', 'field'], 公式: ['behavior', 'behavior-guard', 'service', 'field'], 触发: ['event-handler', 'port'], 流程: ['behavior-guard', 'invariant', 'error', 'command', 'port', 'service'], 情形: ['behavior', 'behavior-guard', 'invariant', 'error', 'field', 'command'] }
+// 第一百五十八批：跨实例、跨聚合才判得了的规则归领域服务（第八十五批），事实与约束落在那儿是对的，从前会被误报
+const EXPECTED = { 事实: ['field', 'invariant', 'behavior', 'port', 'service'], 约束: ['invariant', 'behavior-guard', 'error', 'field', 'service'], 公式: ['behavior', 'behavior-guard', 'service', 'field'], 触发: ['event-handler', 'port'], 流程: ['behavior-guard', 'behavior', 'invariant', 'error', 'command', 'port', 'service'], 情形: ['behavior', 'behavior-guard', 'invariant', 'error', 'field', 'command'] }
 // 本段只作背景的语句：故事里讲到它，可本段没有能承载它的动作（次序、核对这类要等后面的段落）。
 // 切片里写明编号与理由，校验器就不因「没有落点」报错——但记进 deferred 单列出来，谁也别忘了它还欠着。
 const background = new Map((sliceRec?.backgroundTraces ?? []).map((b) => [b.id, b.why]))
@@ -355,11 +365,13 @@ for (const r of rules) {
     continue
   }
   if (background.has(r.id)) add(r1, 'warning', 'coverage.background', r.id, `切片把它记成本段只作背景，模型里却给了落点：要么去掉切片里那一条，要么去掉落点`)
-  if (r.ruleKind && EXPECTED[r.ruleKind] && !landings.some((l) => EXPECTED[r.ruleKind].includes(l.kind))) {
+  // 创建是一个方法、也是建时的规则（第一百五十八批），落点种类表里认不变量、行为、带守卫的行为的，都认创建
+  const kindOk = (l, want) => want.includes(l.kind) || (l.kind === 'create' && want.some((k) => ['invariant', 'behavior', 'behavior-guard'].includes(k)))
+  if (r.ruleKind && EXPECTED[r.ruleKind] && !landings.some((l) => kindOk(l, EXPECTED[r.ruleKind]))) {
     add(r1, 'warning', 'coverage.rule-kind', r.id, `规则种类「${r.rawKind ?? r.ruleKind}」的落点应为 ${EXPECTED[r.ruleKind].join(' / ')}，实际只有 ${[...new Set(landings.map((l) => l.kind))].join(' / ')}`)
   }
   // 一条业务语句一条判断：模型侧列出全部落点及其完整上下文
-  const importance = landings.some((l) => ['invariant', 'behavior-guard', 'error', 'behavior'].includes(l.kind)) ? 'high' : 'medium'
+  const importance = landings.some((l) => ['invariant', 'create', 'behavior-guard', 'behavior', 'service'].includes(l.kind)) ? 'high' : 'medium' // 错误不再挂语句（第一百六十四批）；领域服务的操作与行为一样是方法，有规则、抛错误，同样算高
   const where = [...new Set(landings.map((l) => l.label).filter(Boolean))]
   const ask = `${r.id}「${r.text}」——模型把它写在 ${where.join('、') || '这几处'}。这几处合起来是不是把这句话说全了？有没有多加限制、少了条件，或方向反了？`
   judge(r1, '模型规则是否与业务一致？', r.id, { business: `[${r.id}]${labelOf(r) ? ` (${labelOf(r)})` : ''} ${r.text}`, model: landings.map((l) => l.text).join('\n') }, importance, [...new Set(landings.map((l) => l.el.file))], { ask })
@@ -384,7 +396,7 @@ function checkTraces(target, traces, level = 'error') {
   if (!traces || !traces.length) return add(r1, level, 'traces.empty', target, 'traces 为空')
   for (const t of traces) if (!byId.has(t)) add(r1, 'error', 'traces.unknown', target, `追溯编号不存在：${t}`)
 }
-for (const el of [...domainObjects, ...events, ...errors, ...ports, ...commands, ...queries, ...handlers]) checkTraces(el.file, el.data.traces)
+for (const el of [...domainObjects, ...events, ...ports, ...commands, ...queries, ...handlers]) checkTraces(el.file, el.data.traces) // 错误不挂语句（第一百六十四批），不查追溯
 for (const el of domainObjects) for (const b of el.data.behaviors) checkTraces(`${el.file}#behaviors.${b.name}`, b.traces)
 for (const s of services) for (const op of s.data.operations) checkTraces(`${s.file}#operations.${op.name}`, op.traces)
 for (const m of model.modules?.data.modules ?? []) { if (scopeMods && !scopeMods.has(m.name) && !(m.traces ?? []).length) defer('traces.empty', `${model.modules.file}#${m.name}`, `模块 ${m.name} 本段外未建，追溯待填`); else checkTraces(`${model.modules.file}#${m.name}`, m.traces, 'warning') }
@@ -518,14 +530,26 @@ for (const el of domainObjects) {
     for (const t of b.throws) thrownErrors.add(t)
   }
   for (const inv of [...(el.data.aggregateInvariants ?? []), ...el.data.invariants]) for (const t of inv.throws ?? []) thrownErrors.add(t)
+  // 创建也是发布方：一件东西建的时候查不过抛的错误、建好发的事件
+  const cr = el.data.create
+  if (cr) {
+    for (const r of cr.raises ?? []) raisedEvents.add(typeof r === 'string' ? r : r.event)
+    for (const t of cr.throws ?? []) thrownErrors.add(t)
+  }
 }
 for (const s of services) for (const op of s.data.operations) for (const t of op.throws) thrownErrors.add(t)
 for (const e of events) if (!raisedEvents.has(e.data.name)) add(r1, 'error', 'event.no-publisher', e.file, `事件没有任何行为发出：${e.data.name}`)
-for (const e of errors) if (!thrownErrors.has(e.data.name)) add(r1, 'error', 'error.no-publisher', e.file, `错误没有任何行为或不变量抛出：${e.data.name}`)
+for (const e of errors) if (!thrownErrors.has(e.data.name)) add(r1, 'error', 'error.no-publisher', e.file, `错误没有任何行为、创建、领域服务或不变量抛出：${e.data.name}`)
 // 行为 raises/throws 里引用的事件/错误必须存在
 for (const el of domainObjects) for (const b of el.data.behaviors) {
   for (const r of b.raises) if (!find(['event'], typeof r === 'string' ? r : r.event, el.module)) add(r1, 'error', 'behavior.raises.unknown', `${el.file}#behaviors.${b.name}`, `事件不存在：${typeof r === 'string' ? r : r.event}`)
   for (const t of b.throws) if (!find(['error'], t, el.module)) add(r1, 'error', 'behavior.throws.unknown', `${el.file}#behaviors.${b.name}`, `错误不存在：${t}`)
+}
+for (const el of domainObjects) {
+  const cr = el.data.create
+  if (!cr) continue
+  for (const r of cr.raises ?? []) if (!find(['event'], typeof r === 'string' ? r : r.event, el.module)) add(r1, 'error', 'behavior.raises.unknown', `${el.file}#create`, `事件不存在：${typeof r === 'string' ? r : r.event}`)
+  for (const t of cr.throws ?? []) if (!find(['error'], t, el.module)) add(r1, 'error', 'behavior.throws.unknown', `${el.file}#create`, `错误不存在：${t}`)
 }
 // 事件处理的 trigger、事件是否有处理者
 const handled = new Set()
@@ -578,6 +602,59 @@ for (const el of [...entities, ...vos, ...events, ...errors, ...repos]) {
 // 不变量跨聚合（判断）
 for (const el of roots) for (const inv of el.data.aggregateInvariants ?? []) judge(r1, '这条不变量是否需要另一个聚合才能成立？', `${el.file}#aggregateInvariants`, { model: inv.text }, 'high')
 
+// 走查写着调用的方法，模型里得找得到（第一百五十八批）：空跑场景一没建 FinanceReview，走查第 20、21 步却写着调它，没有工具查
+function checkWalkNames() {
+  const has = (owner, method) => [...domainObjects].some((el) => el.data.name === owner && ((el.data.behaviors ?? []).some((b) => b.name === method) || (method === 'create' && el.data.create)))
+    || services.some((s) => s.data.name === owner && s.data.operations.some((o) => o.name === method))
+  const knownModule = (m) => (model.modules?.data.modules ?? []).some((x) => x.name === m)
+  for (const s of storiesOf(sliceId)) {
+    for (const step of s.story.steps ?? []) {
+      const w = step.walk
+      if (!w || w.kind !== 'command' || typeof w.name !== 'string') continue
+      for (const part of w.name.split('+').map((x) => x.trim())) {
+        const m = part.match(/^((?:[A-Z]\w*\.)+)([a-z]\w*)$/)
+        if (!m) continue // 「照一张发票一次录完（建立聚合，留给应用层）」这类说的是应用层，不查
+        const segs = m[1].slice(0, -1).split('.'), method = m[2]
+        const owner = segs[segs.length - 1]
+        if (has(owner, method)) continue
+        // 别的模块的方法：那个模块的模型还没建时不算错
+        if (segs.length > 1 && knownModule(segs[0]) && !model.moduleFiles.some((mf) => mf.module === segs[0])) continue
+        add(r1, 'warning', 'walk.name', `${s.file}#第 ${step.n} 步`, `走查写着调用 ${part}，模型里找不到这个方法：模型没建它，或者名字改了走查没跟上`)
+      }
+    }
+  }
+}
+checkWalkNames()
+/**
+ * 按模型看的块（第一百五十六批）：一个聚合根 / 实体 / 值对象的「字段与创建」一块，一个行为一块，一个领域服务操作一块。
+ * 人在审模型页上逐块点「写得对 / 要改」；写对的经 slice apply 记进那个文件的 decisions[]（check 是 BLOCK_CHECK，on 是这一块的指纹）。
+ * 下一场再跑：指纹对得上的是「没变」（不用再看），裁过但指纹变了的是「重浮的」，没人裁过的是「新的」。
+ */
+function buildBlocks() {
+  const out = []
+  const stateOf = (id, fp) => {
+    const ds = decisions.filter((d) => d.target === id && d.check === BLOCK_CHECK && d.by === 'human')
+    return !ds.length ? 'new' : ds.some((d) => d.on === fp) ? 'same' : 'refloat'
+  }
+  const push = (el, key, kind, name, body, simple) => {
+    const id = `${el.file}#${key}`, fp = fingerprint(JSON.stringify(body))
+    // 第一百五十九批：「都不标，我都审」——简单方法这个标记不再往报告里带，块一律等他看
+    out.push({ id, file: el.file, kind, name, fp, state: stateOf(id, fp) })
+  }
+  for (const el of domainObjects) {
+    if (scopeMods && !scopeMods.has(el.module)) continue
+    const d = el.data
+    const body = { fields: d.fields ?? [], create: d.create ?? null, invariants: d.invariants ?? [], aggregateInvariants: d.aggregateInvariants ?? [] }
+    if (body.fields.length || body.create || body.invariants.length || body.aggregateInvariants.length) push(el, 'create', 'create', d.name, body)
+    for (const b of d.behaviors ?? []) push(el, 'behaviors.' + b.name, 'behavior', `${d.name}.${b.name}`, b, b.simple)
+  }
+  for (const s of services) {
+    if (scopeMods && !scopeMods.has(s.module)) continue
+    for (const op of s.data.operations) push(s, 'operations.' + op.name, 'operation', `${s.data.name}.${op.name}`, op, op.simple)
+  }
+  return out
+}
+r1.blocks = buildBlocks()
 finish(r1, 'validate-1')
 
 // ========== 方向 ② ==========
@@ -649,7 +726,8 @@ function archivePrevious(dir, name, slice) {
   if (fs.existsSync(md)) fs.copyFileSync(md, path.join(dir, `${name}.${old.slice}.md`))
   console.log(`（${old.slice} 的上一份报告已存为 ${name}.${old.slice}.json）`)
 }
-function carryOver(report, name) {
+/** 这一趟要接的上一份报告：同切片、同方向；没有就 null */
+function previousReport(report, name) {
   const dir = path.join(root, 'reports')
   // 当前那份是本切片的就读它（它最新）；是别的切片的，才回头找自己那份存档
   const live = path.join(dir, `${name}.json`)
@@ -657,10 +735,15 @@ function carryOver(report, name) {
     try { return JSON.parse(fs.readFileSync(live, 'utf8')).slice === report.slice } catch { return false }
   })()
   const p = liveIsMine ? live : path.join(dir, `${name}.${report.slice}.json`)
-  if (!fs.existsSync(p)) return 0
+  if (!fs.existsSync(p)) return null
   let old
-  try { old = JSON.parse(fs.readFileSync(p, 'utf8')) } catch { return 0 }
-  if (old.slice !== report.slice || old.direction !== report.direction) return 0
+  try { old = JSON.parse(fs.readFileSync(p, 'utf8')) } catch { return null }
+  if (old.slice !== report.slice || old.direction !== report.direction) return null
+  return old
+}
+function carryOver(report, name) {
+  const old = previousReport(report, name)
+  if (!old) return 0
   const by = new Map((old.judgments ?? []).map((x) => [judgeKey(x), x]))
   let kept = 0
   let renamedCarry = 0
@@ -683,18 +766,62 @@ function carryOver(report, name) {
     const o = oldConfirm.get([c.check, c.target, c.text].join('\u0000'))
     if (o?.human) c.human = o.human
   }
+  // 块上人点的「写得对 / 要改」：同一块、指纹没变才接；变了就是重浮，要再看一眼
+  const oldBlock = new Map((old.blocks ?? []).map((b) => [b.id + '\u0000' + b.fp, b]))
+  for (const b of report.blocks ?? []) {
+    const o = oldBlock.get(b.id + '\u0000' + b.fp)
+    if (o?.human) b.human = o.human
+  }
+  // 警告上人点的「驳回 / 要改」也要接：从前这里不接，人驳回了一条警告、重跑一次就没了
+  const oldWarn = new Map((old.warnings ?? []).map((w) => [[w.check, w.target, w.text].join('\u0000'), w]))
+  for (const w of report.warnings) {
+    const o = oldWarn.get([w.check, w.target, w.text].join('\u0000'))
+    if (o?.human) w.human = o.human
+  }
   // 这一轮没有任何待判断与需确认——能判的都已经在 decisions[] 里了，等于上一轮就写回过
   if (old.applied && !report.judgments.length && !report.confirms.length) report.applied = old.applied
   if (renamedCarry) console.log(`[校验] 这 ${renamedCarry} 条判断的文字只因改名而变（反着换回去一字不差），上一份填好的结论照样接过来，不重判`)
   return kept
+}
+/** 上一份报告里人裁过、这一趟没接过来、decisions[] 里也没有的那几条 */
+function unsavedHuman(report, name) {
+  const old = previousReport(report, name)
+  if (!old) return []
+  // 按内容比：上一份报告在这里另读了一遍，对象不是 carryOver 接过去的那几个
+  const sig = (x) => [x.target, x.check, JSON.stringify(x.human)].join(' ')
+  // 块在新旧两份里要摆成同一个样子比（目标是块的 id、检查项是 BLOCK_CHECK）
+  const asItem = (b) => ({ ...b, target: b.id, check: BLOCK_CHECK })
+  const carried = new Set([...report.judgments, ...report.confirms, ...report.warnings, ...(report.blocks ?? []).map(asItem)].filter((x) => x.human).map(sig))
+  const saved = (o) => decisions.some((d) => d.by === 'human' && d.target === (o.id ?? o.target) && d.check === (o.id ? BLOCK_CHECK : o.check) && (!o.on || !d.on || d.on === o.on))
+  // 「要改」「不同意」写回时不进 decisions[]，是回流给角色的：apply 在人裁的那天或之后跑过，就算已经写回
+  const applied = (o) => old.applied?.at && String(old.applied.at).slice(0, 10) >= String(o.human?.at ?? '')
+  return [...(old.judgments ?? []), ...(old.confirms ?? []), ...(old.warnings ?? []), ...(old.blocks ?? []).map((b) => ({ ...b, target: b.id, check: BLOCK_CHECK }))]
+    .filter((o) => o.human?.verdict && !carried.has(sig(o)) && !saved(o) && !applied(o))
 }
 function finish(report, name) {
   // 重新定基是一趟专门的活：只看哪些裁决过期了、能不能证明是纯改名，不碰报告
   if (rebaseFile) return
   report.judgments.sort((a, b) => rank(b.importance) - rank(a.importance))
   const kept = carryOver(report, name)
+  // 候选 #8：人的裁决不可再生。上一份报告里人裁过的，这一趟要么原样接过来（文字没变），
+  // 要么已经 slice apply 写进了 decisions[]；两样都不是，重算就会把它无声冲掉——2026-09-16 就这么丢过 52 条。
+  const lost = unsavedHuman(report, name)
+  if (lost.length && !args.includes('--丢弃人裁')) {
+    console.error(`[校验] 停下，没有重写报告：上一份报告里有 ${lost.length} 条人裁过、还没写回模型，这一趟文字变了接不过来，重算就会丢掉：`)
+    for (const x of lost) console.error(`  - [${x.check}] ${x.target}：人裁「${x.human.verdict}」${x.human.note ? '——' + x.human.note : ''}`)
+    console.error(`先把它们写回：node tools/slice.js apply <项目目录> reports/${name}.json${report.slice ? ' --slice ' + report.slice : ''}，再重跑校验。`)
+    console.error('确实不要了（例如人要求重裁），加 --丢弃人裁 再跑。')
+    process.exitCode = 1
+    return
+  }
+  // 升级规则（agents/model/validation.md）：重要度高、校验角色又没把握的，不论判的是 pass 还是 fail，
+  // 都要人亲自看过才算清——从前这条规矩只写在角色指令里，校验角色三趟都降了自信度、汇总却报「需人确认 0」
+  const escalated = report.judgments.filter((j) => j.verdict && j.importance === 'high' && j.confidence && j.confidence !== 'high')
+  for (const j of report.judgments) delete j.escalated
+  for (const j of escalated) j.escalated = true
+  report.judgments.sort((a, b) => rank(b.importance) - rank(a.importance) || (rank(a.confidence) || 9) - (rank(b.confidence) || 9))
   // 已经裁决过的「需人确认」不再算作未清项——人已经拍过板了，报告不该因此永远不干净
-  const openConfirms = report.confirms.filter((c) => !c.human?.verdict).length
+  const openConfirms = report.confirms.filter((c) => !c.human?.verdict).length + escalated.filter((j) => !j.human?.verdict).length
   const open = report.errors.length + report.warnings.length + openConfirms
   report.conclusion = open === 0 ? 'clean' : 'not-clean'
   const dir = path.join(root, 'reports')
@@ -704,7 +831,8 @@ function finish(report, name) {
   fs.writeFileSync(path.join(dir, `${name}.md`), renderMd(report))
   const j = report.judgments.length
   const blank = report.judgments.filter((x) => !x.verdict).length
-  console.log(`方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 需人确认 ${report.confirms.length} · 待判断 ${j}${kept ? `（沿用上一份已填的 ${kept} 条，还要填 ${blank} 条）` : ''} · 已裁决 ${report.decided.length}${report.deferred?.length ? ` · 本段外未建 ${report.deferred.filter((d) => d.kind !== 'coverage.background' && d.kind !== 'coverage.pass').length} 项（粗版，--slice 不计）` : ''}${report.deferred?.some((d) => d.kind === 'coverage.background') ? ` · 只作背景 ${report.deferred.filter((d) => d.kind === 'coverage.background').length} 条` : ''}${report.deferred?.some((d) => d.kind === 'coverage.pass') ? ` · 留给后面的遍 ${report.deferred.filter((d) => d.kind === 'coverage.pass').length} 条` : ''} → ${report.conclusion === 'clean' ? '干净' : '不干净'}（${path.relative(process.cwd(), path.join(dir, name + '.md'))}）`)
+  const blocksOpen = (report.blocks ?? []).filter((b) => b.state !== 'same' && !b.human?.verdict)
+  console.log(`方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 需人确认 ${openConfirms}${escalated.some((x) => !x.human?.verdict) ? `（其中 ${escalated.filter((x) => !x.human?.verdict).length} 条是重要度高、校验没把握的判断：${escalated.filter((x) => !x.human?.verdict).map((x) => x.target).join('、')}）` : ''}${report.confirms.length + escalated.length - openConfirms ? `（人已裁 ${report.confirms.length + escalated.length - openConfirms} 条）` : ''} · 待判断 ${j}${kept ? `（沿用上一份已填的 ${kept} 条，还要填 ${blank} 条）` : ''}${blocksOpen.length ? ` · 方法待看 ${blocksOpen.length} 块（新 ${blocksOpen.filter((b) => b.state === 'new').length}、重浮 ${blocksOpen.filter((b) => b.state === 'refloat').length}）` : ''} · 已裁决 ${report.decided.length}${report.deferred?.length ? ` · 本段外未建 ${report.deferred.filter((d) => d.kind !== 'coverage.background' && d.kind !== 'coverage.pass').length} 项（粗版，--slice 不计）` : ''}${report.deferred?.some((d) => d.kind === 'coverage.background') ? ` · 只作背景 ${report.deferred.filter((d) => d.kind === 'coverage.background').length} 条` : ''}${report.deferred?.some((d) => d.kind === 'coverage.pass') ? ` · 留给后面的遍 ${report.deferred.filter((d) => d.kind === 'coverage.pass').length} 条` : ''} → ${report.conclusion === 'clean' ? '干净' : '不干净'}（${path.relative(process.cwd(), path.join(dir, name + '.md'))}）`)
   if (report.conclusion !== 'clean') process.exitCode = 1
 }
 function rank(x) {
@@ -718,7 +846,7 @@ function renderMd(r) {
   if (r.slice) L.push(`- 切片：${r.slice}`)
   if (r.decodedVersion) L.push(`- 解码版本：${r.decodedVersion}`)
   L.push(`- 时间：${r.at}`)
-  L.push(`- 错误 ${r.errors.length} · 警告 ${r.warnings.length} · 需人确认 ${r.confirms.length} · 待判断 ${r.judgments.length} · 已裁决 ${r.decided.length}`)
+  L.push(`- 错误 ${r.errors.length} · 警告 ${r.warnings.length} · 需人确认 ${r.confirms.length + r.judgments.filter((j) => j.escalated).length} · 待判断 ${r.judgments.length} · 已裁决 ${r.decided.length}`)
   L.push(`- **结论：${r.conclusion === 'clean' ? '干净' : '不干净'}**`)
   const section = (title, items, fmt) => {
     L.push('', `## ${title}`, '')
@@ -813,3 +941,67 @@ function scanBrokenChars() {
   }
 }
 scanBrokenChars()
+
+// ---------- 走查里提到的步号 ----------
+/**
+ * 走查正文、walk、缺口、裁定卡里常写「第 N 步」，可步号会变：删一步、插一步，后面全跟着挪。
+ * 机器判不了「这一处指的内容对不对」，但判得了「这一步压根不存在」——越界的先报出来，人再去核内容。
+ * 历史记录（story 的 log）跳过：那里的步号说的是当时，改了反而不实。
+ * 由来：2026-09-18 第一百四十二批删掉第 74 步、后面 47 步顺延，开发指挥的补丁脚本只认「第 N 步」，
+ * 漏了「第 A、B 步」这种顿号隔开的写法——漏网四处，其中一处指着已经不存在的第 121 步。
+ */
+/** 这条切片名下的走查：一整条（<id>.story.json），或者一场一条（<id>.w<场次>.story.json，第一百五十批） */
+function storiesOf(id) {
+  const dir = path.join(root, 'slices')
+  if (!id || !fs.existsSync(dir)) return []
+  const re = new RegExp('^' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\.w(\\d+))?\\.story\\.json$')
+  return fs.readdirSync(dir).map((f) => ({ f, m: f.match(re) })).filter((x) => x.m)
+    .sort((a, b) => (+a.m[1] || 0) - (+b.m[1] || 0))
+    .map((x) => { try { return { file: 'slices/' + x.f, scene: x.m[1] ? +x.m[1] : null, story: JSON.parse(fs.readFileSync(path.join(dir, x.f), 'utf8')) } } catch { return null } })
+    .filter(Boolean)
+}
+function scanStepRefs() {
+  for (const s of storiesOf(sliceId)) scanStepRefsIn(s.story, s.file)
+}
+function scanStepRefsIn(story, file) {
+  const max = (story.steps ?? []).length
+  if (!max) return
+  const bad = []
+  const STEP = new RegExp('第\\s?\\d{1,3}(?:\\s?[、与和]\\s?\\d{1,3})*\\s?步', 'g')
+  const NUM = new RegExp('\\d{1,3}', 'g')
+  const visit = (node, at) => {
+    if (typeof node === 'string') {
+      for (const m of node.match(STEP) ?? []) {
+        for (const d of m.match(NUM) ?? []) if (+d > max) bad.push({ at, n: +d, text: m })
+      }
+      return
+    }
+    if (Array.isArray(node)) return node.forEach((v, i) => visit(v, at + '[' + i + ']'))
+    if (node && typeof node === 'object') {
+      for (const [k, v] of Object.entries(node)) {
+        if (k === 'log') continue // 历史记录里的步号说的是当时
+        visit(v, at ? at + '.' + k : k)
+      }
+    }
+  }
+  visit(story, '')
+  // 候选 #18、#19：步号、缺口编号会变，指着编号的字不会自己跟着变——跨场引用说事情不说步号，缺口之间用一句话点名
+  const crossScene = [], gapRefs = []
+  const walkText = (node, at) => {
+    if (typeof node === 'string') {
+      for (const m of node.match(/场景[一二三四五六七八九十\d]+\s?第\s?\d{1,3}\s?步/g) ?? []) crossScene.push({ at, text: m })
+      for (const m of node.match(/缺口第\s?\d{1,3}\s?条/g) ?? []) gapRefs.push({ at, text: m })
+      return
+    }
+    if (Array.isArray(node)) return node.forEach((v, i) => walkText(v, at + '[' + i + ']'))
+    if (node && typeof node === 'object') for (const [k, v] of Object.entries(node)) if (k !== 'log' && k !== 'choices') walkText(v, at ? at + '.' + k : k)
+  }
+  walkText(story, '')
+  if (crossScene.length) console.error(file + ' 里跨场指着步号 ' + crossScene.length + ' 处（第一百五十批：跨场引用说事情不说步号），例如 ' + crossScene.slice(0, 3).map((x) => x.at + '「' + x.text + '」').join('；'))
+  if (gapRefs.length) console.error(file + ' 里缺口之间用编号互指 ' + gapRefs.length + ' 处（候选 #19：改成一句话点名，指错了当场看得出），例如 ' + gapRefs.slice(0, 3).map((x) => x.at + '「' + x.text + '」').join('；'))
+  if (bad.length) {
+    console.error(file + ' 里指着不存在的步 ' + bad.length + ' 处（这一条只有 ' + max + ' 步；多半是删步或插步之后没跟上，逐处核内容再改）：')
+    for (const b of bad) console.error('  · ' + b.at + '　写着「' + b.text + '」，其中第 ' + b.n + ' 步没有')
+  }
+}
+scanStepRefs()

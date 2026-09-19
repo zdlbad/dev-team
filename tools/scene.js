@@ -117,7 +117,7 @@ function slices() {
     .map((f) => {
       const d = readJson(path.join(dir, f), null)
       if (!d) return null
-      const st = readJson(path.join(dir, f.replace(/\.json$/, '.story.json')), null)
+      const st = require('./lib/project').currentStory(root, f.replace(/\.json$/, ''))?.story ?? null
       const steps = st?.steps ?? []
       const lit = new Set()
       for (const x of steps) for (const t of x.traces ?? []) lit.add(t)

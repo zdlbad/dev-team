@@ -47,7 +47,10 @@ function buildStructure(project, story) {
     return M.aggregates.get(key)
   }
   const rules = (list, level) => (list || []).map((r) => ({ text: r.text, traces: r.traces || [], throws: r.throws || [], level }))
-  const behaviors = (list) => (list || []).map((b) => ({ name: b.name, note: b.note || '', input: b.input || [], output: b.output, rules: (b.rules || []).map((r) => (typeof r === 'string' ? { text: r, traces: [] } : { text: r.text, traces: r.traces || [] })), throws: b.throws || [], raises: b.raises || [], traces: b.traces || [] }))
+  const behaviors = (list) => (list || []).map((b) => ({ name: b.name, note: b.note || '', input: b.input || [], output: b.output, rules: (b.rules || []).map((r) => (typeof r === 'string' ? { text: r, traces: [] } : { text: r.text, traces: r.traces || [] })), throws: b.throws || [], raises: b.raises || [], traces: b.traces || [],
+    // 第一百五十六批的七段：作用、做法（每一步改哪几栏）、简单方法；领域服务操作还有读写
+    purpose: b.purpose ? { text: b.purpose.text, traces: b.purpose.traces || [] } : null, steps: (b.purpose ? b.steps || [] : []).map((s) => ({ text: s.text, changes: s.changes || [], throws: s.throws || [], traces: s.traces || [] })), simple: !!b.simple, reads: b.reads || [], writes: b.writes || [] }))
+  const createOf = (d) => (d.create ? behaviors([{ name: 'create', ...d.create }])[0] : null)
   const fields = (list) => (list || []).map((f) => ({ name: f.name, type: f.type, note: f.note || f.description || '', traces: f.traces || [], ref: f.ref }))
   for (const el of m.elements) {
     const d = el.data || {}
@@ -55,12 +58,12 @@ function buildStructure(project, story) {
     if (el.kind === 'aggregate-root') {
       const a = aggOf(M, el.aggregateFolder, d.name)
       a.name = d.name
-      a.root = { file: el.file, name: d.name, narrative: d.aggregateNarrative || '', rules: [...rules(d.aggregateInvariants, 'aggregate'), ...rules(d.invariants, 'root')], fields: fields(d.fields), behaviors: behaviors(d.behaviors), traces: d.traces || [] }
+      a.root = { file: el.file, name: d.name, narrative: d.aggregateNarrative || '', rules: [...rules(d.aggregateInvariants, 'aggregate'), ...rules(d.invariants, 'root')], fields: fields(d.fields), behaviors: behaviors(d.behaviors), create: createOf(d), traces: d.traces || [] }
     } else if (el.kind === 'value-object' || el.kind === 'entity') {
       const a = aggOf(M, el.aggregateFolder, d.aggregate)
-      ;(el.kind === 'value-object' ? a.valueObjects : a.entities).push({ file: el.file, name: d.name, rules: rules(d.invariants, 'root'), fields: fields(d.fields), behaviors: behaviors(d.behaviors), traces: d.traces || [] })
+      ;(el.kind === 'value-object' ? a.valueObjects : a.entities).push({ file: el.file, name: d.name, rules: rules(d.invariants, 'root'), fields: fields(d.fields), behaviors: behaviors(d.behaviors), create: createOf(d), traces: d.traces || [] })
     } else if (el.kind === 'error') {
-      aggOf(M, el.aggregateFolder, d.aggregate).errors.push({ file: el.file, name: d.name, conditions: (d.condition || []).map((c) => (typeof c === 'string' ? { text: c, traces: [] } : { text: c.text, traces: c.traces || [] })), traces: d.traces || [] })
+      aggOf(M, el.aggregateFolder, d.aggregate).errors.push({ file: el.file, name: d.name, conditions: (typeof d.condition === 'string' ? [d.condition] : d.condition || []).map((c) => (typeof c === 'string' ? { text: c, traces: [] } : { text: c.text, traces: c.traces || [] })), traces: d.traces || [] })
     } else if (el.kind === 'repository') {
       aggOf(M, el.aggregateFolder, d.aggregate).repositories.push({ file: el.file, name: d.name, methods: (d.methods || []).map((x) => ({ name: x.name, kind: x.kind, input: x.input || [], output: x.output })), traces: d.traces || [] })
     } else if (el.kind === 'event') {
@@ -69,7 +72,7 @@ function buildStructure(project, story) {
       const item = { file: el.file, kind: el.kind, name: d.name, actor: d.actor, trigger: d.trigger, input: d.input || [], writes: d.writes || [], steps: (d.steps || []).map((s, i) => ({ i, text: s.text, call: s.call || null, output: s.output, throws: s.throws || [] })), throws: d.throws || [], raises: d.raises || [], traces: d.traces || [], storySteps: [] }
       ;(el.kind === 'command-handler' ? M.commands : el.kind === 'query-handler' ? M.queries : M.handlers).push(item)
     } else if (el.kind === 'service') {
-      M.services.push({ file: el.file, name: d.name, behaviors: behaviors(d.behaviors || d.operations), traces: d.traces || [] })
+      M.services.push({ file: el.file, name: d.name, coordinates: d.coordinates || [], behaviors: behaviors(d.behaviors || d.operations), traces: d.traces || [] })
     } else if (el.kind === 'port') {
       M.ports.push({ file: el.file, name: d.name, kind: d.kind, target: d.target, operations: (d.operations || []).map((o) => ({ name: o.name, input: o.input || [], output: o.output, note: o.note || '', traces: o.traces || [] })), traces: d.traces || [] })
     }
@@ -201,6 +204,21 @@ const html = `<!doctype html>
   .card h4 { margin:0 0 4px; font-size:14px; }
   .ovm { display:flex; gap:10px; flex-wrap:wrap; margin:10px 0; }
   .ovm .m { border:1px solid var(--line); border-radius:8px; padding:8px 12px; min-width:160px; cursor:pointer; }
+  /* 按模型看（第一百五十六批）：一个方法一块，左列标签、右列自然语言 */
+  .mb { border:1px solid var(--line); border-left:4px solid var(--line); border-radius:8px; padding:6px 12px 4px; margin:10px 0; background:#fff; }
+  .mb.new { border-left-color:#1a7f37; } .mb.refloat { border-left-color:#d4770a; } .mb.done { opacity:.6; }
+  .mb .mh { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; padding:4px 0 6px; }
+  .mb .mh code { font:600 14px ui-monospace, Consolas, monospace; color:#0550ae; }
+  .st2 { font-size:11px; color:#fff; border-radius:4px; padding:0 6px; } .st2.new { background:#1a7f37; } .st2.refloat { background:#d4770a; } .st2.same { background:#8c959f; }
+  .lr { display:grid; grid-template-columns:4.5em 1fr; gap:8px; padding:5px 0; border-top:1px dashed var(--line); }
+  .lr > b { color:var(--muted); font-weight:600; font-size:13px; }
+  .lr ol, .lr ul { margin:0; padding-left:20px; } .lr li { margin:2px 0; }
+  .chg { font-size:12px; color:#0969da; }
+  .chip.ok { color:#1a7f37; border-color:#a7d9b3; } .chip.push { color:#cf222e; border-color:#f3b8b5; font-weight:600; }
+  .mb .row { border-top:1px solid var(--line); padding-top:6px; margin-top:6px; }
+  .skip { color:var(--muted); font-size:12.5px; border-top:1px solid var(--line); padding:6px 0; }
+  .landtx { background:var(--lo); border-radius:6px; padding:6px 10px; margin:4px 0; font-size:13px; white-space:pre-wrap; }
+  @media (max-width: 760px) { .wrap { display:block; } aside { width:auto; position:static; max-height:40vh; border-right:0; border-bottom:1px solid var(--line); } main { padding:12px; } .lr { grid-template-columns:1fr; } }
   .ovm .m b { font-size:15px; } .ovm .m .c { color:var(--bad); font-weight:700; } .ovm .m .c.zero { color:var(--ok); }
 </style></head>
 <body>
@@ -260,12 +278,13 @@ function bindControls(root) {
     if (v !== undefined && v !== null) el.value = v
     el.addEventListener('input', () => {
       it.human = it.human || {}; it.human[el.dataset.f] = el.value; it.human.at = new Date().toISOString().slice(0,10)
-      const box = el.closest('.item, .jc'); if (box) box.classList.toggle('done', !!it.human.verdict)
+      const box = el.closest('.item, .jc, .mb'); if (box) box.classList.toggle('done', !!it.human.verdict)
       if (mode === 'structure') renderTree()
+      if (mode === 'story' && NEW()) { const s = $('#bizcount'); if (s) s.textContent = bizOpen() }
       if (mode === 'code') renderCodeTree()
       scheduleSave()
     })
-    if (it.human?.verdict) { const box = el.closest('.item, .jc'); if (box) box.classList.add('done') }
+    if (it.human?.verdict) { const box = el.closest('.item, .jc, .mb'); if (box) box.classList.add('done') }
   }
 }
 function introNode() {
@@ -275,25 +294,52 @@ function introNode() {
   // 「等你」只数校验角色已经答过的：他没答的那几条轮不到你看（你要做的是看他的理由站不站得住）。
   // 从前这里数的是「人还没填的」，于是校验角色一条没答时，这一页也说「31 条等你」，而页签上的待办数说 0——
   // 两处对不上，人点进来发现没自己的事（2026-09-17 k-002 真出过）
-  const open = js.filter(j => j.verdict && !j.human?.verdict).length
+  const open = js.filter(j => j.verdict && !j.human?.verdict && (!NEW() || pushed(j))).length
   const pending = js.filter(j => !j.verdict).length
   intro.innerHTML = data.mode ? '<b>这一页在问什么（审代码）：</b>pre-pr 审查角色读写好的代码，按几个角度找毛病：用例流程走得对不对、有没有删掉或放松规则、测试测的是不是行为、读着顺不顺。每条发现标着轻重——必须改、应该改、说明——附上会出什么事。<b>你做的：</b>同意它的判断，或不同意写一句为什么；上一轮让改的这轮核过的列在旁边。' + (mode === 'code' ? '<b>按代码结构看：</b>左边是这一段的代码文件，红数字是那个文件上还有几条等你。' : '') + '每次改动自动保存。'
     : (String(data.direction) === '2'
     ? '<b>这一页在问什么（审代码对模型）：</b>解码器把写好的代码读回一份模型，跟模型师的模型逐条比；对不上的地方一条一问「是代码写错了，还是模型该跟着改」。目标是代码文件，按结构看时挂在它对应的模型元素下。没有条目就是代码与模型一字不差。'
-    : '<b>这一页在问什么（审模型）：</b>校验器给你在故事里确认过的每一条业务语句生成一问「模型有没有把它表达出来」，给每个命令的每一步生成一问「这一步是不是只做编排」。')
+    : '<b>这一页在问什么（审模型）：</b>两件事，分两个视角（第一百五十六批）。<b>按模型看</b>：模型写得对不对、有没有条理——左边是模型的树，右边一个方法一块（作用、入参、做法、规则、错误、事件、返回），新的与重浮的点「写得对 / 要改」，要改就退回模型师。<b>按业务看</b>：业务有没有被撑起来——工具查有没有落点、校验角色逐条判落得对不对全不全，<b>只有推上来的</b>（判不通过的，与重要度高、校验没把握的）要你点同意或不同意。')
     + '<b>谁答的：</b>校验角色先答（通过 / 不通过 + 理由）。<b>你只做一件事：</b>看他的理由站不站得住，同意或不同意。这些都是确认，不是新的业务问题——要你拍板的业务分岔在故事页的裁定卡上。<br>'
     + (function(){ var stale = js.filter(function(j){ return !j.human?.verdict && j.staleDecision && !j.staleDecision.reordered }).length; return open ? '<b>这次：</b>新的 ' + (open - stale) + ' 条、文字改了重浮的 ' + stale + ' 条（重浮的旁边写着上次你怎么裁，意思没变就照旧）。' : '' })()
     // 警告也等他：角色修不掉的，驳回或退回只有他能定（2026-09-16 起警告不再挡着判断，跟判断一起交给人）
     + (function(){ var w = (data.warnings || []).filter(function(x){ return !x.human?.verdict }).length; return w ? '<b style="color:#b45309">另有 ' + w + ' 条警告等你处理</b>（在「警告」那一节：站得住就驳回并写理由，不对就选「要改」退回模型师）。' : '' })()
     // 校验角色还没答的：这一页先摆在这儿给你看，但还不是你的活——他答完才轮到你
     + (pending ? '<b style="color:#b45309">这一页还没轮到你：</b>' + js.length + ' 条里有 ' + pending + ' 条校验角色还没答（下面那些空着「校验角色」一栏的）。他答完这一页才会在页签上给你挂待办数。' + (open ? '你现在能看的是已经答过的 ' + open + ' 条。' : '') + '<br>' : '')
-    + '共 ' + js.length + ' 条，还有 <b>' + open + '</b> 条等你：校验角色高信心通过 ' + nHigh + ' 条（可以点右上角「其余高信心的一并同意」一次处理），' + '值得你看的 ' + nLow + ' 条（信心中 / 低' + (nFail ? '、不通过 ' + nFail + ' 条' : '') + '）。'
+    + (NEW() ? '共 ' + js.length + ' 条判断，推上来还没裁的 <b>' + open + '</b> 条；' + ((data.blocks || []).filter(b => b.state !== 'same' && !b.human?.verdict).length) + ' 块方法等你看（新的 ' + (data.blocks || []).filter(b => b.state === 'new').length + '、重浮的 ' + (data.blocks || []).filter(b => b.state === 'refloat').length + '）。' : '共 ' + js.length + ' 条，还有 <b>' + open + '</b> 条等你：校验角色高信心通过 ' + nHigh + ' 条（可以点右上角「其余高信心的一并同意」一次处理），' + '值得你看的 ' + nLow + ' 条（信心中 / 低' + (nFail ? '、不通过 ' + nFail + ' 条' : '') + '）。')
     + (mode === 'structure' ? '<b>按结构看：</b>左边是模型的树，红色数字是那一处还有几条等你；点一个命令，能看到它每一步指到哪个聚合的哪个方法、哪个仓储、哪个端口，规则挂在方法下面。' : (data.story ? '顺序按故事走：每一步的标题就是故事那句话，下面是这一步用到的业务在模型里对得上对不上。' : '顺序按重要度从高到低、信心从低到高。'))
     + '每次改动自动保存。'
   return intro
 }
+/* ---------------- 第一百五十六批：按业务看 ---------------- */
+function bizOpen() { return (data.judgments || []).filter(j => pushed(j) && !j.human?.verdict).length }
+function bizCard(it, i) {
+  return '<div class="item ' + (it.importance || '') + (it.human?.verdict ? ' done' : '') + '">'
+    + '<div class="check">' + esc(it.target) + (it.escalated ? ' <span class="tag" style="color:#b91c1c;border-color:#f3b8b5">重要度高、校验没把握</span>' : it.verdict === 'fail' ? ' <span class="tag" style="color:#b91c1c;border-color:#f3b8b5">校验判不通过</span>' : '') + '</div>'
+    + (it.sides?.business ? '<div class="biz" style="white-space:pre-wrap">' + esc(it.sides.business) + '</div>' : '<div>' + esc(it.ask || it.check) + '</div>')
+    + (data.structure?.length ? landingsHtml(it) : '')
+    + (it.sides?.model ? '<div class="landtx">' + esc(it.sides.model) + '</div>' : '')
+    + judgmentControls(it, i) + '</div>'
+}
+function renderBiz() {
+  const main = $('#main'); main.innerHTML = ''
+  main.appendChild(introNode())
+  section(main, '需人确认', data.confirms, confirmControls, false)
+  const js = (data.judgments || []).map((it, i) => ({ it, i }))
+  const up = js.filter(({ it }) => pushed(it)).sort((a, b) => rank(b.it.importance) - rank(a.it.importance) || (rank(a.it.confidence) || 9) - (rank(b.it.confidence) || 9))
+  const h = document.createElement('div')
+  h.innerHTML = '<h2>推上来要你裁的（' + up.length + '，还有 <span id="bizcount">' + bizOpen() + '</span> 条没裁）</h2>'
+    + (up.length ? up.map(({ it, i }) => bizCard(it, i)).join('') : '<p class="empty">没有推上来的：校验角色判的都通过、而且有把握。</p>')
+    + '<details style="margin-top:16px"><summary>其余 ' + (js.length - up.length) + ' 条（校验通过、有把握；不用你点，想看再展开）</summary>' + js.filter(({ it }) => !pushed(it)).map(({ it, i }) => bizCard(it, i)).join('') + '</details>'
+  main.appendChild(h)
+  section(main, '警告', data.warnings, warningControls, false)
+  section(main, '错误（只读，必须修）', data.errors, () => '', false)
+  bindControls(main)
+  for (const el of main.querySelectorAll('[data-go]')) el.addEventListener('click', () => { mode = 'structure'; try { localStorage.setItem('review-mode', mode) } catch {} sel = el.dataset.go; render(); window.scrollTo(0, 0) })
+}
 /* ---------------- 按故事 / 平铺 ---------------- */
 function renderFlat() {
+  if (NEW()) return renderBiz()
   const main = $('#main'); main.innerHTML = ''
   main.appendChild(introNode())
   section(main, '需人确认', data.confirms, confirmControls, true)
@@ -381,7 +427,10 @@ function indexJudgments() {
   ;(data.judgments || []).forEach((it, i) => { for (const f of filesOf(it)) { if (!byFile.has(f)) byFile.set(f, []); byFile.get(f).push(i) } })
 }
 // 树上的红数字与页首「等你」同一个口径：校验角色答过、人还没看的才算
-const openCount = (files) => { const seen = new Set(); for (const f of files) for (const i of byFile.get(f) || []) { const j = data.judgments[i]; if (j.verdict && !j.human?.verdict) seen.add(i) } return seen.size }
+const openCount = (files) => { const seen = new Set(); for (const f of files) for (const i of byFile.get(f) || []) { const j = data.judgments[i]; if (j.verdict && !j.human?.verdict && (!NEW() || pushed(j))) seen.add(i) }
+  // 按模型看：这几个文件里等看的块也算
+  const blocks = NEW() ? (data.blocks || []).filter(b => files.includes(b.file) && b.state !== 'same' && !b.human?.verdict).length : 0
+  return seen.size + blocks }
 function aggFiles(a) { return [a.root?.file, ...a.valueObjects.map(x => x.file), ...a.entities.map(x => x.file), ...a.errors.map(x => x.file), ...a.repositories.map(x => x.file), ...a.events.map(x => x.file)].filter(Boolean) }
 function modFiles(M) { return [...M.aggregates.flatMap(aggFiles), ...[...M.commands, ...M.queries, ...M.handlers, ...M.services, ...M.ports].map(x => x.file)] }
 // 一个元素的文字里有没有提到某个业务编号（高亮用）
@@ -392,7 +441,7 @@ function mentions(x, id) {
 function nodeHtml(id, label, kind, files, depth, hasKids, extra) {
   const n = openCount(files)
   const isSel = sel === id
-  const hl = hlId && extra && extra.some(x => mentions(x, hlId))
+  const hl = (hlId && extra && extra.some(x => mentions(x, hlId))) || litHas(extra)
   return '<div class="tn' + (isSel ? ' sel' : '') + (n ? '' : ' zero') + (hl ? ' hl' : '') + '" data-id="' + esc(id) + '" style="padding-left:' + (6 + depth * 14) + 'px">'
     + '<span class="tw"' + (hasKids ? ' data-tw="' + esc(id) + '"' : '') + '>' + (hasKids ? (openNodes.has(id) ? '▾' : '▸') : '') + '</span>'
     + (kind ? '<span class="k">' + esc(kind) + '</span>' : '') + '<span class="lb">' + esc(label) + '</span><span class="cnt' + (n ? '' : ' zero') + '">' + (n || '') + '</span></div>'
@@ -457,6 +506,7 @@ function chips(ids, cls) { return (ids || []).map(id => '<span class="chip ' + (
 function errChips(names) { return (names || []).map(n => '<span class="chip err">' + esc(n) + '</span>').join('') }
 // 落在某个文件上、并且（若给了编号）跟这个编号有关的判断
 function judgmentsFor(file, ids, step) {
+  if (NEW()) return []
   const out = []
   for (const i of byFile.get(file) || []) {
     const it = data.judgments[i]
@@ -512,11 +562,111 @@ function jcard(i) {
   const it = data.judgments[i]
   const short = it.check.replace(/？$/, '')
   return '<div class="jc ' + (it.importance || '') + (it.human?.verdict ? ' done' : '') + '"><div class="ck">' + esc(short) + '<span class="tag">' + esc(it.target) + '</span></div>'
+    + (it.escalated ? '<div style="color:#b91c1c;font-weight:600;margin:4px 0">要你亲自看：这一条重要度高，校验角色自己没把握（自信度 ' + esc(it.confidence) + '）——' + esc(it.reason || '') + '</div>' : '')
     + (it.sides?.business ? '<div class="biz">' + esc(it.sides.business) + '</div>' : '')
     + landingsHtml(it)
     + judgmentControls(it, i)
     + (it.sides?.model ? '<details><summary>校验器对到的模型原文</summary><div class="biz" style="font-size:13px">' + esc(it.sides.model) + '</div></details>' : '')
     + guideOf(it.check) + '</div>'
+}
+/* ---------------- 第一百五十六批：按模型看的块 ---------------- */
+// 方向 ①（审模型）走新的两个视角；方向 ② 与 pre-pr 照旧
+function NEW() { return String(data.direction) === '1' && !data.mode }
+// 推上来要人裁的判断：校验判不通过的，与重要度高、校验没把握的
+function pushed(it) { return it.verdict === 'fail' || !!it.escalated }
+function judgmentOfId(id) { return (data.judgments || []).find(j => j.target === id) }
+// 编号小标签：✓ 校验通过、有把握；⚠ 推上来了（人还没裁）；点一下高亮它落在哪儿
+function chipsJ(ids) {
+  return (ids || []).map(id => { const j = judgmentOfId(id); const cls = !j ? '' : pushed(j) && !j.human?.verdict ? 'push' : j.verdict ? 'ok' : ''; const mk = !j ? '' : pushed(j) && !j.human?.verdict ? ' ⚠' : j.verdict ? ' ✓' : ''
+    return '<span class="chip ' + cls + (hlId === id ? ' hl' : '') + '" data-chip="' + esc(id) + '" title="' + esc((data.business || {})[id]?.text || '') + '">' + esc(id) + mk + '</span>' }).join('')
+}
+function blockIdx(file, key) { return (data.blocks || []).findIndex(b => b.id === file + '#' + key) }
+const STATE = { new: '新的', refloat: '重浮的', same: '没变' }
+function blockCard(file, key, head, body) {
+  const i = blockIdx(file, key), b = i >= 0 ? data.blocks[i] : null
+  const needs = b && b.state !== 'same' && !b.simple
+  const ctl = !b ? '' : b.simple ? '<div class="skip">简单方法，跳过不用点</div>' : b.state === 'same' ? '' :
+    '<div class="row"><select data-k="blocks" data-i="' + i + '" data-f="verdict"><option value="">— 这一块 —</option><option value="ok">写得对</option><option value="fix">要改</option></select>'
+    + '<input type="text" placeholder="要改的话写哪里、改成什么" data-k="blocks" data-i="' + i + '" data-f="note"></div>'
+  return '<div class="mb ' + (b ? b.state : '') + (b?.human?.verdict ? ' done' : '') + '"><div class="mh">' + (b ? '<span class="st2 ' + b.state + '">' + STATE[b.state] + '</span>' : '') + head + (b?.simple ? ' <span class="tag">简单方法</span>' : '') + '</div>' + body + ctl + '</div>'
+}
+// 七段：作用、入参、做法、规则、错误、事件、返回（老写法没有作用与做法，就照原来摆说明与规则）
+function sevenHtml(b, extra) {
+  const L = []
+  if (b.purpose) L.push('<div class="lr"><b>作用</b><div>' + esc(b.purpose.text) + ' ' + chipsJ(b.purpose.traces) + '</div></div>')
+  else if (b.note) L.push('<div class="lr"><b>说明</b><div>' + esc(b.note) + '</div></div>')
+  if (extra) L.push(extra)
+  if ((b.input || []).length) L.push('<div class="lr"><b>入参</b><div>' + b.input.map(x => '<code>' + esc(paramText(x)) + '</code>' + (x.note ? ' ' + esc(x.note) : '')).join('<br>') + '</div></div>')
+  if ((b.steps || []).length) L.push('<div class="lr"><b>做法</b><ol>' + b.steps.map(s => '<li>' + esc(s.text) + (s.changes.length ? ' <span class="chg">→ 改 ' + s.changes.map(esc).join('、') + '</span>' : '') + (s.throws.length ? ' ' + errChips(s.throws) : '') + ' ' + chipsJ(s.traces) + '</li>').join('') + '</ol></div>')
+  if ((b.rules || []).length) L.push('<div class="lr"><b>规则</b><ul>' + b.rules.map(r => '<li' + (hlId && r.traces.includes(hlId) ? ' class="hl"' : '') + '>' + esc(r.text) + ' ' + chipsJ(r.traces) + '</li>').join('') + '</ul></div>')
+  L.push('<div class="lr"><b>错误</b><div>' + ((b.throws || []).length ? errChips(b.throws) : '无') + '</div></div>')
+  L.push('<div class="lr"><b>事件</b><div>' + ((b.raises || []).length ? b.raises.map(r => esc(typeof r === 'string' ? r : r.event || r.name || '')).join('、') : '无') + '</div></div>')
+  L.push('<div class="lr"><b>返回</b><div>' + (b.output ? '<code>' + esc(b.output) + '</code>' : '无') + '</div></div>')
+  return L.join('')
+}
+function sig7(b) { return '<code>' + esc(b.name) + '(' + (b.input || []).map(x => esc(x.name)).join(', ') + ')</code>' }
+// 一个聚合根 / 实体 / 值对象：「字段与创建」一块 + 每个行为一块
+function objectBlocks(el) {
+  let h = ''
+  const createBody = (el.narrative ? '<div class="lr"><b>说明</b><div>' + esc(el.narrative) + '</div></div>' : '')
+    + (el.fields.length ? '<div class="lr"><b>字段</b><div>' + fieldsHtml(el) + '</div></div>' : '')
+    + (el.create ? sevenHtml(el.create) : '')
+    + (el.rules.length ? '<div class="lr"><b>' + (el.create ? '不变量' : '创建时守的') + '</b><ol>' + el.rules.map(r => '<li' + (hlId && r.traces.includes(hlId) ? ' class="hl"' : '') + '>' + (r.level === 'aggregate' ? '<span class="lv">聚合级</span>' : '') + esc(r.text) + (r.throws.length ? ' ' + errChips(r.throws) : '') + ' ' + chipsJ(r.traces) + '</li>').join('') + '</ol></div>' : '')
+  if (createBody) h += blockCard(el.file, 'create', '<b>字段与创建</b>', createBody)
+  for (const b of el.behaviors) h += blockCard(el.file, 'behaviors.' + b.name, sig7(b), sevenHtml(b))
+  return h
+}
+/* ---------------- 看整张：点走查的一步，亮出支撑它的聚合、方法、字段 ---------------- */
+let litStep = null
+// 走查一步写的「A.b + C.d」→ 模型里的方法；walk.aggregate 另亮那个聚合（建立、查询这类留给应用层的也亮聚合）
+function litOf(w) {
+  const out = { methods: [], aggs: [] }
+  if (!w) return out
+  for (const part of String(w.name || '').split('+').map(x => x.trim())) {
+    const m = part.match(/^((?:[A-Z][A-Za-z0-9]*\\.)+)([a-z][A-Za-z0-9]*)$/)
+    if (!m) continue
+    const segs = m[1].slice(0, -1).split('.'), owner = segs[segs.length - 1], method = m[2]
+    for (const M of data.structure || []) {
+      for (const a of M.aggregates) for (const el of [a.root, ...a.valueObjects, ...a.entities].filter(Boolean)) {
+        const b = el.behaviors.find(x => x.name === method)
+        if (el.name === owner && b) out.methods.push({ M, a, el, b, key: 'behaviors.' + b.name, label: owner + '.' + method })
+      }
+      for (const s of M.services) { const b = s.behaviors.find(x => x.name === method); if (s.name === owner && b) out.methods.push({ M, a: null, el: s, b, key: 'operations.' + b.name, label: '领域服务 ' + owner + '.' + method }) }
+    }
+  }
+  const ag = String(w.aggregate || '').split('.').pop()
+  for (const M of data.structure || []) for (const a of M.aggregates) if (a.name === ag || out.methods.some(x => x.a === a)) out.aggs.push({ M, a })
+  return out
+}
+function litHas(els) {
+  if (litStep === null || !els) return false
+  const L = litOf((data.walk || [])[litStep])
+  return els.some(e => e && (L.methods.some(x => x.el === e) || L.aggs.some(x => x.a.root === e)))
+}
+function walkListHtml() {
+  const W = data.walk || []
+  if (!W.length) return ''
+  let h = '<h3>看整张：点走查的一步，看支撑它的聚合、方法、字段</h3><div class="card">'
+  let last = null
+  W.forEach((w, i) => {
+    if (w.sid !== last) { last = w.sid; h += '<div class="k" style="margin-top:6px">' + esc(w.scene ? '第 ' + w.scene + ' 场（' + w.sid + '）' : w.sid) + '</div>' }
+    const L = litOf(w), cnt = L.methods.length ? L.methods.length + ' 个方法' : L.aggs.length ? '只到聚合' : '不经过模型'
+    h += '<div class="rule' + (litStep === i ? ' hl' : '') + '" style="cursor:pointer" data-step="' + i + '"><b>第 ' + esc(w.n) + ' 步</b> ' + esc(w.text).slice(0, 80) + ' <span class="k">→ ' + esc(cnt) + '</span></div>'
+  })
+  return h + '</div>'
+}
+function litPaneHtml() {
+  const w = (data.walk || [])[litStep]
+  if (!w) return ''
+  const L = litOf(w)
+  let h = '<div class="hd"><span class="k">' + esc(w.scene ? '第 ' + w.scene + ' 场 · ' : '') + '第 ' + esc(w.n) + ' 步</span><h2>这一步亮起来的</h2></div><div class="narr">' + esc(w.text) + '</div>'
+  h += '<div class="meta">走查写着：' + esc(w.name || '（没有动作）') + (w.aggregate ? '　· 聚合 ' + esc(w.aggregate) : '') + '</div>'
+  if (!L.methods.length && !L.aggs.length) return h + '<p class="empty">这一步不经过模型（查询、铺垫，或者留给应用层）。</p>'
+  if (L.aggs.length) h += '<div class="meta">聚合：' + L.aggs.map(x => '<span class="to" data-go="' + esc('a:' + x.M.name + ':' + x.a.key) + '">' + esc(x.a.name) + '</span>').join('、') + '</div>'
+  const fieldsTouched = [...new Set(L.methods.flatMap(x => (x.b.steps || []).flatMap(s => s.changes)))]
+  if (fieldsTouched.length) h += '<div class="meta">改到的字段：' + fieldsTouched.map(f => '<code>' + esc(f) + '</code>').join('、') + '</div>'
+  for (const x of L.methods) h += '<div class="k" style="margin-top:8px">' + esc(x.label) + '</div>' + blockCard(x.el.file, x.key, sig7(x.b), sevenHtml(x.b))
+  return h
 }
 function rulesHtml(el, opts) {
   if (!el || !el.rules?.length) return ''
@@ -548,7 +698,7 @@ function behaviorsHtml(el) {
 }
 function errorsHtml(a) {
   if (!a.errors.length) return ''
-  return '<h3>错误——什么时候抛</h3>' + a.errors.map(e => '<div class="card" id="' + esc('f:' + e.file) + '"><h4><span class="chip err">' + esc(e.name) + '</span></h4>' + e.conditions.map(c => '<div class="rule' + (hlId && c.traces.includes(hlId) ? ' hl' : '') + '">' + esc(c.text) + ' ' + chips(c.traces) + judgmentsFor(e.file, c.traces).map(jcard).join('') + '</div>').join('') + leftover(e.file, e.conditions.flatMap(c => c.traces)) + '</div>').join('')
+  return '<h3>错误——表示什么</h3>' + a.errors.map(e => '<div class="card" id="' + esc('f:' + e.file) + '"><h4><span class="chip err">' + esc(e.name) + '</span></h4>' + e.conditions.map(c => '<div class="rule' + (hlId && c.traces.includes(hlId) ? ' hl' : '') + '">' + esc(c.text) + ' ' + chips(c.traces) + judgmentsFor(e.file, c.traces).map(jcard).join('') + '</div>').join('') + leftover(e.file, e.conditions.flatMap(c => c.traces)) + '</div>').join('')
 }
 // 落在这个文件上、却没挂到任何一条具体规则 / 字段 / 条件上的判断（编号只写在元素的 traces 上）
 function leftover(file, coveredIds) {
@@ -591,6 +741,16 @@ function usecaseHtml(M, c) {
   return h
 }
 function aggregateHtml(M, a) {
+  if (NEW()) {
+    const r = a.root
+    let h = '<div class="hd"><span class="k">' + esc(M.name) + ' › 聚合</span><h2>' + esc(a.name) + '</h2>' + chipsJ(r?.traces) + '</div>'
+    if (r?.code) h += '<div class="meta">代码：' + esc(r.code) + '</div>'
+    if (r) h += objectBlocks(r)
+    for (const v of [...a.valueObjects, ...a.entities]) h += '<h3 id="' + esc('f:' + v.file) + '">' + (a.valueObjects.includes(v) ? '值对象' : '实体') + ' ' + esc(v.name) + '</h3>' + objectBlocks(v)
+    if (a.errors.length) h += '<h3>错误——表示什么</h3>' + a.errors.map(e => '<div class="card" id="' + esc('f:' + e.file) + '"><h4><span class="chip err">' + esc(e.name) + '</span></h4>' + e.conditions.map(c => '<div class="rule">' + esc(c.text) + ' ' + chipsJ(c.traces) + '</div>').join('') + '</div>').join('')
+    if (a.events.length) h += '<h3>事件</h3>' + a.events.map(e => '<div class="card" id="' + esc('f:' + e.file) + '"><h4>' + esc(e.name) + '</h4>' + fieldsHtml(e) + '</div>').join('')
+    return h
+  }
   const r = a.root
   let h = '<div class="hd"><span class="k">' + esc(M.name) + ' › 聚合</span><h2>' + esc(a.name) + '</h2>' + chips(r?.traces) + '</div>'
   if (r?.code) h += '<div class="meta">代码：' + esc(r.code) + '</div>'
@@ -614,11 +774,16 @@ function portHtml(M, p) {
   h += leftover(p.file, p.operations.flatMap(o => o.traces))
   return h
 }
-function serviceHtml(M, s) { return '<div class="hd"><span class="k">' + esc(M.name) + ' › 领域服务</span><h2>' + esc(s.name) + '</h2>' + chips(s.traces) + '</div>' + behaviorsHtml(s) + leftover(s.file, s.behaviors.flatMap(b => [...b.traces, ...b.rules.flatMap(x => x.traces)])) }
+function serviceHtml(M, s) {
+  if (NEW()) return '<div class="hd"><span class="k">' + esc(M.name) + ' › 领域服务</span><h2>' + esc(s.name) + '</h2>' + chipsJ(s.traces) + '</div>' + (s.coordinates?.length ? '<div class="meta">协调 ' + s.coordinates.map(esc).join('、') + '</div>' : '')
+    + s.behaviors.map(b => blockCard(s.file, 'operations.' + b.name, sig7(b), sevenHtml(b, (b.reads.length || b.writes.length ? '<div class="lr"><b>读 / 写</b><div>读 ' + (b.reads.map(esc).join('、') || '—') + '；写 ' + (b.writes.map(esc).join('、') || '—') + '</div></div>' : '') + (b.purpose && b.note ? '<div class="lr"><b>说明</b><div>' + esc(b.note) + '</div></div>' : '')))).join('')
+  return legacyServiceHtml(M, s)
+}
+function legacyServiceHtml(M, s) { return '<div class="hd"><span class="k">' + esc(M.name) + ' › 领域服务</span><h2>' + esc(s.name) + '</h2>' + chips(s.traces) + '</div>' + behaviorsHtml(s) + leftover(s.file, s.behaviors.flatMap(b => [...b.traces, ...b.rules.flatMap(x => x.traces)])) }
 function overviewHtml() {
   const S = data.structure || []
   let h = '<h2 style="margin-top:0">总览</h2><div class="ovm">' + S.map(M => { const n = openCount(modFiles(M)); return '<div class="m" data-go="' + esc('m:' + M.name) + '"><b>' + esc(M.name) + '</b><br><span class="c' + (n ? '' : ' zero') + '">' + (n ? n + ' 条等你' : '都看过了') + '</span><br><span class="k">' + M.aggregates.length + ' 个聚合 · ' + (M.commands.length + M.queries.length) + ' 个命令/查询 · ' + M.ports.length + ' 个端口</span></div>' }).join('') + '</div>'
-  const orphan = (data.judgments || []).map((it, i) => ({ it, i })).filter(({ it }) => !filesOf(it).some(f => findByFile(f)))
+  const orphan = NEW() ? [] : (data.judgments || []).map((it, i) => ({ it, i })).filter(({ it }) => !filesOf(it).some(f => findByFile(f)))
   if (orphan.length) h += '<h3>没落到树上任何元素的判断</h3>' + orphan.map(({ i }) => jcard(i)).join('')
   return h
 }
@@ -626,14 +791,15 @@ function renderPane() {
   const main = $('#main'); main.innerHTML = ''
   if (!sel) {
     main.appendChild(introNode())
-    const d = document.createElement('div'); d.innerHTML = overviewHtml(); main.appendChild(d)
+    const d = document.createElement('div'); d.innerHTML = overviewHtml() + (NEW() ? walkListHtml() : ''); main.appendChild(d)
     section(main, '需人确认', data.confirms, confirmControls, true)
     section(main, '警告', data.warnings, warningControls, true)
     section(main, '错误（只读，必须修）', data.errors, () => '', false)
   } else {
     const d = document.createElement('div')
     let h = '<p class="empty">树上没有这个节点</p>'
-    if (sel.startsWith('m:')) {
+    if (sel === 'w') h = litPaneHtml()
+    else if (sel.startsWith('m:')) {
       const M = (data.structure || []).find(x => x.name === sel.slice(2))
       if (M) h = '<div class="hd"><span class="k">模块</span><h2>' + esc(M.name) + '</h2></div><div class="meta">' + M.aggregates.length + ' 个聚合 · ' + M.commands.length + ' 个命令 · ' + M.queries.length + ' 个查询 · ' + M.ports.length + ' 个端口。左边点开看每一个；命令那一页能看到每一步指到哪个方法。</div>'
         + '<h3>命令</h3>' + (M.commands.map(c => '<div class="card"><h4><span class="to" data-go="' + esc('f:' + c.file) + '">' + esc(c.name) + '</span> <span class="k">' + (c.actor ? '执行者 ' + esc(c.actor) + ' · ' : '') + storyLine(c) + '</span></h4><div class="k">' + c.steps.map((s, i) => (i + 1) + '. ' + esc(s.text)).join('　') + '</div></div>').join('') || '<p class="empty">（无）</p>')
@@ -658,6 +824,7 @@ function renderPane() {
   }
   bindControls(main)
   for (const el of main.querySelectorAll('[data-go]')) el.addEventListener('click', () => { sel = el.dataset.go; const parts = sel.split(':'); if (parts[0] === 'a') openNodes.add('m:' + parts[1]); else { const f = sel.startsWith('f:') ? findByFile(sel.slice(2)) : null; if (f) { openNodes.add('m:' + f.M.name); if (f.a) openNodes.add('a:' + f.M.name + ':' + f.a.key) } else if (parts[0] === 'm') openNodes.add(sel) } renderTree(); renderPane(); window.scrollTo(0, 0) })
+  for (const el of main.querySelectorAll('[data-step]')) el.addEventListener('click', () => { litStep = Number(el.dataset.step); sel = 'w'; for (const x of litOf((data.walk || [])[litStep]).aggs) openNodes.add('m:' + x.M.name); renderTree(); renderPane(); window.scrollTo(0, 0) })
   for (const el of main.querySelectorAll('[data-chip]')) el.addEventListener('click', (ev) => { ev.stopPropagation(); hlId = hlId === el.dataset.chip ? null : el.dataset.chip; renderTree(); renderPane(); $('#status').textContent = hlId ? '高亮 ' + hlId + ' 落在哪儿（树上黄色的），再点一次取消' : '' })
 }
 /* ---------------- 按代码结构（校验 ②、pre-pr） ---------------- */
@@ -778,7 +945,9 @@ function render() {
   const canStructure = !!(data.structure && data.structure.length)
   $('#mode').hidden = !canStructure
   if (!canStructure) mode = 'story'
-  $('#mode').textContent = mode === 'structure' ? '按故事看' : '按结构看'
+  $('#mode').textContent = NEW() ? (mode === 'structure' ? '按业务看' : '按模型看') : (mode === 'structure' ? '按故事看' : '按结构看')
+  // 方向 ① 只有推上来的等人，一并同意用不着了
+  $('#agree-high').hidden = NEW()
   $('#tree').hidden = mode !== 'structure'
   if (mode === 'structure') { indexJudgments(); if (!openNodes.size) for (const M of data.structure) openNodes.add('m:' + M.name); renderTree(); renderPane() }
   else renderFlat()
@@ -786,6 +955,10 @@ function render() {
 async function load() {
   data = await (await fetch('/data')).json()
   try { const m = localStorage.getItem('review-mode'); mode = m || (data.structure?.length ? 'structure' : 'story') } catch { mode = data.structure?.length ? 'structure' : 'story' }
+  if (location.hash === '#biz') mode = 'story'
+  if (location.hash === '#model' && data.structure?.length) mode = 'structure'
+  if (/^#w:\\d+$/.test(location.hash) && data.structure?.length) { mode = 'structure'; litStep = Number(location.hash.slice(3)); sel = 'w'; for (const x of litOf((data.walk || [])[litStep]).aggs) openNodes.add('m:' + x.M.name) }
+  if (/^#[af]:/.test(location.hash) && data.structure?.length) { mode = 'structure'; sel = decodeURIComponent(location.hash.slice(1)); const pr = sel.split(':'); if (pr[0] === 'a') openNodes.add('m:' + pr[1]) }
   render()
 }
 async function save(auto) {
@@ -851,6 +1024,8 @@ const server = http.createServer((req, res) => {
           for (const f of obj.scope?.files || []) files.add(f)
           obj.codeFiles = [...files].sort()
         } catch { obj.codeFiles = [] }
+        // 看整张用：这个切片名下每一场走查的每一步调了哪个方法（第一百五十六批）
+        try { obj.walk = require('./lib/project').storiesOfSlice(projectDir, obj.slice).flatMap((s) => (s.story.steps || []).map((x) => ({ sid: s.id, scene: s.scene, n: x.n, text: x.text, name: x.walk?.name || '', kind: x.walk?.kind || '', aggregate: x.walk?.aggregate || '' }))) } catch { obj.walk = [] }
         try { obj.structure = buildStructure(projectDir, st) } catch (e) { console.error('[审阅] 模型结构算不出来，只给按故事那一面：' + e.message) }
         try { const { loadBusiness } = require('./lib/project'); obj.business = Object.fromEntries((loadBusiness(projectDir) || []).map((s) => [s.id, { text: s.text, label: s.label }])) } catch { /* 没有就不给提示 */ }
       }
@@ -869,10 +1044,12 @@ const server = http.createServer((req, res) => {
         let obj = posted
         try {
           const disk = JSON.parse(fs.readFileSync(file, 'utf8'))
-          for (const arr of ['judgments', 'confirms']) {
-            const mine = new Map((posted[arr] ?? []).map((x) => [key(x), x]))
+          // 警告与按模型看的块也要合：从前只合判断与需人确认，警告上点的驳回存不进去
+          const keyOf = { judgments: key, confirms: key, warnings: (x) => [x.check, x.target, x.text].join(' '), blocks: (x) => x.id + ' ' + x.fp }
+          for (const arr of ['judgments', 'confirms', 'warnings', 'blocks']) {
+            const mine = new Map((posted[arr] ?? []).map((x) => [keyOf[arr](x), x]))
             for (const it of disk[arr] ?? []) {
-              const p = mine.get(key(it))
+              const p = mine.get(keyOf[arr](it))
               if (p && p.human) it.human = p.human
             }
           }
@@ -895,7 +1072,7 @@ const server = http.createServer((req, res) => {
           }
         } catch { /* 日志记不上不影响保存 */ }
         // 页面附上的结构、业务原文、故事不是报告的一部分，不写回
-        delete obj.structure; delete obj.business
+        delete obj.structure; delete obj.business; delete obj.walk
         fs.writeFileSync(file, JSON.stringify(obj, null, 2) + '\n')
         res.writeHead(200)
         res.end('ok')

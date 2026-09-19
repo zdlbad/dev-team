@@ -18,45 +18,13 @@
       "$ref": "urn:dev-team:common#/$defs/modelName"
     },
     "condition": {
-      "description": "何时抛出；解码结果为空字符串。写成数组就能一句一标：校验问某一条业务语句时只摆相关的那几句，不再把整张清单端出来",
-      "oneOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "array",
-          "items": {
-            "oneOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "text",
-                  "traces"
-                ],
-                "properties": {
-                  "text": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "traces": {
-                    "$ref": "urn:dev-team:common#/$defs/traces"
-                  },
-                  "carries": {
-                    "$ref": "urn:dev-team:common#/$defs/carries"
-                  }
-                }
-              }
-            ]
-          }
-        }
-      ]
+      "description": "这个错误表示什么：一句话说它指的是哪种不成立。不写在哪个方法、什么时候抛——那写在抛它的方法的规则里（第一百六十四批）",
+      "type": "string",
+      "minLength": 1
     },
     "traces": {
-      "$ref": "urn:dev-team:common#/$defs/traces"
+      "$ref": "urn:dev-team:common#/$defs/traces",
+      "description": "留空：错误不挂业务语句，语句落在抛它的方法的规则上（第一百六十四批）"
     },
     "decisions": {
       "$ref": "urn:dev-team:common#/$defs/decisions"

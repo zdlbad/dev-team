@@ -10,7 +10,9 @@ function walk(dir, out = []) {
   if (!fs.existsSync(dir)) return out
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name)
-    if (e.isDirectory()) walk(p, out)
+    // 点开头的目录不进：.git、.proto-build，还有走查页每次保存前留旧版的 slices/.history/。
+    // 那些备份是纯拷贝、不是工件，扫进来会被当成切片文件校验（2026-09-18 真出过，check-schema 报 1 个不合规）。
+    if (e.isDirectory()) { if (!e.name.startsWith('.')) walk(p, out) }
     else out.push(p)
   }
   return out
@@ -178,4 +180,47 @@ function modelKeyOf(codeRel, moduleNames) {
   return parts.join('/') + '.json'
 }
 
-module.exports = { folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }
+/**
+ * 一份校验报告里等人审的条目（第一百五十六批）。
+ * 方向 ①：判断只有「推上来的」等人——校验判不通过的，与重要度高、校验自己没把握的（escalated）；
+ * 其余由工具与校验角色负责，人不用逐条点（k-002 一次 67 条，他说看不过来）。
+ * 另加需人确认、警告，以及按模型看的块里新的与重浮的（第一百五十九批起简单方法也不跳过）。
+ * 方向 ② 与 pre-pr 照旧：校验角色答过的判断都等人。
+ */
+function humanTodo(r) {
+  if (!r) return []
+  const dir1 = String(r.direction) === '1' && !r.mode
+  const judgments = (r.judgments ?? []).filter((j) => j.verdict && (!dir1 || j.verdict === 'fail' || j.escalated || j.human))
+  // 第一百五十九批：简单方法不再跳过，每一块他都审
+  const blocks = dir1 ? (r.blocks ?? []).filter((b) => b.state !== 'same') : []
+  return [...judgments, ...(r.confirms ?? []), ...(r.warnings ?? []), ...blocks].filter((x) => !x.human?.verdict)
+}
+/**
+ * 一个切片名下的走查（第一百五十批）：一整条 slices/<id>.story.json，或者一场一条 slices/<id>.w<场次>.story.json。
+ * 返回 [{ id, file, scene, sealed, story }]，按场次排；读不动的跳过。
+ */
+function storiesOfSlice(root, id) {
+  const dir = require('node:path').join(root, 'slices')
+  const fsx = require('node:fs')
+  if (!id || !fsx.existsSync(dir)) return []
+  const esc = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const re = new RegExp('^(' + esc + '(?:\\.w(\\d+))?)\\.story\\.json$')
+  return fsx.readdirSync(dir).map((f) => ({ f, m: f.match(re) })).filter((x) => x.m)
+    .sort((a, b) => (+a.m[2] || 0) - (+b.m[2] || 0))
+    .map((x) => { try { const story = JSON.parse(fsx.readFileSync(require('node:path').join(dir, x.f), 'utf8')); return { id: x.m[1], file: require('node:path').join(dir, x.f), scene: x.m[2] ? +x.m[2] : null, sealed: story.sealed ?? null, story } } catch { return null } })
+    .filter(Boolean)
+}
+/** 眼下该摆的那一份走查：一整条的就是它；一场一条的取还没锁死的最前一场，都锁死了取最后一场。没有就 null */
+function currentStory(root, id) {
+  const all = storiesOfSlice(root, id)
+  if (!all.length) return null
+  const whole = all.find((s) => s.scene === null)
+  if (whole) return whole
+  return all.find((s) => !s.sealed) ?? all[all.length - 1]
+}
+/**
+ * 走查里的铺垫步（候选 #11）：没挂编号、模型这一侧也没有动作（walk.kind 为 none 或没写），也不出题——
+ * 交代「账已开、服务已做」这类背景，没有要人勾的。k-002 第 1～3 步就是，人点开才发现没东西可勾。
+ */
+function isIntroStep(s) { return !(s.traces ?? []).length && (!s.walk || s.walk.kind === 'none') && !s.quiz }
+module.exports = { isIntroStep, storiesOfSlice, currentStory, humanTodo, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }

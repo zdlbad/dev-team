@@ -65,6 +65,9 @@
         },
         "traces": {
           "$ref": "#/$defs/traces"
+        },
+        "carries": {
+          "$ref": "#/$defs/carries"
         }
       }
     },
@@ -87,6 +90,10 @@
         },
         "type": {
           "$ref": "#/$defs/typeRef"
+        },
+        "note": {
+          "type": "string",
+          "description": "这个参数是什么"
         }
       }
     },
@@ -164,7 +171,7 @@
     },
     "rules": {
       "type": "array",
-      "description": "守的规则，一条一句。写成对象就能标明这一条管哪几个编号——校验问某一条业务语句时只摆相关的那几条，不再把整个方法端出来。不标也收，不标的每次都摆。行为与领域服务操作共用这一份定义",
+      "description": "守的规则，一条一句。写成对象就能标明这一条管哪几个编号——校验问某一条业务语句时只摆相关的那几条，不再把整个方法端出来。不标也收，不标的每次都摆。行为与领域服务操作共用这一份定义。第一百五十六批：规则只写这个方法自己检查什么、怎么算",
       "items": {
         "oneOf": [
           {
@@ -216,7 +223,8 @@
           "$ref": "#/$defs/typeRef"
         },
         "rules": {
-          "$ref": "#/$defs/rules"
+          "$ref": "#/$defs/rules",
+          "description": "规则：这个方法自己检查什么、怎么算，不成立抛什么。不做的事、设计思路不写在这里（放字段或聚合的说明）"
         },
         "raises": {
           "$ref": "#/$defs/raises"
@@ -226,6 +234,17 @@
         },
         "traces": {
           "$ref": "#/$defs/traces"
+        },
+        "purpose": {
+          "$ref": "#/$defs/purpose"
+        },
+        "steps": {
+          "$ref": "#/$defs/steps",
+          "description": "做法：按先后写，每一步改哪几栏（changes）。方法只写它自己做的——调用方负责的前提不写"
+        },
+        "simple": {
+          "type": "boolean",
+          "description": "简单方法的标记。第一百五十九批起不标（项目所有者：「都不标，我都审，之后需要再说」），工具也不按它跳过；留着这一栏以后要再说"
         }
       }
     },
@@ -310,6 +329,15 @@
         },
         "carries": {
           "$ref": "#/$defs/carries"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "这一步改了哪几栏（行为里写字段名，领域服务里写「聚合.字段」）。走查一步 → 方法 → 字段一路亮下去靠它（第一百五十六批）"
         }
       }
     },
@@ -446,6 +474,61 @@
         "type": "string",
         "minLength": 1,
         "maxLength": 60
+      }
+    },
+    "purpose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ],
+      "description": "作用（第一百五十六批）：调用它做了什么、改了什么，动词对得上方法名；没有复杂逻辑的不解释它为什么存在。作用很窄的专用行为可以再补一句它用在什么业务情形里——不点具体角色，语句挂在这一句上",
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "traces": {
+          "$ref": "#/$defs/traces"
+        },
+        "carries": {
+          "$ref": "#/$defs/carries"
+        }
+      }
+    },
+    "create": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "purpose",
+        "steps",
+        "rules",
+        "throws",
+        "traces"
+      ],
+      "description": "创建（第一百五十八批）：与行为同一套七段——作用、入参、做法、规则、错误、事件、返回。一件东西怎么被建出来的先后写在这里；真正在它一生里时时都要成立的约束才留在不变量里",
+      "properties": {
+        "purpose": {
+          "$ref": "#/$defs/purpose"
+        },
+        "input": {
+          "$ref": "#/$defs/params"
+        },
+        "steps": {
+          "$ref": "#/$defs/steps"
+        },
+        "rules": {
+          "$ref": "#/$defs/rules"
+        },
+        "raises": {
+          "$ref": "#/$defs/raises"
+        },
+        "throws": {
+          "$ref": "#/$defs/throws"
+        },
+        "traces": {
+          "$ref": "#/$defs/traces"
+        }
       }
     }
   }

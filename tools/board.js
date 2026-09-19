@@ -37,7 +37,7 @@ function report(direction) {
   if (!fs.existsSync(p)) return null
   const r = JSON.parse(fs.readFileSync(p, 'utf8'))
   const unjudged = r.judgments.filter((j) => !j.verdict).length
-  const unreviewed = [...r.judgments, ...r.confirms].filter((it) => !it.human?.verdict).length
+  const unreviewed = require('./lib/project').humanTodo(r).length
   const stale = [...r.judgments, ...r.confirms, ...r.warnings].filter((it) => it.staleDecision).length
   return { slice: r.slice, at: r.at.slice(0, 16).replace('T', ' '), errors: r.errors.length, warnings: r.warnings.length, confirms: r.confirms.length, judgments: r.judgments.length, unjudged, unreviewed, decided: r.decided.length, stale, applied: !!r.applied, conclusion: r.conclusion, decodedVersion: r.decodedVersion }
 }
@@ -76,14 +76,15 @@ function sideOf(role) {
 /** 这条切片此刻有几件事在等人：没裁的卡、没答的题、没审的判断 */
 function pendingForHuman(id) {
   const out = []
-  const sp = path.join(root, 'slices', `${id}.story.json`)
+  const curSt = require('./lib/project').currentStory(root, id)
+  const sp = curSt ? curSt.file : path.join(root, 'slices', `${id}.story.json`)
   if (fs.existsSync(sp)) {
     try {
       const st = JSON.parse(fs.readFileSync(sp, 'utf8'))
       const voided = (c) => c.ruling?.choice === '作废' || /^本卡作废/.test(c.ruling?.note ?? '')
       const cards = (st.choices ?? []).filter((c) => !c.ruling && !voided(c)).length
       const quiz = (st.steps ?? []).filter((s) => s.quiz && !s.human).length
-      const unreviewed = (st.steps ?? []).filter((s) => !s.review).length
+      const unreviewed = (st.steps ?? []).filter((s) => !s.review && !require('./lib/project').isIntroStep(s)).length
       if (cards) out.push(`${cards} 张卡没裁`)
       if (quiz) out.push(`${quiz} 道题没答`)
       if (unreviewed) out.push(`${unreviewed} 步没审`)
@@ -95,7 +96,7 @@ function pendingForHuman(id) {
     try {
       const r = JSON.parse(fs.readFileSync(rp, 'utf8'))
       if (r.slice && r.slice !== id) continue
-      const n = [...(r.judgments ?? []).filter((x) => x.verdict), ...(r.confirms ?? [])].filter((x) => !x.human?.verdict).length
+      const n = require('./lib/project').humanTodo(r).length
       if (n) out.push(`校验 ${d} 有 ${n} 条没审`)
     } catch {}
   }

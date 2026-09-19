@@ -106,6 +106,7 @@ model/
   "aggregateInvariants": [ { "text": "跨成员始终成立的条件", "traces": [] } ],
   "fields": [ { "name": "status", "type": "OrderStatus", "nullable?": false, "note?": "" } ],
   "invariants": [ { "text": "根对象自身始终成立的条件", "traces": [], "throws?": ["InvalidOrder"] } ],   // throws = 创建时违反该不变量抛出的错误
+  "create?": { /* 创建：与行为同一套七段，见下（第一百五十八批） */ },
   "behaviors": [ /* 见下 */ ],
   "traces": [], "questions": [] }
 
@@ -118,18 +119,25 @@ model/
   "fields": [], "invariants": [], "behaviors": [], "traces": [] }
 ```
 
-**行为**（三者共用）：
+**行为**（三者共用；第一百五十六批起像用自然语言写一个方法，道理在 `seed/slices.md`「方法怎么写」）：
 
 ```jsonc
 { "name": "confirm",
-  "input": [ { "name": "at", "type": "date" } ], "output?": "…",
-  "rules": [ "这个行为做判断时依据的规则" ],
+  "purpose?": { "text": "作用：调用它做了什么、改了什么", "traces": [] },
+  "input": [ { "name": "at", "type": "date", "note?": "这个参数是什么" } ], "output?": "…",
+  "steps?": [ { "text": "做法的一步", "changes": ["status", "confirmedAt"], "throws?": [], "traces?": [] } ],
+  "simple?": false,   // 第一百五十九批起不标：每个方法他都审
+  "rules": [ "规则：这个方法自己检查什么、怎么算，不成立抛什么" ],
   "raises": [ "OrderConfirmed", { "event": "OrderRejected", "when": "…" } ],
   "throws": [ "OrderFailed" ],
   "traces": [] }
 ```
 
-`invariants` 是对象状态**始终成立**的条件；`rules` 是某个行为**做决定时**依据的逻辑。值对象的推导规则就是它的行为上的 `rules`。不变量的 `throws` 记录**创建时**（静态工厂）违反它所抛出的错误——工厂不是行为，这是错误在创建路径上唯一的归属。
+`invariants` 是对象状态**始终成立**的条件；`rules` 是某个行为**做决定时**依据的逻辑。**不写进方法的**：调用方负责的前提、方法不做的事、设计思路（放聚合或字段的 `note`）、字段为什么存在（放那个字段的 `note`）。
+
+**创建**（`create`，第一百五十八批）：`{ "purpose", "input?", "steps", "rules", "raises?", "throws", "traces" }`，与行为同一套。一件东西怎么被建出来写在这里；时时都要成立的约束留在 `invariants`。老模型没有 `create`、只有不变量的照样认。
+
+**字段**可以带 `carries`（一条语句落在好几栏时，这一栏承担哪一半）。值对象的推导规则就是它的行为上的 `rules`。不变量的 `throws` 记录**创建时**（静态工厂）违反它所抛出的错误——工厂不是行为，这是错误在创建路径上唯一的归属。
 
 **`raises` / `throws` 是传递闭包。** 一个行为调用了另一个行为或工厂，被调者可能发出的事件与错误也算作它的：`Order.total()` 调了 `Money.add()`，后者抛 `CurrencyMismatch`，则 `total` 的 `throws` 含 `CurrencyMismatch`；用例再向上继承。解码器机械地计算这个闭包，模型按此书写。
 
@@ -140,10 +148,12 @@ model/
 { "name": "OrderConfirmed", "aggregate": "Order", "payload": [ { "name": "orderId", "type": "string" } ], "traces": [] }
 
 // error.OrderFailedError.json
-{ "name": "OrderFailed", "aggregate": "Order", "condition": "何时抛出", "traces": [] }
+{ "name": "OrderFailed", "aggregate": "Order", "condition": "这张订单的内容不成立：缺了该有的一项，或者某一项填得不对", "traces": [] }
 ```
 
-不记发布方。谁发谁记（行为的 `raises` / `throws`）；校验反向核对每个事件、每个错误至少有一个发布方。
+错误的 `condition` 一句话说它表示什么，不写在哪里、什么时候抛，`traces` 留空——抛它的方法的规则里已经写了查什么、不成立抛它，语句挂在那条规则上（第一百六十四批）。
+
+不记发布方。谁发谁记（行为、创建 `create`、领域服务操作的 `raises` / `throws`）；校验反向核对每个事件、每个错误至少有一个发布方。
 
 ### repository.&lt;Name&gt;RepositoryInterface.json
 
@@ -159,7 +169,7 @@ model/
 { "name": "Pricing", "module": "Ordering",
   "coordinates": ["Order", "Promotion"],
   "operations": [
-    { "name": "price", "input": [], "output": "Money", "note?": "给人读的边界说明：为什么住这儿、管不了什么、真保证在哪儿",
+    { "name": "price", "purpose?": { "text": "作用", "traces": [] }, "input": [], "output": "Money", "note?": "给人读的边界说明：为什么住这儿、管不了什么、真保证在哪儿",
       "reads": ["Order", "Promotion"], "writes": [],
       "steps": [ /* 步骤语法 */ ],
       "rules": [], "raises": [], "throws": [], "traces": [] } ],
@@ -177,6 +187,7 @@ model/
              "method": "confirm" },     // factory 时为大写蛇形工厂名，如 CREATE
   "when?": "decision 为 discounted",   // 分流：条件只能是某次领域调用返回值的判别属性；"否则" 表示 else
   "input?": "…", "output?": "…",
+  "changes?": ["Order.status"],        // 这一步改了哪几栏：行为里写字段名，领域服务里写「聚合.字段」
   "raises?": [], "throws?": [] }
 ```
 
@@ -250,7 +261,7 @@ model/
 2. 领域服务只协调本模块的聚合；跨模块只经端口或事件。
 3. 查询的步骤只允许调用仓储的 `read` 方法。
 4. 命令与事件处理的 `writes` 大于 1 必须有 `writesNote`，校验列为需人确认。
-5. 每个事件、每个错误至少有一个发布方（某个行为的 `raises` / `throws`）。
+5. 每个事件、每个错误至少有一个发布方（某个行为、创建或领域服务操作的 `raises` / `throws`，或不变量的 `throws`）。
 6. 用例的 `raises` / `throws` 必须等于其步骤所调用的行为与服务的 `raises` / `throws` 之并集。
 7. 每个步骤的 `call` 必须解析到存在的目标与方法。
 8. 每条业务目标至少被一个命令或查询追溯；每条业务规则至少被一个行为、不变量、错误或事件处理追溯；反之每个模型元素的 `traces` 非空。

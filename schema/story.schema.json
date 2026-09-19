@@ -17,8 +17,8 @@
   "properties": {
     "slice": {
       "type": "string",
-      "pattern": "^[sk]-[0-9]{3,}$",
-      "description": "s-xxx：段落的故事；k-xxx：模块切片的业务走查场景（第九十七批），形状相同、不出题、不点亮段落"
+      "pattern": "^[sk]-[0-9]{3,}(\\.w[0-9]+)?$",
+      "description": "s-xxx：段落的故事；k-xxx：模块切片的业务走查场景（第九十七批），形状相同、不出题、不点亮段落。一场一条的走查写成 k-003.w1 这样：切片 id 加场次（第一百五十批）"
     },
     "title": {
       "type": "string",
@@ -471,6 +471,49 @@
       },
       "uniqueItems": true,
       "description": "人勾选的缺口下标：这些缺口要滚成下一版故事"
+    },
+    "scene": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "第几场（一场一条的走查才有；步号在一场之内从 1 编起）"
+    },
+    "premises": {
+      "type": "array",
+      "description": "这一场靠着的前提（第一百五十批）：开演之前先摆给人确认，免得演到最后才推翻",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[GRU]-[0-9]{3,}$"
+            }
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confirmedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "sealed": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}",
+      "description": "审完锁死的日期（第一百五十批）：锁死之后这一场不再动，真要改走修改切片"
     }
   },
   "if": {

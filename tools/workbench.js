@@ -83,6 +83,11 @@ function gateOf(s) {
   if (s.kind === 'module' && (s.pass ?? '骨架') === '骨架' && s.stages?.model?.status === 'in-progress' && s.stages?.model?.proofreadAt) {
     return { kind: 'draft-ok', ask: '看过「模型图」页了？初稿允许不准，走查时再改精。', button: '初稿定了', why: '骨架初稿等你说「就按这个走」' }
   }
+  // 一场一条的模块切片：每一场都审完锁死了，最后看一次整张，他说定稿，模型就定了、可以出原型（第一百五十六批）
+  if (s.kind === 'module' && !s.wholeLookAt && s.stages?.model?.status !== 'done') {
+    const scenes = require('./lib/project').storiesOfSlice(root, s.id).filter((x) => x.scene !== null)
+    if (scenes.length && scenes.every((x) => x.sealed)) return { kind: 'whole-look', ask: '走完 ' + scenes.length + ' 场了。在「审模型」页「按模型看」的总览里点走查的每一步，看支撑它的聚合、方法、字段——看完没有要改的，就定稿（可以出原型）；还有场景没走到，让开发指挥开下一场。', button: '定稿', why: '每一场都审完了，等你看整张说定稿' }
+  }
   if (s.kind === 'story' && s.stages?.model?.status === 'done' && !s.protoGo && s.stages?.code?.status === 'pending') {
     return { kind: 'proto-go', ask: '模型确认了。看过整个模型，这一段现在出原型？', button: '出原型', why: '模型确认了，等你说出不出原型' }
   }
@@ -118,7 +123,7 @@ function todo() {
     if (!r) return 0
     if ((r.errors ?? []).length) return 0
     if ((r.judgments ?? []).some((x) => !x.verdict)) return 0
-    return [...(r.judgments ?? []), ...(r.confirms ?? []), ...(r.warnings ?? [])].filter((x) => !x.human?.verdict).length
+    return require('./lib/project').humanTodo(r).length
   }
   const sc = scene(), sid = currentSlice()
   const t = { ask: 0, story: 0, review: 0, codemodel: 0, prepr: 0, plan: 0, slices: 0 }
@@ -130,7 +135,9 @@ function todo() {
 
   const r1 = readSafe('reports/validate-1.json'), r2 = readSafe('reports/validate-2.json')
   const openWarnings = (r) => (r?.warnings ?? []).filter((x) => !x.human?.verdict).length
-  put('review', waiting(r1), (n) => `${n - openWarnings(r1) ? `${n - openWarnings(r1)} 条模型判断` : ''}${n - openWarnings(r1) && openWarnings(r1) ? '、' : ''}${openWarnings(r1) ? `${openWarnings(r1)} 条警告` : ''}等你审${other(r1)}`)
+  // 第一百五十六批：方法块也等他；判断只数推上来的
+  const openBlocks = (r) => (r?.blocks ?? []).filter((b) => b.state !== 'same' && !b.human?.verdict).length
+  put('review', waiting(r1), (n) => { const b = openBlocks(r1), w = openWarnings(r1), j = n - b - w; return [b ? `${b} 块方法` : '', j ? `${j} 条推上来的判断` : '', w ? `${w} 条警告` : ''].filter(Boolean).join('、') + `等你审${other(r1)}` })
   put('codemodel', waiting(r2), (n) => `${n} 条代码对模型的判断等你审${other(r2)}`)
   const prs = ['reports/pre-pr-proto.json', 'reports/pre-pr-shell.json'].map(readSafe).filter(Boolean)
   const pr = prs.find((x) => x.slice === sid) ?? prs[0] ?? null
@@ -140,7 +147,7 @@ function todo() {
   // 模块切片的骨架初稿一步都没有，可模型师把形状上的选择留在了同一个文件里，那几张卡是留给他裁的——
   // 跟「初稿定了」那道门同时轮到他（文职校完），照数（2026-09-15 k-001 五张卡摆在那儿，工作台还说「没有等你的事」）。
   const cur = sid ? readSafe(`slices/${sid}.json`) : null
-  const story = sid ? readSafe(`slices/${sid}.story.json`) : null
+  const story = sid ? (require('./lib/project').currentStory(root, sid)?.story ?? null) : null
   const walked = (story?.steps ?? []).some((s) => s.walk)
   const draftGate = cur ? gateOf(cur)?.kind === 'draft-ok' : false
   if (story && (walked || draftGate)) {
@@ -246,7 +253,9 @@ async function startAll() {
   // 故事服务起的时候带哪一段：那一段得真有故事文件。没有就不带——story.js 找不到故事会直接退，
   // 而「模型图」「词汇表」两页也住在它里面，不能为了一个还没写故事的切片把那两页一起拖没（2026-09-16 在样例上真踩到）
   const s0 = currentSlice()
-  const withStory = s0 && fs.existsSync(path.join(root, 'slices', `${s0}.story.json`)) ? [s0] : []
+  // 一场一条的走查：带眼下那一场（第一百五十批）
+  const s0story = s0 ? require('./lib/project').currentStory(root, s0) : null
+  const withStory = s0story ? [s0story.id] : []
   await ensure('story', (p) => [path.join(tools, 'story.js'), 'serve', root, ...withStory, '--port', String(p), '--no-open'])
   for (const n of LATE) await startLate(n)
   const t = setInterval(() => { for (const n of LATE) if (!tried.has(n)) startLate(n).catch((e) => console.log(`${n}：补起来没成——${e.message}`)) }, 5000)
@@ -443,7 +452,8 @@ function slicesPage() {
   const choices = (s) => {
     if (s.kind !== 'module') return ''
     let st = null
-    try { st = JSON.parse(fs.readFileSync(path.join(dir, `${s.id}.story.json`), 'utf8')) } catch { return '' }
+    st = require('./lib/project').currentStory(root, s.id)?.story
+    if (!st) return ''
     const n = (st.choices ?? []).filter((c) => !c.ruling).length
     return n ? `<div class="meta">形状上的选择 ${n} 张没裁——在「走故事」页裁</div>` : ''
   }
@@ -749,10 +759,10 @@ const server = http.createServer((req, res) => {
     return
   }
   // 「切片」页上的两道门（第九十七批）：模块切片「初稿定了」= slice advance model done；段落「出原型」= slice proto-go。跟计划页一样直接跑命令行那一个
-  if ((url === '/slice/draft-ok' || url === '/slice/proto-go') && req.method === 'POST') {
+  if ((url === '/slice/draft-ok' || url === '/slice/proto-go' || url === '/slice/whole-look') && req.method === 'POST') {
     const slice = q.slice
     if (!/^[sk]-[0-9]{3,}$/.test(slice ?? '')) { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('没指到哪一条切片') }
-    const argv = url === '/slice/draft-ok' ? ['advance', root, slice, 'model', 'done', '初稿定了（项目所有者在切片页按的）'] : ['proto-go', root, slice, '项目所有者在切片页按了「出原型」']
+    const argv = url === '/slice/draft-ok' ? ['advance', root, slice, 'model', 'done', '初稿定了（项目所有者在切片页按的）'] : url === '/slice/whole-look' ? ['whole-look', root, slice, '项目所有者看过整张，在切片页按了「定稿」'] : ['proto-go', root, slice, '项目所有者在切片页按了「出原型」']
     const r = spawnSync(process.execPath, [path.join(tools, 'slice.js'), ...argv], { encoding: 'utf8', cwd: root })
     const out = ((r.stdout ?? '') + (r.stderr ?? '')).trim()
     console.log(`页面上 slice ${argv[0]} ${slice} → ${r.status === 0 ? '成' : '拒'}：${out.split('\n')[0]}`)
