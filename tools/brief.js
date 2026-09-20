@@ -9,6 +9,8 @@
  *   --活    按这趟的活装：只带常驻那几份，加上这一档点名的那几份／那几节。不给就按角色文件头上的「默认活」装；--整份 才把所有档并起来（第一百七十二批）
  *   --list  只打印会拼进去的文件与各自字节数，不打印正文（带 --活 时也列这一档没带的）
  *   --size  末尾多打一行合计字节数（到 stderr，不进提示词）
+ *   --写 <文件>  把装好的派工书落到这个文件，屏幕上只回一行。开发指挥派工前跑它，提示里只给路径，
+ *               角色一次 Read 读完——别在提示里写「先跑 brief.js」，那份输出超工具上限会被切碎，读它要八轮
  *
  * `reads:` 两种写法：
  *   一张平清单（老写法，整份带）：
@@ -20,6 +22,7 @@
  *         - common/discipline.md
  *       改现有模型:       # --活 改现有模型 时才带
  *         - model/shapes.md#领域对象      ← 井号后面是小节标题的关键字，只带那一节
+ *         - common/wording.md#-规则句,-一事一处  ← 减号开头是排除：除这几节外都带（大半要、只有两三节不要时用）
  * 没带的部分自动附一张索引（一行一节，写清什么时候该看、怎么取回），角色用 `look doc` 现取。
  *
  * 由来：2026-09-14 项目所有者——「只有那些 agent 特异化的技能才应该进 agent，通用的规范进 common 文件夹，这样可以灵活地装配」
@@ -90,14 +93,29 @@ function sections(text) {
   })
 }
 
-/** "common/wording.md#规则句" → 取那一节；没有井号就整份 */
+/**
+ * "common/wording.md#规则句"    → 只取那一节
+ * "common/wording.md#-规则句,-一事一处" → 除掉这几节，其余都带（整份里大半要、只有两三节不要时用这个，
+ *                                 免得把十来节一节一节列出来，每节还各顶一行「摘自」）
+ * 没有井号就整份。
+ */
 function pickPart(ref) {
   const [rel, anchor] = ref.split('#')
   const file = path.normalize(path.join(AGENTS, rel))
   if (!fs.existsSync(file)) die(`点名的规范不存在：${rel}`)
   const text = fs.readFileSync(file, 'utf8')
   if (!anchor) return { rel, file, anchor: null, text: text.trimEnd() }
-  const hit = sections(text).find((s) => s.title.includes(anchor))
+  const all = sections(text)
+  if (anchor.startsWith('-')) {
+    const drop = anchor.split(',').map((x) => x.trim().replace(/^-/, '')).filter(Boolean)
+    for (const d of drop) if (!all.some((s) => s.title.includes(d))) die(`${rel} 里没有标题含「${d}」的小节（写在 # 后面的排除清单里）`)
+    const kept = all.filter((s) => !drop.some((d) => s.title.includes(d)))
+    const lines = text.split('\n')
+    const preface = lines.slice(0, all[0].i).join('\n').trimEnd() // 第一个 ## 之前的开场白照带
+    const body = [preface, ...kept.map((s) => s.text)].filter(Boolean).join('\n\n')
+    return { rel, file, anchor, text: `> 摘自 ${rel}（这一趟用不上的 ${drop.length} 节没带：${drop.join('、')}；见末尾索引）\n\n${body}` }
+  }
+  const hit = all.find((s) => s.title.includes(anchor))
   if (!hit) die(`${rel} 里没有标题含「${anchor}」的小节`)
   return { rel, file, anchor, text: `> 摘自 ${rel}（整份还有别的小节，见末尾索引）\n\n${hit.text}` }
 }
@@ -109,6 +127,7 @@ function main(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--活' || a === '--for') { job = argv[++i]; continue }
+    if (a === '--写') { flags.add('--写'); i++; continue }
     if (a.startsWith('--')) { flags.add(a); continue }
     args.push(a)
   }
@@ -169,6 +188,15 @@ function main(argv) {
   if (flags.has('--list')) {
     for (const [name, size] of rows) console.log(`${String(size).padStart(7)}  ${name}`)
     console.log(`${String(total).padStart(7)}  合计${job ? `（--活 ${job}）` : byJob ? '（整份装；这个角色分了档：' + jobs.join('、') + '）' : ''}`)
+    return
+  }
+  const outIdx = argv.indexOf('--写')
+  if (outIdx >= 0) {
+    const dest = argv[outIdx + 1]
+    if (!dest || dest.startsWith('--')) die('--写 后面要一个文件路径')
+    fs.mkdirSync(path.dirname(path.resolve(dest)), { recursive: true })
+    fs.writeFileSync(path.resolve(dest), out, 'utf8')
+    console.log(`${who}${job ? ' · ' + job : ''} 的派工书写到 ${dest}：${out.length} 字、${total} 字节、${rows.length} 份。派工提示里给这个路径，让角色一次 Read 读完，别让它自己跑 brief.js。`)
     return
   }
   process.stdout.write(out)

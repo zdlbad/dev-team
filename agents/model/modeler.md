@@ -28,7 +28,6 @@ reads:
     - model/shapes.md#port
     - model/shapes.md#repository
     - model/shapes.md#步骤语法
-  - business/layers.md
 ---
 
 # 模型师

@@ -5,7 +5,7 @@ description: 模型校验。跑校验器，逐条填写判断清单（结论 / �
 reads:
   常驻:
     - common/discipline.md
-    - common/project-layout.md
+    - common/project-layout.md#写入权
     - model/validation.md
   判模型:
     - model/shapes.md#领域对象
@@ -15,7 +15,6 @@ reads:
   判代码:
     - model/shapes.md
     - business/layers.md
-  - model/validation.md
 ---
 
 # 模型校验

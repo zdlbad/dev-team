@@ -15,7 +15,6 @@ reads:
     - code/coding-standard.md#五、领域层
     - code/coding-standard.md#十一、禁止项
     - code/coding-standard.md#十二、测试
-  - code/style.md
 ---
 
 # 编码

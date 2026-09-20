@@ -16,7 +16,6 @@ reads:
     - code/coding-standard.md#一、代码目录
     - code/coding-standard.md#六、应用层
     - ../building-block/proto/README.md
-  - ../building-block/proto/README.md
 ---
 
 # 原型
