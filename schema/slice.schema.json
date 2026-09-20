@@ -226,6 +226,7 @@
           "stage": {
             "enum": [
               "slice",
+              "business",
               "model",
               "plan",
               "contracts",
