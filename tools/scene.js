@@ -584,7 +584,7 @@ function render(d){
   const all=(s.questions||[])
   const open=all.filter(q=>!q.answeredAt)
   const mode=s.askMode||'逐个'
-  if(open.length>1)h+='<div class="ask" style="padding:10px 20px"><b>攒着 '+open.length+' 个问题等你</b> <span class="dim">· 问答模式：'+esc(mode)+'</span>'+(mode==='问卷'?' <a href="/questions" target="_top" style="color:var(--ok)">去「等你答」那一页</a>':'')+'</div>'
+  if(open.length>1)h+='<div class="ask" style="padding:10px 20px"><b>攒着 '+open.length+' 个问题等你</b> <span class="dim">· 问答模式：'+esc(mode)+'</span>'+' ' + LINK + '</div>'
   for(const q of open){
     h+='<div class="ask"><h2>● '+esc(q.id)+' '+(q.answeredAt?'改一下':'等你回答')+' <span class="dim" style="font-weight:400;font-size:13px">'+esc(q.who||'—')+' · '+ago(q.ts)+'前</span></h2>'
     h+='<div class="meta"><div class="k">在做什么</div><div>'+esc(q.doing)+'</div></div>'
@@ -594,10 +594,11 @@ function render(d){
       return '<div class="opt'+(lean?' lean':'')+'">'+esc(o)+(lean?' <span class="dim">· 它偏向这个</span>':'')+'</div>'}).join('')
     h+='<div class="meta" style="margin-top:8px"><div class="k">偏向</div><div>'+esc(q.lean)+' <span class="dim">· 信心'+esc(q.confidence)+'</span>'
       +(q.wentAhead?' <span class="dim">· 你不在，已经照这个先做下去了，你选别的就要返工</span>':'')+'</div></div>'
-    // 现场页只把问题亮出来；答在哪儿看模式：逐个＝开发指挥在对话里问你，问卷＝去「等你答」那一页一口气答完
+    // 现场页只把问题亮出来；两种模式都给出「等你答」那一页的路——逐个模式下开发指挥会在对话里端给你，
+    // 但你想点着答也随时点得到（第一百七十五批）
     h+='<div class="how">'+(mode==='问卷'
       ? '现在是问卷模式：这些攒着等你，<a href="/questions" target="_top" style="color:var(--ok)">去「等你答」那一页</a>一口气答完。'
-      : '现在是逐个模式：开发指挥会在 Claude Code 的对话里把这个问题端给你，你在那儿答就行，不用在这儿点。')+'</div>'
+      : '现在是逐个模式：开发指挥会在 Claude Code 的对话里把这个问题端给你；想点着答就<a href="/questions" target="_top" style="color:var(--ok)">去「等你答」那一页</a>。')+'</div>'
     h+='</div>'
   }
 

@@ -223,7 +223,10 @@ if (cmd === 'new') {
     }
     writeJson(sp, story)
     console.log(kind === 'module' ? `已建业务走查的文件：${path.relative(process.cwd(), sp)}（讲解在骨架初稿定了之后写场景；下一步看 slice next）` : `已建故事骨架：${path.relative(process.cwd(), sp)}（${base ? `基于 ${basedOn}，上一版 ${base.steps.length} 步写成前情提要、不重复；` : ''}下一步：讲解写故事）`)
-  } else console.log('下一步：人与模型师商定范围后，把 scope 与 traces 填进切片记录，再执行 slice next。')
+  } else {
+    console.log('下一步：人与模型师商定范围后，把 scope 与 traces 填进切片记录，再执行 slice next。')
+    if (slice.kind === 'change') console.log(`  先记一道方法块基线（动手改模型之前）：node tools/validate.js ${rel(root)} --slice ${id} --记基线\n  记下这一刻模块里每块方法的指纹，往后审模型页只摆这条切片动过的那几块；不记就整个模块摊给他看。`)
+  }
 }
 
 // ---------- whole-look：最后一场之后他看过整张、说了定稿（第一百五十六批：模型定稿就可以出原型） ----------
@@ -302,6 +305,7 @@ if (cmd === 'candidate') {
     x.status = 'opened'; x.openedAs = id; x.openedAt = today
     writeJson(candidatesPath(), c)
     console.log(`候选 #${x.n} 开成修改切片 ${id}：${path.relative(process.cwd(), slicePath(id))}。下一步：slice next`)
+    console.log(`  先记一道方法块基线（动手改模型之前）：node tools/validate.js ${rel(root)} --slice ${id} --记基线\n  记下这一刻模块里每块方法的指纹，往后审模型页只摆这条切片动过的那几块；不记就整个模块摊给他看。`)
   } else if (sub === 'drop') {
     const x = find(args[3])
     const why = args[4]

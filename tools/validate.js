@@ -3,6 +3,9 @@
  * 校验器。依据 agents/model/validation.md。
  *
  * 用法：node tools/validate.js <项目目录> [--code <代码库目录>] [--slice <切片id>]
+ *       node tools/validate.js <项目目录> --slice <m-xxx> --记基线
+ *           修改切片开工前记一道方法块基线：把这一刻模块里每块方法的指纹存进切片记录。
+ *           之后审模型页只摆指纹跟基线对不上的那几块——这条切片动过的——不再把整个模块摊给他看。
  *   方向 ①（模型 ↔ 业务描述）总是执行；带 --code 时执行方向 ②（解码代码并与模型比对）。
  * 输出：reports/validate-1.json/.md、reports/validate-2.json/.md（每方向只留最新一份）。
  * 退出码：0 干净；1 不干净；2 用法或前置错误。
@@ -644,9 +647,14 @@ checkWalkNames()
  */
 function buildBlocks() {
   const out = []
+  // 修改切片记过基线的，先拿基线比：指纹跟开工那一刻一样，就是这条切片没动它，算 same 不摆给他。
+  // 人裁过的照旧按裁决算——他裁过的那一块，后来谁改了都要重浮。
+  const baseline = sliceRec?.kind === 'change' ? sliceRec.blockBaseline ?? null : null
   const stateOf = (id, fp) => {
     const ds = decisions.filter((d) => d.target === id && d.check === BLOCK_CHECK && d.by === 'human')
-    return !ds.length ? 'new' : ds.some((d) => d.on === fp) ? 'same' : 'refloat'
+    if (ds.length) return ds.some((d) => d.on === fp) ? 'same' : 'refloat'
+    if (baseline && baseline[id] === fp) return 'same'
+    return 'new'
   }
   const push = (el, key, kind, name, body, simple) => {
     const id = `${el.file}#${key}`, fp = fingerprint(JSON.stringify(body))
@@ -667,6 +675,19 @@ function buildBlocks() {
   return out
 }
 r1.blocks = buildBlocks()
+if (args.includes('--记基线')) {
+  const stop = (m) => { console.error(m); process.exit(2) }
+  if (!sliceRec) stop('--记基线 要跟 --slice <切片id>')
+  if (sliceRec.kind !== 'change') stop(`${sliceRec.id} 不是修改切片：基线是给修改切片用的，模块切片本来就要整块整块地审`)
+  const had = Object.keys(sliceRec.blockBaseline ?? {}).length
+  if (had) stop(`${sliceRec.id} 已经记过基线了（${had} 块）。再记一次会把这条切片已经改出来的那几块也当成没动过，从此不再摆给他看。真要重记，先把切片记录里的 blockBaseline 删掉。`)
+  const p = path.join(root, 'slices', sliceRec.id + '.json')
+  const rec = JSON.parse(fs.readFileSync(p, 'utf8'))
+  rec.blockBaseline = Object.fromEntries(r1.blocks.map((b) => [b.id, b.fp]))
+  fs.writeFileSync(p, JSON.stringify(rec, null, 2) + '\n', 'utf8')
+  console.log(`${sliceRec.id}：记下 ${r1.blocks.length} 块方法的基线。往后审模型页只摆这条切片动过的那几块。`)
+  process.exit(0)
+}
 finish(r1, 'validate-1')
 
 // ========== 方向 ② ==========

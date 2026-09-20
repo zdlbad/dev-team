@@ -294,6 +294,14 @@
       "type": "integer",
       "minimum": 1,
       "description": "修改切片：从 slices/_candidates.json 的第几号候选开出来的"
+    },
+    "blockBaseline": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "修改切片开工那一刻，模块里每块方法的指纹（validate --记基线 记下来）。审模型页照它认哪几块是这条切片动的：指纹跟基线一样就是没动过，不摆给人看。没有这一栏就整个模块都摆出来——m-004 上 67 块只动了 9 块（第一百七十五批）"
     }
   },
   "$defs": {

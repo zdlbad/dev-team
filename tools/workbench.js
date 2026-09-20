@@ -4,7 +4,7 @@
  *
  * 用法：node tools/workbench.js <项目目录> [--code <代码库>] [--port 4870]
  *
- * 页签（2026-09-13 项目所有者要直白的名字，「审阅」「审查」太像）：谁在干什么（scene）· 等你答（scene 的 /questions：攒着的问题列一页，问卷模式用）· 切片（现算：段落 / 修改 / 候选三栏，第八十六批）· 日志（现算：journal/<日期>.jsonl 按派工分块，角色做了什么、花了多久，给人复盘）· 读原文（导读/<切片>-原文选读.md）· 走故事（story；当前是模块切片时这一页装的是业务走查，页签名字跟着改）· 模型图（story 的 /model）· 这段改了什么（model-delta，按当前段落现算）
+ * 页签（2026-09-13 项目所有者要直白的名字，「审阅」「审查」太像）：谁在干什么（scene）· 等你答（scene 的 /questions：攒着的问题列一页，点选项、写补充、按「答这个」）· 切片（现算：段落 / 修改 / 候选三栏，第八十六批）· 日志（现算：journal/<日期>.jsonl 按派工分块，角色做了什么、花了多久，给人复盘）· 读原文（导读/<切片>-原文选读.md）· 走故事（story；当前是模块切片时这一页装的是业务走查，页签名字跟着改）· 模型图（story 的 /model）· 这段改了什么（model-delta，按当前段落现算）
  *      · 审模型（review，读 reports/validate-1.json，校验器对模型的判断）· 审代码对模型（codemodel，读 reports/validate-2.json，方向 ② 留给人的判断）· 审代码（review，读 reports/pre-pr-*.json，pre-pr 审查的发现）· 编码计划（plans/<当前段落>.md 现渲染）· 试原型（proto，给了 --code 且 src/proto/main.ts 在才起）
  * 它自己把这几个服务拉起来：每个现挑一个空闲端口、只听 127.0.0.1、不许它们自己弹浏览器；页面统统从工作台这一个口代理出去（/p/<页面>/…），
  * 所以人只需要开 http://localhost:4870 这一个地址，别的口不用管也看不见。进程退出时把自己拉起来的一并关掉。
@@ -131,6 +131,10 @@ function todo() {
   const put = (k, n, text) => { t[k] = n; if (n) why[k] = text(n) }
   const other = (r) => (r?.slice && sid && r.slice !== sid ? `（${r.slice} 的报告）` : '')
 
+
+  // 攒着的问题：角色 scene ask 挂上来、人还没答的那几个。逐个模式下也照数——人在电脑前，
+  // 对话里问过的他也可能想在页面上点，页签上有个数他才知道那一页有东西（第一百七十五批）
+  put('ask', (sc.questions ?? []).filter((q) => !q.answeredAt).length, (n) => `${n} 个问题等你答`)
 
   const r1 = readSafe('reports/validate-1.json'), r2 = readSafe('reports/validate-2.json')
   const openWarnings = (r) => (r?.warnings ?? []).filter((x) => !x.human?.verdict).length
@@ -608,7 +612,7 @@ header .sp{flex:1}header .now{color:var(--dim);font-size:12.5px;white-space:nowr
 main{flex:1;position:relative}iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--page,#fff)}
 </style></head><body>
 <header><h1>工作台<span>${esc(projectName)}</span></h1>
-<button data-t="scene" class="on">谁在干什么</button><button data-t="slices">切片</button><button data-t="journal">日志</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="proto">试原型</button>
+<button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="slices">切片</button><button data-t="journal">日志</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="proto">试原型</button>
 <span class="sp"></span><span class="td" id="todo"></span><span class="now" id="now"></span><button id="theme" title="白天 / 黑夜">🌙</button><a id="open" href="#" target="_blank" title="在新窗口打开这一页">新窗口 ↗</a></header>
 <main><iframe id="f" src="/p/scene/"></iframe></main>
 <script>
