@@ -11,7 +11,8 @@
  *                       [--modules A,B] [--aggregates A.X,B.Y] [--use-cases X,Y] [--traces G-001,R-001]
  *                       --story：同时建故事骨架 slices/<id>.story.json（故事切片：范围由故事定，见 tools/story.js）
  *                       --based-on <id>：这条故事从上一版滚出来（骨架带上一版的人物与步骤，讲解在其上加）
- *                       --改 --来源 "<谁在哪儿点出的>" --动到 s-001,s-002：修改切片（id 用 m-xxx）——已走通的段落上被点出的一件事；正路是先记候选再 candidate open
+ *                       --改 --来源 "<谁在哪儿点出的>" --动到 s-001,s-002：修改切片（id 用 m-xxx）——已走通的段落上被点出的一件事。
+ *                       动的是已经建好的模块就直接这么开，不进候选（第一百八十四批）
  *   node tools/slice.js candidate <项目目录> add "<改什么，一句话>" --来源 "<试原型页 / 审阅页 / 裁定第几批>" [--动到 s-001,s-002] [--备注 "<一句>"]
  *   node tools/slice.js candidate <项目目录> list                列候选：审阅点出的事先记在这里，不当场改（第八十六批）
  *   node tools/slice.js candidate <项目目录> done <序号> "<在哪一批、怎么做掉的>"   做掉了（第一百八十批：从前只记得下「不做」，账本因此长期失真）
@@ -203,6 +204,22 @@ if (cmd === 'new') {
   }
   writeJson(slicePath(id), slice)
   console.log(`已建立切片 ${id}（${kind}）：${path.relative(process.cwd(), slicePath(id))}`)
+  // 新模块一建，先把候选里等着它的那几件端出来（第一百八十四批，项目所有者：「要是新模块建立了，
+  // 候选里相关的也提出来随着新模块做了」）。候选攒在那里没人翻，新模块正是它们等的那一刻。
+  if (kind === 'module') {
+    const mod = opt('--module')
+    // 就地读：candidatesPath / loadCandidates 定义在这一段下面，这里调它们会撞上暂时性死区
+    const candFile = path.join(root, 'slices', '_candidates.json')
+    const open = ((fs.existsSync(candFile) ? readJson(candFile) : { items: [] }).items ?? []).filter((x) => (x.status ?? 'open') === 'open')
+    const mine = open.filter((x) => (x.waitFor ?? '').includes(mod) || x.text.includes(mod) || (x.note ?? '').includes(mod))
+    if (mine.length) {
+      console.log(`\n候选里有 ${mine.length} 件等着 ${mod}，挑出来随这个模块一起做（第一百八十四批）：`)
+      for (const x of mine) console.log(`  #${x.n}　${x.text.replace(/\s+/g, ' ').slice(0, 90)}${x.waitFor ? `　（等：${x.waitFor}）` : ''}`)
+      console.log(`  做掉一件：node tools/slice.js candidate ${path.relative(process.cwd(), root) || '.'} done <序号> "<在哪一批、怎么做掉的>"`)
+    } else if (open.length) {
+      console.log(`\n候选里还有 ${open.length} 件，没有一件点名等 ${mod}；翻一眼再往下走：node tools/slice.js candidate ${path.relative(process.cwd(), root) || '.'} list`)
+    }
+  }
   if (args.includes('--story') || kind === 'module') {
     // 模块切片的走查一场一条（第一百五十批）：从第一场建起，文件名带场次；段落故事照旧一整条
     const sp = path.join(root, 'slices', kind === 'module' ? `${id}.w1.story.json` : `${id}.story.json`)
@@ -280,13 +297,23 @@ if (cmd === 'candidate') {
   const find = (n) => { const x = c.items.find((y) => y.n === Number(n)); if (!x) die(`没有候选 #${n}`); return x }
   if (sub === 'add') {
     const text = args[3]
-    if (!text) die('用法：slice candidate <项目目录> add "<改什么，一句话>" --来源 "<谁在哪儿点出的>" [--动到 s-001,s-002] [--备注 "<一句>"]')
+    if (!text) die('用法：slice candidate <项目目录> add "<改什么，一句话>" --来源 "<谁在哪儿点出的>" --等 "<在等哪个还没建的模块>" [--动到 s-001,s-002] [--备注 "<一句>"]')
     const origin = opt('--来源')
     if (!origin) die('候选要写来源：--来源 "<试原型页 / 审阅页 / 裁定第几批>"')
+    // 第一百八十四批：动的是已经建好的模块就直接做，别记候选。候选从此只装「等着某个还没建的模块」的事——
+    // 说得出在等哪个模块，才是候选；说不出，就是现在就该做的（项目所有者：「如果再遇到这种对已经存在的
+    // 模块的改动，就别进候选了，直接做了吧」）。
+    const waitFor = opt('--等')
+    if (!waitFor) {
+      die('候选只装「等着某个还没建的模块」的事（第一百八十四批）。\n' +
+        '  动的是已经建好的模块 → 现在就做，别记候选：\n' +
+        `    node tools/slice.js new ${path.relative(process.cwd(), root) || '.'} m-xxx "<改什么>" --改 --来源 "${origin}" --动到 <s-001,…>\n` +
+        '  确实在等一个还没建的模块 → 说出它叫什么：--等 "<模块名>"')
+    }
     const n = c.items.reduce((m, x) => Math.max(m, x.n), 0) + 1
-    c.items.push({ n, text, origin, touches: list('--动到'), ts: today, status: 'open', openedAs: null, ...(opt('--备注') ? { note: opt('--备注') } : {}) })
+    c.items.push({ n, text, origin, waitFor, touches: list('--动到'), ts: today, status: 'open', openedAs: null, ...(opt('--备注') ? { note: opt('--备注') } : {}) })
     writeJson(candidatesPath(), c)
-    console.log(`候选 #${n} 记下了：${text}（来源：${origin}）。不当场改；当前段落收口后 slice candidate open ${n} m-xxx`)
+    console.log(`候选 #${n} 记下了：${text}（来源：${origin}）。等着「${waitFor}」建起来，到时候随它一起做。`)
   } else if (sub === 'list') {
     if (!c.items.length) console.log('没有候选。')
     for (const x of c.items) console.log(`#${x.n} [${x.status === 'open' ? '等着开' : x.status === 'opened' ? '已开成 ' + x.openedAs : '不做'}] ${x.text}　来源：${x.origin}${x.touches?.length ? '　动到 ' + x.touches.join('、') : ''}${x.note ? '　备注：' + x.note : ''}`)
