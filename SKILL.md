@@ -45,6 +45,7 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 | `prepr check <项目> <id> --mode proto\|shell` | 核对审查角色填好的报告形状，写 `.md` | `node $DEV_TEAM/tools/prepr.js check …` |
 | `inventory <代码库> [--out <md>]` | 盘点一个既有代码库（给解读角色的地图） | `node $DEV_TEAM/tools/inventory.js …` |
 | `read <代码库> <项目>` | 解读既有代码：先 `inventory`，再启动解读角色写出 `raw/legacy-reading.md`（一份原料）、词汇表别名、模型草稿与解读说明 | 开发指挥自己执行（见下） |
+| `usage [<会话id>] [--列] [--细 <趟次>] [--读]` | 量这一段会话的用量：开发指挥自己花了多少、每趟角色花了多少、上下文怎么长起来的、每趟把什么读进了上下文。只读 `~/.claude/projects/`（第一百七十九批） | `node $DEV_TEAM/tools/usage.js …` |
 | `slice pending <项目> <id>` | 这条切片还有什么要人裁的：五处汇成一张单子，分「挡住业务这一关」与「挡住模型收口」两组。每批活开工第一件事跑它（第一百七十八批） | `node $DEV_TEAM/tools/slice.js pending …` |
 | `slice next <项目> <id>` | 算出下一步：谁上场、跑什么 | `node $DEV_TEAM/tools/slice.js next …` |
 | `slice advance <项目> <id> <model\|code\|validate> <状态> [说明]` | 推进阶段状态并写 log | `node $DEV_TEAM/tools/slice.js advance …` |
