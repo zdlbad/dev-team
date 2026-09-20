@@ -10,6 +10,10 @@ reads:
   走查:
     - model/shapes.md#领域对象
     - model/shapes.md#步骤语法
+  # 「补一步走查」：已有的走查上改一两步——措辞、金额、加一步
+  补一步走查:
+    - 正文#-故事怎么写,-原文选读,-题怎么出,-裁定卡的措辞,-导读
+    - model/shapes.md#步骤语法
   起草走查:
     - model/shapes.md
     - business/layers.md

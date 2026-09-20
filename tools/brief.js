@@ -21,8 +21,9 @@
  *       常驻:            # 每趟都带
  *         - common/discipline.md
  *       改现有模型:       # --活 改现有模型 时才带
- *         - model/shapes.md#领域对象      ← 井号后面是小节标题的关键字，只带那一节
- *         - common/wording.md#-规则句,-一事一处  ← 减号开头是排除：除这几节外都带（大半要、只有两三节不要时用）
+ *         - model/shapes.md#领域对象      ← 井号后面是小节标题的关键字，只带那一节（连它的子节）
+ *         - common/wording.md#-规则句,-一事一处  ← 减号开头是排除：除这几节（连子节）外都带
+ *         - 正文#-方法怎么写,-追溯        ← 「正文」指角色自己那一份，也按档裁（第一百八十二批）
  * 没带的部分自动附一张索引（一行一节，写清什么时候该看、怎么取回），角色用 `look doc` 现取。
  *
  * 由来：2026-09-14 项目所有者——「只有那些 agent 特异化的技能才应该进 agent，通用的规范进 common 文件夹，这样可以灵活地装配」
@@ -107,19 +108,34 @@ function pickPart(ref) {
   if (!fs.existsSync(file)) die(`点名的规范不存在：${rel}`)
   const text = fs.readFileSync(file, 'utf8')
   if (!anchor) return { rel, file, anchor: null, text: text.trimEnd() }
+  const { body, carried } = cutText(text, anchor, rel)
+  return { rel, file, anchor, carried, text: `> 摘自 ${rel}${anchor.startsWith('-') ? `（这一趟用不上的 ${anchor.split(',').length} 节没带；见末尾索引）` : '（整份还有别的小节，见末尾索引）'}\n\n${body}` }
+}
+
+/**
+ * 按小节剪一份 Markdown：`甲` 只取那一节（连它的子节），`-甲,-乙` 是除这几节（连子节）以外的全部。
+ * 剪裁按**行**来。一节的 text 里本来就含着它的子节（sections 取到下一个同级或更高级标题为止），
+ * 排除式从前是「按标题挑出留下的小节、再把它们的正文接起来」，两头都错——被排除那一节的子节标题
+ * 对不上排除词，于是又单独印了一遍；留下那一节的子节则跟着母节印一遍、自己再印一遍，整整两份
+ * （第一百八十二批量出来：validation.md 的「覆盖」「命名」「模型内部一致性」三节都是两份）。
+ */
+function cutText(text, anchor, rel) {
   const all = sections(text)
+  const covered = (from, to) => new Set(all.filter((s) => s.i >= from && s.i < to).map((s) => s.title))
   if (anchor.startsWith('-')) {
     const drop = anchor.split(',').map((x) => x.trim().replace(/^-/, '')).filter(Boolean)
     for (const d of drop) if (!all.some((s) => s.title.includes(d))) die(`${rel} 里没有标题含「${d}」的小节（写在 # 后面的排除清单里）`)
-    const kept = all.filter((s) => !drop.some((d) => s.title.includes(d)))
     const lines = text.split('\n')
-    const preface = lines.slice(0, all[0].i).join('\n').trimEnd() // 第一个 ## 之前的开场白照带
-    const body = [preface, ...kept.map((s) => s.text)].filter(Boolean).join('\n\n')
-    return { rel, file, anchor, text: `> 摘自 ${rel}（这一趟用不上的 ${drop.length} 节没带：${drop.join('、')}；见末尾索引）\n\n${body}` }
+    const cut = new Set()
+    for (const s of all) if (drop.some((d) => s.title.includes(d))) for (let i = s.i; i < s.end; i++) cut.add(i)
+    return {
+      body: lines.filter((_, i) => !cut.has(i)).join('\n').replace(/\n{3,}/g, '\n\n').trimEnd(),
+      carried: new Set(all.filter((s) => !cut.has(s.i)).map((s) => s.title)),
+    }
   }
   const hit = all.find((s) => s.title.includes(anchor))
   if (!hit) die(`${rel} 里没有标题含「${anchor}」的小节`)
-  return { rel, file, anchor, text: `> 摘自 ${rel}（整份还有别的小节，见末尾索引）\n\n${hit.text}` }
+  return { body: hit.text, carried: covered(hit.i, hit.end) }
 }
 
 function main(argv) {
@@ -155,36 +171,46 @@ function main(argv) {
   else if (flags.has('--整份')) { refs = [...new Set(Object.values(reads).flat())]; job = null }
   else refs = [...(reads['常驻'] ?? []), ...reads[job]]
 
+  // 角色自己那份正文也按档裁（第一百八十二批）：`正文#-方法` 这样写在某一档里，那一趟就不带「方法」那一节。
+  // 量出来的：小活里正文是最大的一块（模型师 19.8K、讲解 12.5K），比几张卡片加起来还大。
+  const 自己 = refs.filter((r) => r.startsWith('正文#'))
+  refs = refs.filter((r) => !r.startsWith('正文#'))
+  let bodyText = body.trimEnd(), bodyCarried = null
+  if (自己.length) {
+    const cut = cutText(body, 自己[0].slice('正文#'.length), rel)
+    bodyText = `> ${rel} 的正文，这一趟只带用得上的几节（其余见末尾索引）\n\n${cut.body}`
+    bodyCarried = cut.carried
+  }
+
   const parts = refs.map(pickPart)
-  const chosen = new Set(parts.map((p) => p.rel + (p.anchor ? '#' + p.anchor : '')))
-  // 没带的：这个角色别的档点过、这一趟没带的文件，以及带了某几节的文件里剩下的那些节
+  // 没带的：这个角色别的档点过、这一趟一页没带的文件，以及带了某几节的文件里剩下的那些节。
+  // 一份文件带了哪几节，由 pickPart 的 carried 说了算（排除式带的是「除这几节以外的全部」，
+  // 从前拿排除串当小节名去比，一节也对不上，已经带在手上的那些反倒全被列成「没带」）。
   const indexLines = []
   if (byJob) {
-    const all = [...new Set(Object.values(reads).flat())]
-    const tookWhole = new Set(parts.filter((p) => !p.anchor).map((p) => p.rel))
-    for (const ref of all) {
-      const [r, anchor] = ref.split('#')
-      if (tookWhole.has(r)) continue
-      if (chosen.has(ref)) continue
-      indexLines.push(anchor ? `  ${r}#${anchor}` : `  ${r}（整份）`)
+    const took = new Map() // 文件 → 带到的小节标题；整份带的记 'whole'
+    for (const p of parts) {
+      if (!p.anchor) { took.set(p.rel, 'whole'); continue }
+      if (took.get(p.rel) === 'whole') continue
+      took.set(p.rel, new Set([...(took.get(p.rel) ?? []), ...p.carried]))
     }
-    // 带了某几节的文件：剩下的那些节才进索引（同一份文件带了好几节，逐节都要排除）
-    const anchorsOf = new Map()
-    for (const p of parts.filter((x) => x.anchor)) anchorsOf.set(p.rel, [...(anchorsOf.get(p.rel) ?? []), p.anchor])
-    for (const [r, anchors] of anchorsOf) {
-      for (const s of sections(fs.readFileSync(path.join(AGENTS, r), 'utf8'))) {
-        if (anchors.some((a) => s.title.includes(a))) continue
-        const line = `  ${r}#${s.title}`
-        if (!indexLines.includes(line)) indexLines.push(line)
-      }
+    const add = (line) => { if (!indexLines.includes(line)) indexLines.push(line) }
+    for (const ref of [...new Set(Object.values(reads).flat())]) {
+      const r = ref.split('#')[0]
+      if (!took.has(r)) add(`  ${r}（整份）`)
+    }
+    if (bodyCarried) for (const sec of sections(body)) if (!bodyCarried.has(sec.title)) add(`  ${rel}#${sec.title}　（你自己那份里的）`)
+    for (const [r, t] of took) {
+      if (t === 'whole') continue
+      for (const s of sections(fs.readFileSync(path.join(AGENTS, r), 'utf8'))) if (!t.has(s.title)) add(`  ${r}#${s.title}`)
     }
   }
   const indexBlock = indexLines.length
     ? `## 这趟没带的（用到再取，别猜）\n\n一条命令可以连着取几节，中间用 \`+\` 隔开：\n\n\`\`\`\nnode $DEV_TEAM/tools/look.js <项目> doc <文件> <标题关键字> + doc <文件> <标题关键字>\n\`\`\`\n\n没带的是这些：\n\n\`\`\`\n${[...new Set(indexLines)].join('\n')}\n\`\`\`\n`
     : ''
 
-  const out = [...parts.map((p) => p.text), body.trimEnd(), indexBlock].filter(Boolean).join('\n\n---\n\n') + '\n'
-  const rows = [...parts.map((p) => [p.rel + (p.anchor ? '#' + p.anchor : ''), Buffer.byteLength(p.text)]), [rel + '（正文）', Buffer.byteLength(body)]]
+  const out = [...parts.map((p) => p.text), bodyText, indexBlock].filter(Boolean).join('\n\n---\n\n') + '\n'
+  const rows = [...parts.map((p) => [p.rel + (p.anchor ? '#' + p.anchor : ''), Buffer.byteLength(p.text)]), [rel + (bodyCarried ? '（正文，按档裁过）' : '（正文）'), Buffer.byteLength(bodyText)]]
   if (indexBlock) rows.push(['（没带的索引）', Buffer.byteLength(indexBlock)])
   const total = Buffer.byteLength(out)
   if (flags.has('--list')) {

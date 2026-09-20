@@ -219,8 +219,39 @@ function currentStory(root, id) {
   return all.find((s) => !s.sealed) ?? all[all.length - 1]
 }
 /**
+ * 这条切片眼下业务这一关上还摆着的那几件。业务定了模型才开工（第一百七十八批），所以这几件既是
+ * slice pending 的上半截，也是工作台顶栏要算进「N 件等你」的那一截——只在命令行看得见的关卡对他
+ * 等于不存在（一条老规矩）。两边读同一个函数，免得页面说没事、命令行说卡着四件。
+ * 返回 [{ kind, id, text, blocking }]，kind 是「等人答」「没裁的卡」「走查缺口」「候选修改」，按这个顺序排。
+ * **走查缺口 blocking 为 false**：它是下一版故事的候选，不是这一关的活（story.js 的走查页与 guide.md
+ * 都这么说——第一轮只走主线，守卫、异常、怪事记进 gaps 标轮次，留给重走那一趟）。第一百七十八批把
+ * 它一并算成挡路的，于是 k-001 三条人早已在正文里改成「（已答）…」的缺口永远挂在单子上（项目所有者
+ * 2026-09-21 裁：缺口不挡业务，从这一组撤出来）。
+ */
+function businessBlockers(root, sliceId) {
+  const fsx = require('node:fs'), px = require('node:path')
+  if (!sliceId) return []
+  const one = (p) => { try { return JSON.parse(fsx.readFileSync(px.join(root, p), 'utf8')) } catch { return null } }
+  // 卡与缺口两种写法都要认：缺口按 schema/story.schema.json 就是一句话（字符串），卡是对象。
+  // 从前这里一律当对象取 text/why，缺口就落到 JSON.stringify 上，印出来带着引号和转义（k-001 三条都这样）。
+  const cut = (x) => (typeof x === 'string' ? x : x?.question ?? x?.text ?? x?.why ?? JSON.stringify(x)).replace(/\s+/g, ' ').slice(0, 100)
+  const out = []
+  for (const q of one('reports/_scene.json')?.questions ?? []) {
+    if (q.slice === sliceId && !q.answeredAt) out.push({ kind: '等人答', id: q.id, text: cut(q.question), blocking: true })
+  }
+  const story = currentStory(root, sliceId)?.story
+  for (const c of story?.choices ?? []) {
+    if (!c.ruling) out.push({ kind: '没裁的卡', id: c.id ?? null, text: cut(c), blocking: true })
+  }
+  for (const g of story?.gaps ?? []) out.push({ kind: '走查缺口', id: null, text: cut(g), blocking: false })
+  for (const x of one('slices/_candidates.json')?.items ?? []) {
+    if ((x.status ?? 'open') === 'open' && (x.touches ?? []).includes(sliceId)) out.push({ kind: '候选修改', id: `#${x.n}`, text: cut(x.text), blocking: true })
+  }
+  return out
+}
+/**
  * 走查里的铺垫步（候选 #11）：没挂编号、模型这一侧也没有动作（walk.kind 为 none 或没写），也不出题——
  * 交代「账已开、服务已做」这类背景，没有要人勾的。k-002 第 1～3 步就是，人点开才发现没东西可勾。
  */
 function isIntroStep(s) { return !(s.traces ?? []).length && (!s.walk || s.walk.kind === 'none') && !s.quiz }
-module.exports = { isIntroStep, storiesOfSlice, currentStory, humanTodo, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }
+module.exports = { isIntroStep, storiesOfSlice, currentStory, businessBlockers, humanTodo, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }

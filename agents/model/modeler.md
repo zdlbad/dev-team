@@ -16,6 +16,11 @@ reads:
     - model/shapes.md#service
     - model/shapes.md#步骤语法
     - model/shapes.md#通用约定
+  # 「改一个方法」：只动一两个方法——加一条规则、改一步做法、换个错误
+  改一个方法:
+    - 正文#-方法怎么写,-放置规则,-追溯,-问人,-不做,-自检
+    - model/shapes.md#步骤语法
+    - model/shapes.md#事件与错误
   起草新模块:
     - model/shapes.md
     - business/layers.md
@@ -47,6 +52,16 @@ reads:
 
 - `model/modules.json`、`model/<Module>/module.json`、`model/<Module>/domain/...`、`model/<Module>/application/...`、`model/<Module>/ports/...`
 - 段落切片时：`slices/<id>.story.json` 里每一步的 `walk` 与顶层的 `choices`（不动故事的步骤、题目、人物）
+
+## 开工前先看这一关
+
+**上游有待定，你不开工**（第一百七十八批）。调用顺序是业务 → 模型：切片记录里 `stages.business.status` 不是 `done`，或者看板上这条切片还有等人答的问题，这一趟就不该派给你。派工提示里没写清楚，**你先跑一句问清楚**：
+
+```
+node $DEV_TEAM/tools/slice.js pending <项目目录> <切片id>
+```
+
+「挡住业务这一关」那一组不空，就停下，把「这几件没清，我建出来的多半要重来」写进交回，交给开发指挥。2026-09-20 出过一次：三个问题只写在交接正文里，模型照建，人答复一到，模型又改一轮，三条判断全部重填，那一趟三分之二白花。
 
 ## 方法
 

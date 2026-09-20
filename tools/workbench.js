@@ -88,6 +88,17 @@ function gateOf(s) {
     const scenes = require('./lib/project').storiesOfSlice(root, s.id).filter((x) => x.scene !== null)
     if (scenes.length && scenes.every((x) => x.sealed)) return { kind: 'whole-look', ask: '走完 ' + scenes.length + ' 场了。在「审模型」页「按模型看」的总览里点走查的每一步，看支撑它的聚合、方法、字段——看完没有要改的，就定稿（可以出原型）；还有场景没走到，让开发指挥开下一场。', button: '定稿', why: '每一场都审完了，等你看整张说定稿' }
   }
+  // 段落切片的业务这一关（第一百七十八批补上这一关；2026-09-21 项目所有者裁「先按文档写，但要人按一下」）：
+  // 故事点亮完——每一步该挂的编号都挂上了——就轮到他按。模块切片由 slice lit 登记编号时自动置 done、
+  // 修改切片由开发指挥 advance，只有段落这一条从前谁都不管：文档与 schema 都写着「由故事点亮完置 done」，
+  // 可 tools/ 里没有一行这么做，story.js 一处都不碰 stages.business（2026-09-21 分身核出来的第 1 条）。
+  if (['story', 'initial', 'increment'].includes(s.kind) && (s.stages?.business?.status ?? null) !== 'done') {
+    const steps = require('./lib/project').currentStory(root, s.id)?.story?.steps ?? []
+    const dark = steps.filter((x) => (x.needs ?? []).length && !(x.traces ?? []).length).length
+    if (steps.length && !dark) {
+      return { kind: 'business-ok', ask: `故事 ${steps.length} 步都点亮了。范围内的语句立好了、要你裁的都裁完了，就按这个——按了模型师才开工。`, button: '这一段的业务定了', why: '故事点亮完了，等你说业务这一关定了' }
+    }
+  }
   if (s.kind === 'story' && s.stages?.model?.status === 'done' && !s.protoGo && s.stages?.code?.status === 'pending') {
     return { kind: 'proto-go', ask: '模型确认了。看过整个模型，这一段现在出原型？', button: '出原型', why: '模型确认了，等你说出不出原型' }
   }
@@ -126,7 +137,7 @@ function todo() {
     return require('./lib/project').humanTodo(r).length
   }
   const sc = scene(), sid = currentSlice()
-  const t = { ask: 0, story: 0, review: 0, codemodel: 0, prepr: 0, plan: 0, slices: 0 }
+  const t = { scene: 0, ask: 0, story: 0, review: 0, codemodel: 0, prepr: 0, plan: 0, slices: 0 }
   const why = {}
   const put = (k, n, text) => { t[k] = n; if (n) why[k] = text(n) }
   const other = (r) => (r?.slice && sid && r.slice !== sid ? `（${r.slice} 的报告）` : '')
@@ -175,8 +186,25 @@ function todo() {
   const nCand = ((cand?.items ?? []).filter((x) => (x.status ?? 'open') === 'open')).length
   t.slices = gates.length + nCand
   if (t.slices) why.slices = [...gates.map((x) => `${x.s.id}：${x.g.why}，按「${x.g.button}」`), nCand && `${nCand} 件候选修改攒着，等这一段收口后挑`].filter(Boolean).join('；')
-  const total = t.ask + t.story + t.review + t.codemodel + t.prepr + t.plan + gates.length
-  return { tabs: t, soft: gates.length ? [] : ['slices'], total, why, slice: sid }
+
+  // 业务这一关卡在几件上（slice pending 的上半截，第一百七十八批）：这一组从前只有命令行看得见，
+  // 而只能在命令行跑的关卡对他等于不存在。徽章摆在「谁在干什么」上，现场页把这几件逐条列出来。
+  // 走查缺口不算（blocking 为 false，见 businessBlockers）；候选修改归「切片」页那个徽章。
+  // 总数只加别的页签没数过的那几件：等人答已经进了「等你答」，走查摆出来之后没裁的卡由「走故事」数——
+  // 同一件在顶栏上算两遍，这个数就不能信了。
+  // 这一关已经收口了就不再数：剩下的那些（没裁的卡、攒着的候选）是别处的活，
+  // 挂在「业务这一关卡在几件上」名下会让这个数说假话
+  const businessOpen = (cur?.stages?.business?.status ?? 'done') !== 'done'
+  const blockers = businessOpen ? require('./lib/project').businessBlockers(root, sid) : []
+  const mine = blockers.filter((b) => b.blocking && b.kind !== '候选修改')
+  const nKind = (k) => mine.filter((b) => b.kind === k).length
+  const cardsCounted = !!(story && (walked || draftGate))
+  put('scene', mine.length, (n) =>
+    `${sid} 的业务这一关卡在 ${n} 件上：` + ['等人答', '没裁的卡'].filter(nKind).map((k) => `${nKind(k)} 件${k}`).join('、'))
+  const onlyHere = cardsCounted ? 0 : nKind('没裁的卡')
+
+  const total = t.ask + t.story + t.review + t.codemodel + t.prepr + t.plan + gates.length + onlyHere
+  return { tabs: t, soft: gates.length ? [] : ['slices'], total, why, slice: sid, blockers }
 }
 
 // ---------- 子服务 ----------
@@ -466,7 +494,7 @@ function slicesPage() {
   const changes = all.filter((s) => s.kind === 'change')
   // 模块切片已经在「模块」栏里了，别让它在「其他」栏再出现一遍
   const others = all.filter((s) => !modules.includes(s) && !stories.includes(s) && !changes.includes(s))
-  const candCard = (x) => `<div class="cc ${esc(x.status)}"><div class="sh"><span class="id">#${x.n}</span><b>${esc(x.text)}</b><span class="sp"></span><span class="st ${esc(x.status)}">${x.status === 'open' ? '等着开' : x.status === 'opened' ? '已开成 ' + esc(x.openedAs) : '不做'}</span></div><div class="it">来源：${esc(x.origin)}${(x.touches || []).length ? `　动到 ${x.touches.map(esc).join('、')}` : ''}　记于 ${esc(x.ts)}</div>${x.note ? `<div class="meta">${esc(x.note)}</div>` : ''}</div>`
+  const candCard = (x) => `<div class="cc ${esc(x.status)}"><div class="sh"><span class="id">#${x.n}</span><b>${esc(x.text)}</b><span class="sp"></span><span class="st ${esc(x.status)}">${x.status === 'open' ? '等着开' : x.status === 'opened' ? '已开成 ' + esc(x.openedAs) : x.status === 'done' ? '做掉了' : '不做'}</span></div><div class="it">来源：${esc(x.origin)}${(x.touches || []).length ? `　动到 ${x.touches.map(esc).join('、')}` : ''}　记于 ${esc(x.ts)}</div>${x.note ? `<div class="meta">${esc(x.note)}</div>` : ''}</div>`
   const openN = cands.items.filter((x) => x.status === 'open').length
   return `<div class="ptree"><div class="ph">切片是迭代的步伐。<b>段落</b>一段一个最小业务动作，按故事线的先后走；<b>修改</b>只改已走通的段落上被试原型、审阅或裁定点出的一件事，编号 m-xxx；审阅页、试原型页上点出的事先记成<b>候选</b>、不当场改——当前段落收口后再从候选里挑一件开（第八十六批）。</div></div>
 <div class="cols"><section>${modules.length ? `<h2>模块 <span class="n">${modules.length}</span></h2>${modules.map(card).join('')}` : ''}<h2>段落 <span class="n">${stories.length}</span></h2>${stories.map(card).join('') || '<p class="none">还没有段落。</p>'}</section>
@@ -758,11 +786,14 @@ const server = http.createServer((req, res) => {
     })
     return
   }
-  // 「切片」页上的两道门（第九十七批）：模块切片「初稿定了」= slice advance model done；段落「出原型」= slice proto-go。跟计划页一样直接跑命令行那一个
-  if ((url === '/slice/draft-ok' || url === '/slice/proto-go' || url === '/slice/whole-look') && req.method === 'POST') {
+  // 「切片」页上的几道门（第九十七批）：模块切片「初稿定了」= slice advance model done；段落「出原型」= slice proto-go；
+  // 段落「这一段的业务定了」= slice advance business done（第一百八十二批）。跟计划页一样直接跑命令行那一个
+  if ((url === '/slice/draft-ok' || url === '/slice/proto-go' || url === '/slice/whole-look' || url === '/slice/business-ok') && req.method === 'POST') {
     const slice = q.slice
     if (!/^[sk]-[0-9]{3,}$/.test(slice ?? '')) { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('没指到哪一条切片') }
-    const argv = url === '/slice/draft-ok' ? ['advance', root, slice, 'model', 'done', '初稿定了（项目所有者在切片页按的）'] : url === '/slice/whole-look' ? ['whole-look', root, slice, '项目所有者看过整张，在切片页按了「定稿」'] : ['proto-go', root, slice, '项目所有者在切片页按了「出原型」']
+    // 业务这一关不给说明：advance 那头「有没答的问题就拒绝收口，除非末尾写理由」——理由是绕过用的，
+    // 页面上这个按钮一给说明就等于替他绕过了自己的关卡。他要绕，得在命令行上把理由说出来。
+    const argv = url === '/slice/draft-ok' ? ['advance', root, slice, 'model', 'done', '初稿定了（项目所有者在切片页按的）'] : url === '/slice/whole-look' ? ['whole-look', root, slice, '项目所有者看过整张，在切片页按了「定稿」'] : url === '/slice/business-ok' ? ['advance', root, slice, 'business', 'done'] : ['proto-go', root, slice, '项目所有者在切片页按了「出原型」']
     const r = spawnSync(process.execPath, [path.join(tools, 'slice.js'), ...argv], { encoding: 'utf8', cwd: root })
     const out = ((r.stdout ?? '') + (r.stderr ?? '')).trim()
     console.log(`页面上 slice ${argv[0]} ${slice} → ${r.status === 0 ? '成' : '拒'}：${out.split('\n')[0]}`)
