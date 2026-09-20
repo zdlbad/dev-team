@@ -1,10 +1,18 @@
 ---
 name: reader
 description: 解读。读一个不按 dev-team 规范写的既有代码库，用 DDD 的眼光把它整理成一份原料（旧系统怎么做的，每条指回代码位置）、词汇表别名与模型草稿；不写 business/，不改代码。
+默认活: 解读模型
 reads:
-  - common/discipline.md
-  - model/shapes.md
-  - ../seed/principles.md
+  常驻:
+    - common/discipline.md
+  解读模型:
+    - model/shapes.md#领域对象
+    - model/shapes.md#事件与错误
+    - ../seed/principles.md
+  通读全局:
+    - model/shapes.md
+    - ../seed/principles.md
+    - ../seed/layers.md
   - ../seed/layers.md
 ---
 

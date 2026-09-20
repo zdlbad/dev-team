@@ -1,9 +1,18 @@
 ---
 name: guide
 description: 讲解。衔接业务到模型：为开发指挥定下的段落写故事（故事写在语句之前，每步标需要哪条业务），摘原文给人先读，把业务与模型翻成人一次能消化的份量——故事、原文选读、导读、题目、裁定卡的措辞。不裁定，不发明业务事实。
+默认活: 走查
 reads:
-  - common/discipline.md
-  - common/wording.md
+  常驻:
+    - common/discipline.md
+    - common/project-layout.md
+    - business/layers.md
+    - common/wording.md
+  走查:
+    - model/shapes.md#领域对象
+    - model/shapes.md#步骤语法
+  起草走查:
+    - model/shapes.md
   - business/layers.md
 ---
 

@@ -399,8 +399,14 @@ if (cmd === 'back') {
   const today = now.slice(0, 10), yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
   const all = readJournal([yesterday, today])
   // 这一趟从哪次派工算起：同一角色最近一次 dispatch，且它后面还没有 back
-  let start = null
-  for (let i = all.length - 1; i >= 0; i--) { const e = all[i]; if (e.who !== who) continue; if (e.kind === 'back') break; if (e.kind === 'dispatch') { start = e; break } }
+  let start = null, already = null
+  for (let i = all.length - 1; i >= 0; i--) { const e = all[i]; if (e.who !== who) continue; if (e.kind === 'back') { already = e; break } if (e.kind === 'dispatch') { start = e; break } }
+  // 角色自己交回过、开发指挥又补记一次：从前会在日志里多出一条没有派工可配的假记录（第一百七十二批）
+  if (!start && already) {
+    console.log(`这一趟 ${who} 已经交回过了（${already.ts.slice(11, 16)}「${String(already.text).slice(0, 30)}」），不再记一条。`)
+    console.log('要补充的话，写进交接或裁定；真要再记一条，先 scene dispatch 起一趟新的。')
+    return
+  }
   const num = (k) => (opt(k) != null && /^[0-9]+$/.test(opt(k)) ? Number(opt(k)) : null)
   const elapsedMs = start ? new Date(now).getTime() - new Date(start.ts).getTime() : null
   const steps = start ? all.filter((e) => e.kind === 'progress' && e.who === who && e.ts > start.ts).length : null

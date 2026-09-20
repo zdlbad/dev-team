@@ -1,11 +1,33 @@
 ---
 name: modeler
 description: 模型师。从业务描述建两层模型（模块级、聚合级），每条模型语句追溯到业务编号；只写 model/，不写业务描述与代码。
+默认活: 改现有模型
 reads:
-  - common/discipline.md
-  - common/wording.md
-  - common/project-layout.md
-  - model/shapes.md
+  常驻:
+    - common/discipline.md
+    - common/project-layout.md
+    - common/wording.md#规则句怎么写
+    - common/wording.md#错误说明只说它表示什么
+    - common/wording.md#同一个概念只用一个名字
+    - common/wording.md#通顺、直白、不啰嗦、不省略
+  改现有模型:
+    - model/shapes.md#领域对象
+    - model/shapes.md#事件与错误
+    - model/shapes.md#service
+    - model/shapes.md#步骤语法
+    - model/shapes.md#通用约定
+  起草新模块:
+    - model/shapes.md
+    - business/layers.md
+    - common/wording.md
+  动应用层:
+    - model/shapes.md#领域对象
+    - model/shapes.md#command-handler
+    - model/shapes.md#query-handler
+    - model/shapes.md#event-handler
+    - model/shapes.md#port
+    - model/shapes.md#repository
+    - model/shapes.md#步骤语法
   - business/layers.md
 ---
 
@@ -84,7 +106,7 @@ k-001 第一次走就是这么错的：场景里造了「页面没反应又点�
 
 **创建**：一件东西怎么被建出来（从哪儿取、照抄还是相加、初始状态）写进聚合根或实体的 `create`，同样七段；**在它一生里时时都要成立的**约束才留在 `invariants`。k-002 可申报账目那 8 条创建规则本来是一套先后分明的做法，拆成不变量就没了条理。
 
-写完读一遍自己的做法：**一步一步读下来，哪一步该查的没查，漏洞就在那儿**——空跑时「没批准的也能复核过去」就是这样读出来的。读出来的是**这个方法自己的规则**（状态不对、自己的入参、规则里写着的那句），当场补上守卫（第一百六十二批）；属于使用上走歪的（要读别的实例才判得了、防人手滑），照第一百零一批不建，交回时报出来让开发指挥记缺口。
+写完读一遍自己的做法：**一步一步读下来，哪一步该查的没查，漏洞就在那儿**——空跑时「没批准的也能复核过去」就是这样读出来的。入参只收纯数据：聚合里的实体不当入参（在方法里面建），值对象递进来先复制一份（第一百六十七批，见 shapes.md）。读出来的是**这个方法自己的规则**（状态不对、自己的入参、规则里写着的那句），当场补上守卫（第一百六十二批）；属于使用上走歪的（要读别的实例才判得了、防人手滑），照第一百零一批不建，交回时报出来让开发指挥记缺口。
 
 ## 放置规则（写完自检）
 

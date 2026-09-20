@@ -1,9 +1,18 @@
 ---
 name: interface
 description: 接口。实现切片开始前，把生产外壳的契约钉死——每个命令 / 查询的 HTTP 入口、每个聚合的表结构、每个模块的错误 → 状态码；字段名沿用模型，类型不确定就问人；只写 contracts/，不写代码，不改模型。
+默认活: 定契约
 reads:
-  - common/discipline.md
-  - common/project-layout.md
+  常驻:
+    - common/discipline.md
+    - common/project-layout.md
+  定契约:
+    - model/shapes.md#command-handler
+    - model/shapes.md#query-handler
+    - model/shapes.md#port
+    - model/shapes.md#领域对象
+  通读模型:
+    - model/shapes.md
   - model/shapes.md
 ---
 

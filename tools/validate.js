@@ -115,6 +115,7 @@ function makeReport(direction) {
 const decisions = [] // 全部模型文件的 decisions[]
 const decFile = new Map() // 每一条裁决出自哪个文件（重新定基时要写回去）
 const staleSeen = [] // 这一趟遇到的过期裁决：{ dec, text }
+const readOnly = args.includes('--只看') // 第一百七十批：只报错误与警告，不重写报告
 const decStats = { 问过: 0, 压根没人裁过: 0, 指纹对上: 0, 挪位对上: 0, 没带指纹就认了: 0, 过期: 0 }
 /** 裁决对象的指纹：文字变了裁决即过期 */
 /** 按模型看：人点「写得对」记进 decisions[] 时用的检查项名 */
@@ -341,7 +342,7 @@ function ruleLandings(id) {
     for (const b of el.data.behaviors) if (tracedHere(b, id)) out.push({ kind: b.throws.length ? 'behavior-guard' : 'behavior', el, label: `${el.data.name}.${b.name}`, text: `${el.data.name}.${sig(b.name, b.input, b.output)}　${methodText(b)}${rulesText(b.rules, id)}${raisesText(b.raises)}${throwsText(b.throws)}` })
 
     // 字段也是模型的落点：聚合上记着什么、每一栏干什么用，跟不变量一样在承载业务
-    for (const f of el.data.fields ?? []) if ((f.traces ?? []).includes(id)) out.push({ kind: 'field', el, label: `${el.data.name} 的字段 ${f.name}`, text: `${objLabel} ${el.data.name} 的字段 ${f.name}: ${f.type}${f.nullable ? '（可空）' : ''}${f.note ? `　${f.note}` : ''}` })
+    for (const f of el.data.fields ?? []) if ((f.traces ?? []).includes(id)) out.push({ kind: 'field', el, label: `${el.data.name} 的字段 ${f.name}`, text: `${objLabel} ${el.data.name} 的字段 ${f.name}: ${f.type}${f.nullable ? '（可空）' : ''}${f.note ? `　${f.note}` : ''}${carriesOf(f, id)}` }) // 候选 #2：字段也印「本处承担」
   }
   for (const s of services) for (const op of s.data.operations) if (tracedHere(op, id)) out.push({ kind: 'service', el: s, label: `领域服务 ${s.data.name}.${op.name}`, text: `领域服务 ${s.data.name}.${sig(op.name, op.input, op.output)}　${methodText(op)}${rulesText(op.rules, id)}${throwsText(op.throws)}` })
   for (const h of handlers) if (h.data.traces.includes(id)) out.push({ kind: 'event-handler', el: h, label: `事件处理 ${h.data.name}`, text: `事件处理 ${h.data.name}（触发：${h.data.trigger}）：${h.data.steps.map((s) => s.text).join(' → ')}` })
@@ -544,6 +545,17 @@ for (const e of errors) if (!thrownErrors.has(e.data.name)) add(r1, 'error', 'er
 for (const el of domainObjects) for (const b of el.data.behaviors) {
   for (const r of b.raises) if (!find(['event'], typeof r === 'string' ? r : r.event, el.module)) add(r1, 'error', 'behavior.raises.unknown', `${el.file}#behaviors.${b.name}`, `事件不存在：${typeof r === 'string' ? r : r.event}`)
   for (const t of b.throws) if (!find(['error'], t, el.module)) add(r1, 'error', 'behavior.throws.unknown', `${el.file}#behaviors.${b.name}`, `错误不存在：${t}`)
+}
+// 方法收纯数据：聚合内的实体不外露，不当入参（第一百六十七批）
+{
+  const entityNames = new Set(entities.map((e) => e.data.name))
+  for (const el of domainObjects) {
+    const methods = [['create', el.data.create], ...(el.data.behaviors ?? []).map((b) => ['behaviors.' + b.name, b])]
+    for (const [where, m] of methods) for (const p of m?.input ?? []) {
+      const t = String(p.type ?? '').replace(/\[\]$/, '')
+      if (entityNames.has(t)) add(r1, 'warning', 'input.entity', `${el.file}#${where}`, `入参 ${p.name} 的类型是实体 ${t}：聚合里的实体只由聚合自己建、不外露，方法收这一样的数据、在里面建（第一百六十七批）`)
+    }
+  }
 }
 for (const el of domainObjects) {
   const cr = el.data.create
@@ -806,6 +818,16 @@ function finish(report, name) {
   // 候选 #8：人的裁决不可再生。上一份报告里人裁过的，这一趟要么原样接过来（文字没变），
   // 要么已经 slice apply 写进了 decisions[]；两样都不是，重算就会把它无声冲掉——2026-09-16 就这么丢过 52 条。
   const lost = unsavedHuman(report, name)
+  // --只看（第一百七十批）：角色跑校验只为看自己改出没改出毛病，不该被「人裁还没写回」挡住，也不该重写报告。
+  // 由来：2026-09-20 模型师那一趟 46 轮里有 11 轮花在绕开这道门（翻开关、把项目拷到别处跑）。写回仍旧只有开发指挥做。
+  if (readOnly) {
+    const openConfirms0 = report.confirms.filter((c) => !c.human?.verdict).length
+    console.log(`[只看] 方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 需人确认 ${openConfirms0} · 待判断 ${report.judgments.length}（没有重写 reports/，判断的接续与人裁都不动）`)
+    for (const e of report.errors) console.log(`  错误 [${e.check}] ${e.target}：${e.text}`)
+    for (const w of report.warnings) console.log(`  警告 [${w.check}] ${w.target}：${w.text}`)
+    if (report.errors.length) process.exitCode = 1
+    return
+  }
   if (lost.length && !args.includes('--丢弃人裁')) {
     console.error(`[校验] 停下，没有重写报告：上一份报告里有 ${lost.length} 条人裁过、还没写回模型，这一趟文字变了接不过来，重算就会丢掉：`)
     for (const x of lost) console.error(`  - [${x.check}] ${x.target}：人裁「${x.human.verdict}」${x.human.note ? '——' + x.human.note : ''}`)
