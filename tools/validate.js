@@ -945,7 +945,8 @@ const { brokenChars } = require('./lib/wording')
  * 「HCP □用款」…）。两批都是人在页面上读出来的，那时工具一处都没查——走查正文不经过措辞检查。
  */
 function scanBrokenChars() {
-  const skip = new Set(['node_modules', '.git', 'raw', 'archive', 'reports'])
+  // .history 是页面自动保存留下的旧版快照：旧版里的坏字在现行文件里早就补好了，再扫只会刷屏（第一百七十四批）
+  const skip = new Set(['node_modules', '.git', 'raw', 'archive', 'reports', '.history'])
   const hits = []
   const visit = (p) => {
     const st = fs.statSync(p)

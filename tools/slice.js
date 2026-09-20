@@ -173,7 +173,7 @@ if (cmd === 'new') {
     if (!origin) die('修改切片要写来源：--来源 "<试原型页 / 审阅页 / 裁定第几批点出的什么>"')
     slice.origin = origin
     slice.touches = list('--动到')
-    if (!slice.touches.length) die('修改切片要写动到哪几段：--动到 s-001,s-002（收口前人要在原型上重走它们）')
+    if (!slice.touches.length) die('修改切片要写动到哪几条切片：--动到 s-001,s-002（段落，收口前人要在原型上重走）或 k-001（模块，模型要重审）')
     slice.log[0].text = `修改切片建立：${title}；来源：${origin}；动到 ${slice.touches.join('、')}`
   } else if (id.startsWith('m-')) die('m-xxx 只给修改切片用')
   if (kind === 'implementation') {
@@ -588,21 +588,26 @@ if (cmd === 'pass') {
   console.log(`${id} 推到业务走查：讲解出场景，模型师拿初稿走、长出聚合行为，他在场。下一步看 slice next`)
   if (dropped.length) console.log(`  骨架接不住的 ${dropped.length} 条登记作废，逐条看一遍：走查长得出落点的就让它长，落点其实在应用层（段落切片）的重新登记回 backgroundTraces：\n${dropped.map((b) => `    ${b.id}：${b.why}`).join('\n')}`)
 }
-/** 业务分析模块点亮完，开发指挥把编号登记进模块切片（第九十七批）：骨架初稿照这些语句起草 */
+/**
+ * 业务分析模块点亮完，开发指挥把编号登记进模块切片（第九十七批）：骨架初稿照这些语句起草。
+ * 修改切片也用它（第一百七十五批）：m-004 改到一半发现模型里建着「被拒的钱放回时账上另记合计、留痕」，
+ * 业务里一条语句都没有；业务分析补了 R-250，不登记进切片，校验就不给它出判断，模型里那一条从此没人判。
+ */
 if (cmd === 'lit') {
   const id = args[2], ids = (args[3] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
-  if (!id || !ids.length) die('用法：slice lit <项目目录> <切片id> <R-001,G-002,…>　业务分析模块点亮完，开发指挥把编号登记进切片')
+  if (!id || !ids.length) die('用法：slice lit <项目目录> <切片id> <R-001,G-002,…>　业务分析点亮完（模块切片）或补了新语句（修改切片），开发指挥把编号登记进切片')
   const slice = loadSlice(id)
-  if (slice.kind !== 'module') die(`${id} 不是模块切片；段落的编号由故事点亮回填，不用登记`)
+  if (slice.kind !== 'module' && slice.kind !== 'change') die(`${id} 既不是模块切片也不是修改切片；段落的编号由故事点亮回填，不用登记`)
   const { business } = loadProject(root)
   const known = new Set(business.map((s) => s.id))
   const missing = ids.filter((i) => !known.has(i))
   if (missing.length) die(`这些编号在 business/ 里不存在：${missing.join('、')}`)
   slice.traces = [...new Set([...slice.traces, ...ids])].sort()
-  slice.stages.model.litAt = today
-  appendLog(slice, 'model', `模块点亮登记 ${ids.length} 条：${ids.join('、')}`)
+  const isChange = slice.kind === 'change'
+  if (!isChange) slice.stages.model.litAt = today
+  appendLog(slice, 'model', isChange ? `补的语句登记 ${ids.length} 条：${ids.join('、')}` : `模块点亮登记 ${ids.length} 条：${ids.join('、')}`)
   writeJson(slicePath(id), slice)
-  console.log(`${id}：登记了 ${ids.length} 条编号，共 ${slice.traces.length} 条。下一步 slice next（模型师起草骨架初稿）`)
+  console.log(`${id}：登记了 ${ids.length} 条编号，共 ${slice.traces.length} 条。下一步 ${isChange ? '跑一趟 validate，新编号会出一条判断，交给模型校验填' : 'slice next（模型师起草骨架初稿）'}`)
 }
 /**
  * 只作背景（候选 #9）：只改切片记录里 backgroundTraces 这一栏，读、改、写在同一刻做完。
