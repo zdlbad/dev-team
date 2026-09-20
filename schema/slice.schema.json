@@ -285,10 +285,10 @@
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^s-[0-9]{3,}$"
+        "pattern": "^[skm]-[0-9]{3,}$"
       },
       "uniqueItems": true,
-      "description": "修改切片：动到哪几个已走通的段落；收口前人要在原型上重走它们"
+      "description": "这条修改切片动到哪几条切片：段落 s-xxx（收口前人要在原型上重走）或模块切片 k-xxx（模型要重审）。第一百七十四批起也认 k-xxx：k-002 走查点出的洞，改的可能是 k-001 建的那一片模型"
     },
     "candidate": {
       "type": "integer",
