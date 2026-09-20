@@ -66,11 +66,38 @@ function list(name) {
   return v ? v.split(',').map((s) => s.trim()).filter(Boolean) : []
 }
 function readJson(p) {
-  return JSON.parse(fs.readFileSync(p, 'utf8'))
+  const data = JSON.parse(fs.readFileSync(p, 'utf8'))
+  readAt.set(path.resolve(p), fs.statSync(p).mtimeMs) // 记下读的是哪一版（候选 #9）
+  return data
 }
+// 读过哪几份、读的时候是什么时间戳：整份写回去之前拿它对一次（候选 #9）
+const readAt = new Map()
 function writeJson(p, data) {
   fs.mkdirSync(path.dirname(p), { recursive: true })
+  // 别人在这中间改过就停手：几个角色轮流整份写同一份切片文件，后写的会把先写的整段冲掉，
+  // 而两边都以为自己写成功了。停下来让人重跑一次，比悄悄丢掉一段强。
+  const seen = readAt.get(path.resolve(p))
+  if (seen != null && fs.existsSync(p) && fs.statSync(p).mtimeMs > seen + 1) {
+    console.error(`[slice] 停下，没有写：${path.relative(root, p)} 在你读它之后被别人改过（你读的是 ${new Date(seen).toISOString()}，磁盘上是 ${new Date(fs.statSync(p).mtimeMs).toISOString()}）。`)
+    console.error('重跑一遍这条命令：它会读到最新那一版，再把你这一步做上去。')
+    process.exit(1)
+  }
+  keepSliceHistory(p)
   fs.writeFileSync(p, JSON.stringify(data, null, 2) + '\n')
+  readAt.set(path.resolve(p), fs.statSync(p).mtimeMs)
+}
+/** 写之前留一版，最近 30 份滚着放在 slices/.history/（走查文件早就这么做了，切片文件一直没有） */
+function keepSliceHistory(p) {
+  try {
+    if (!fs.existsSync(p) || !/[\\/]slices[\\/]/.test(p)) return
+    const dir = path.join(root, 'slices', '.history')
+    fs.mkdirSync(dir, { recursive: true })
+    const base = path.basename(p, '.json')
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    fs.copyFileSync(p, path.join(dir, `${base}.${stamp}.json`))
+    const mine = fs.readdirSync(dir).filter((f) => f.startsWith(base + '.')).sort()
+    for (const f of mine.slice(0, Math.max(0, mine.length - 30))) fs.unlinkSync(path.join(dir, f))
+  } catch { /* 留不下备份不拦写入 */ }
 }
 /** 同项目已有切片里最后记下的代码库；一条都没有就返回 null */
 function lastCodebase() {

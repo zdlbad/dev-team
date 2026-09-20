@@ -207,7 +207,12 @@ const html = `<!doctype html>
   /* 按模型看（第一百五十六批）：一个方法一块，左列标签、右列自然语言 */
   .mb { border:1px solid var(--line); border-left:4px solid var(--line); border-radius:8px; padding:6px 12px 4px; margin:10px 0; background:#fff; }
   .mb.new { border-left-color:#1a7f37; } .mb.refloat { border-left-color:#d4770a; } .mb.done { opacity:.6; }
-  .mb .mh { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; padding:4px 0 6px; }
+  .mb .mh { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; padding:4px 0 6px; cursor:pointer; list-style:none; }
+  .mb .mh::-webkit-details-marker { display:none }
+  .mb .mh::before { content:'▾'; color:var(--dim); font-size:11px; width:10px; }
+  .mb:not([open]) .mh::before { content:'▸' }
+  .mb:not([open]) .mh { padding-bottom:2px }
+  #foldall { font:inherit; border:1px solid var(--line); background:#fff; border-radius:6px; padding:2px 8px; cursor:pointer; margin-left:8px }
   .mb .mh code { font:600 14px ui-monospace, Consolas, monospace; color:#0550ae; }
   .st2 { font-size:11px; color:#fff; border-radius:4px; padding:0 6px; } .st2.new { background:#1a7f37; } .st2.refloat { background:#d4770a; } .st2.same { background:#8c959f; }
   .lr { display:grid; grid-template-columns:4.5em 1fr; gap:8px; padding:5px 0; border-top:1px dashed var(--line); }
@@ -222,7 +227,7 @@ const html = `<!doctype html>
   .ovm .m b { font-size:15px; } .ovm .m .c { color:var(--bad); font-weight:700; } .ovm .m .c.zero { color:var(--ok); }
 </style></head>
 <body>
-<header><h1 id="title">审阅</h1><span id="status"></span><button id="mode" hidden>按故事看</button><button id="agree-high">其余高信心的一并同意</button><button id="save" class="primary">保存</button></header>
+<header><h1 id="title">审阅</h1><span id="status"></span><button id="mode" hidden>按故事看</button><button id="foldall" hidden>全部收起</button><button id="agree-high">其余高信心的一并同意</button><button id="save" class="primary">保存</button></header>
 <div class="wrap"><aside id="tree" hidden></aside><main id="main"></main></div>
 <script>
 const $ = (s, p=document) => p.querySelector(s)
@@ -318,8 +323,7 @@ function bizCard(it, i) {
     + '<div class="check">' + esc(it.target) + (it.escalated ? ' <span class="tag" style="color:#b91c1c;border-color:#f3b8b5">重要度高、校验没把握</span>' : it.verdict === 'fail' ? ' <span class="tag" style="color:#b91c1c;border-color:#f3b8b5">校验判不通过</span>' : '') + '</div>'
     + (it.sides?.business ? '<div class="biz" style="white-space:pre-wrap">' + esc(it.sides.business) + '</div>' : '<div>' + esc(it.ask || it.check) + '</div>')
     + (data.structure?.length ? landingsHtml(it) : '')
-    + (it.sides?.model ? '<div class="landtx">' + esc(it.sides.model) + '</div>' : '')
-    + judgmentControls(it, i) + '</div>'
+    + judgmentControls(it, i) + '</div>' // 模型原文不在这一视角摆（第一百六十九批）：落点点得过去，要看就切到按模型看
 }
 function renderBiz() {
   const main = $('#main'); main.innerHTML = ''
@@ -588,10 +592,11 @@ function blockCard(file, key, head, body) {
   const ctl = !b ? '' : b.simple ? '<div class="skip">简单方法，跳过不用点</div>' : b.state === 'same' ? '' :
     '<div class="row"><select data-k="blocks" data-i="' + i + '" data-f="verdict"><option value="">— 这一块 —</option><option value="ok">写得对</option><option value="fix">要改</option></select>'
     + '<input type="text" placeholder="要改的话写哪里、改成什么" data-k="blocks" data-i="' + i + '" data-f="note"></div>'
-  return '<div class="mb ' + (b ? b.state : '') + (b?.human?.verdict ? ' done' : '') + '"><div class="mh">' + (b ? '<span class="st2 ' + b.state + '">' + STATE[b.state] + '</span>' : '') + head + (b?.simple ? ' <span class="tag">简单方法</span>' : '') + '</div>' + body + ctl + '</div>'
+  const shut = b && (b.state === 'same' || b.human?.verdict) // 看过的、没变的默认收起（第一百六十九批）
+  return '<details class="mb ' + (b ? b.state : '') + (b?.human?.verdict ? ' done' : '') + '"' + (shut ? '' : ' open') + '><summary class="mh">' + (b ? '<span class="st2 ' + b.state + '">' + STATE[b.state] + '</span>' : '') + head + (b?.simple ? ' <span class="tag">简单方法</span>' : '') + '</summary>' + body + ctl + '</details>'
 }
 // 七段：作用、入参、做法、规则、错误、事件、返回（老写法没有作用与做法，就照原来摆说明与规则）
-function sevenHtml(b, extra) {
+function sevenHtml(b, extra) { // 七段的正文
   const L = []
   if (b.purpose) L.push('<div class="lr"><b>作用</b><div>' + esc(b.purpose.text) + ' ' + chipsJ(b.purpose.traces) + '</div></div>')
   else if (b.note) L.push('<div class="lr"><b>说明</b><div>' + esc(b.note) + '</div></div>')
@@ -946,6 +951,9 @@ function render() {
   $('#mode').hidden = !canStructure
   if (!canStructure) mode = 'story'
   $('#mode').textContent = NEW() ? (mode === 'structure' ? '按业务看' : '按模型看') : (mode === 'structure' ? '按故事看' : '按结构看')
+  const folds = document.querySelectorAll('details.mb')
+  $('#foldall').hidden = !folds.length // 只有按模型看那一侧才有块（第一百六十九批）
+  $('#foldall').textContent = [...folds].some((d) => d.open) ? '全部收起' : '全部展开'
   // 方向 ① 只有推上来的等人，一并同意用不着了
   $('#agree-high').hidden = NEW()
   $('#tree').hidden = mode !== 'structure'
@@ -972,6 +980,12 @@ async function save(auto) {
 let saveTimer = null
 function scheduleSave() { clearTimeout(saveTimer); $('#status').textContent = '有改动，稍后自动保存'; saveTimer = setTimeout(() => save(true), 800) }
 $('#save').addEventListener('click', () => { clearTimeout(saveTimer); save(false) })
+$('#foldall').addEventListener('click', () => {
+  const folds = [...document.querySelectorAll('details.mb')]
+  const shut = folds.some((d) => d.open)
+  for (const d of folds) d.open = !shut
+  $('#foldall').textContent = shut ? '全部展开' : '全部收起'
+})
 $('#mode').addEventListener('click', () => { mode = mode === 'structure' ? 'story' : 'structure'; try { localStorage.setItem('review-mode', mode) } catch {} render(); window.scrollTo(0, 0) })
 $('#agree-high').addEventListener('click', () => {
   let n = 0

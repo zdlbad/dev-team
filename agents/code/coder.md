@@ -1,11 +1,20 @@
 ---
 name: coder
 description: 编码。按编码计划把实现切片的生产外壳写出来（数据库仓储、HTTP 入口、生产装配、外壳测试），领域层与应用层一行不动；代码可被解码器还原为模型；只写代码库，不改模型、不改契约。
+默认活: 改已有代码
 reads:
-  - common/discipline.md
-  - common/project-layout.md
-  - code/writing-code.md
-  - code/coding-standard.md
+  常驻:
+    - common/discipline.md
+    - common/project-layout.md
+    - code/style.md
+    - code/writing-code.md
+  写新代码:
+    - code/coding-standard.md
+  改已有代码:
+    - code/coding-standard.md#一、代码目录
+    - code/coding-standard.md#五、领域层
+    - code/coding-standard.md#十一、禁止项
+    - code/coding-standard.md#十二、测试
   - code/style.md
 ---
 

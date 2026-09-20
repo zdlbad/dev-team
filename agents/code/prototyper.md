@@ -1,12 +1,21 @@
 ---
 name: prototyper
 description: 原型。按编码计划把一条故事的领域代码与应用层写出来（这就是最终代码），用内存适配器装进原型宿主，让人在页面上直接操作业务规则；写领域与用例测试；只写代码库与故事的 walk.input，不改模型。
+默认活: 改原型
 reads:
-  - common/discipline.md
-  - common/project-layout.md
-  - code/writing-code.md
-  - code/coding-standard.md
-  - code/style.md
+  常驻:
+    - common/discipline.md
+    - common/project-layout.md
+    - code/style.md
+  建原型:
+    - code/writing-code.md
+    - code/coding-standard.md
+    - ../building-block/proto/README.md
+  改原型:
+    - code/writing-code.md#让代码可解码：模型到代码的对应
+    - code/coding-standard.md#一、代码目录
+    - code/coding-standard.md#六、应用层
+    - ../building-block/proto/README.md
   - ../building-block/proto/README.md
 ---
 

@@ -17,6 +17,10 @@
  *   judge <编号>                 一条判断的全文（业务、模型两侧，判定与理由）
  *   doc <文件> [<标题关键字>]    Markdown 的小节目录；给了关键字就是那一节全文。文件先按项目找，再按 dev-team 找
  *   --max <字数>                输出上限，默认 6000 字；超出就截断，并提示怎么取得更小
+ *
+ * 一次取多块（第一百七十批）：几个查询连着写，中间用 + 隔开——
+ *   node tools/look.js <项目> R-166 + model ClaimableEntry.create + model Invoice.void + term 发票
+ * 少跑几个来回：2026-09-20 模型师那一趟 46 轮里有 21 轮是一块一块地要。
  */
 const fs = require('node:fs')
 const path = require('node:path')
@@ -178,11 +182,16 @@ function lookJudge(id) {
 }
 
 function lookDoc(file, key) {
-  const p = [path.join(root, file), path.join(DEV_TEAM, file)].find((x) => fs.existsSync(x))
+  // agents/ 底下的规范，写不写 agents/ 前缀都认（派工书索引里印的是 model/shapes.md 那种短写法）
+  const p = [path.join(root, file), path.join(DEV_TEAM, file), path.join(DEV_TEAM, 'agents', file)].find((x) => fs.existsSync(x))
   if (!p) { say('找不到 ' + file + '（按项目、按 dev-team 都找过）'); return }
   const lines = fs.readFileSync(p, 'utf8').split('\n')
   const heads = lines.map((l, i) => ({ i, m: /^(#{1,6})\s+(.*)$/.exec(l) })).filter((h) => h.m)
   if (!key) { say(`${file} 的小节（${lines.length} 行）：`); for (const h of heads) say(`${'  '.repeat(h.m[1].length - 1)}${h.m[2]}`); return }
+  try { // 记一笔：取回过哪一节。常取的升进派工书默认，从不取的彻底裁掉（第一百七十一批）
+    const sc = JSON.parse(fs.readFileSync(path.join(root, 'reports', '_scene.json'), 'utf8'))
+    fs.appendFileSync(path.join(root, 'reports', '_look-doc.jsonl'), JSON.stringify({ ts: new Date().toISOString(), who: sc.who ?? null, slice: sc.slice ?? null, step: sc.step ?? null, file, key }) + '\n')
+  } catch { /* 没有现场看板或写不进去就不记，取回本身照做 */ }
   const at = heads.findIndex((h) => h.m[2].includes(key))
   if (at < 0) { say(`${file} 里没有标题含「${key}」的小节`); return }
   const level = heads[at].m[1].length
@@ -190,12 +199,20 @@ function lookDoc(file, key) {
   say(lines.slice(heads[at].i, end ? end.i : lines.length).join('\n').trim())
 }
 
-if (/^[GRU]-\d{3,}$/.test(what)) lookStatement(what)
-else if (what === 'term') lookTerm(rest.join(' '))
-else if (what === 'model' && rest[0]) lookModel(rest[0])
-else if (what === 'step') lookStep(rest[0], rest[1])
-else if (what === 'gap' && rest[0]) lookGap(rest[0], rest[1])
-else if (what === 'judge') lookJudge(rest[0])
-else if (what === 'doc' && rest[0]) lookDoc(rest[0], rest.slice(1).join(' '))
-else usage()
+// 一次取多块：用 + 隔开的几段，逐段照单块那样取（第一百七十批）
+function one(parts) {
+  const [what, ...rest] = parts
+  if (!what) return
+  if (/^[GRU]-\d{3,}$/.test(what)) lookStatement(what)
+  else if (what === 'term') lookTerm(rest.join(' '))
+  else if (what === 'model' && rest[0]) lookModel(rest[0])
+  else if (what === 'step') lookStep(rest[0], rest[1])
+  else if (what === 'gap' && rest[0]) lookGap(rest[0], rest[1])
+  else if (what === 'judge') lookJudge(rest[0])
+  else if (what === 'doc' && rest[0]) lookDoc(rest[0], rest.slice(1).join(' '))
+  else { say('看不懂要取什么：' + [what, ...rest].join(' ')); say('') }
+}
+const groups = [[]]
+for (const a of [what, ...rest]) { if (a === '+') groups.push([]); else groups[groups.length - 1].push(a) }
+groups.forEach((g, i) => { if (i) say('———'); one(g) })
 flush()

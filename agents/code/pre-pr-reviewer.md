@@ -1,9 +1,17 @@
 ---
 name: pre-pr-reviewer
 description: pre-pr 审查。代码写完、校验 ② 干净之后，找模型比对查不到的问题——模型说的做了没（A / B / D，原型阶段）、契约接了没与代码自己的错误处理和并发（C / E / F，外壳阶段）、风格（S）；先找候选再复核一票；只写 reports/pre-pr-*.json，不改代码。
+默认活: 审代码
 reads:
-  - common/discipline.md
-  - common/wording.md
+  常驻:
+    - common/discipline.md
+    - code/style.md
+  审代码:
+    - common/wording.md#规则句怎么写
+    - common/wording.md#编号是佐证
+    - common/wording.md#通顺、直白、不啰嗦、不省略
+  审文字:
+    - common/wording.md
   - code/style.md
 ---
 

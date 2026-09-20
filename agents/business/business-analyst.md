@@ -1,9 +1,17 @@
 ---
 name: business-analyst
 description: 业务分析。粗读原料出全景与模块候选，之后按段落把原料里的业务点亮成陈述性语句（业务抽象与业务落地两层，每条标层与种类），并维护词汇表；不设计模型，不写应用行为，不用技术词。
+默认活: 立改语句
 reads:
-  - common/discipline.md
-  - common/wording.md
+  常驻:
+    - common/discipline.md
+    - common/project-layout.md
+    - business/layers.md
+    - common/wording.md
+  立改语句:
+    - model/shapes.md#领域对象
+  起草一段业务:
+    - model/shapes.md
   - business/layers.md
 ---
 

@@ -131,7 +131,6 @@ function todo() {
   const put = (k, n, text) => { t[k] = n; if (n) why[k] = text(n) }
   const other = (r) => (r?.slice && sid && r.slice !== sid ? `（${r.slice} 的报告）` : '')
 
-  put('ask', (sc.questions ?? []).filter((q) => !q.answeredAt).length, (n) => `${n} 个问题等你答`)
 
   const r1 = readSafe('reports/validate-1.json'), r2 = readSafe('reports/validate-2.json')
   const openWarnings = (r) => (r?.warnings ?? []).filter((x) => !x.human?.verdict).length
@@ -609,7 +608,7 @@ header .sp{flex:1}header .now{color:var(--dim);font-size:12.5px;white-space:nowr
 main{flex:1;position:relative}iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--page,#fff)}
 </style></head><body>
 <header><h1>工作台<span>${esc(projectName)}</span></h1>
-<button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="slices">切片</button><button data-t="journal">日志</button><button data-t="source">读原文</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="delta">这段改了什么</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="plan">编码计划</button><button data-t="proto">试原型</button>
+<button data-t="scene" class="on">谁在干什么</button><button data-t="slices">切片</button><button data-t="journal">日志</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="proto">试原型</button>
 <span class="sp"></span><span class="td" id="todo"></span><span class="now" id="now"></span><button id="theme" title="白天 / 黑夜">🌙</button><a id="open" href="#" target="_blank" title="在新窗口打开这一页">新窗口 ↗</a></header>
 <main><iframe id="f" src="/p/scene/"></iframe></main>
 <script>
@@ -724,11 +723,8 @@ const server = http.createServer((req, res) => {
   // 不是看板里那个字段的原样——看板漏记一笔，页签不该跟着指不到地方
   if (url === '/state') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ...scene(), slice: currentSlice() })) }
   if (url === '/todo') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify(todo())) }
-  if (url === '/delta') return html(deltaPage(q.slice || currentSlice()) ?? wrap('<p>还没指到哪一段。</p>'))
   if (url === '/slices') return html(wrap(slicesPage()))
   if (url === '/journal') return html(wrap(journalPage(q.date)))
-  if (url === '/plan') return html(wrap(planPage(q.slice || currentSlice())))
-  if (url === '/source') return html(wrap(sourcePage(q.slice || currentSlice())))
   // 计划页的按钮：确认 / 撤销 / 留话都不另写逻辑，直接跑命令行那一个（plan.js confirm | unconfirm | comment），门禁、日志、切片记录同一套；
   // 留话顺手记进现场日志（scene progress --who 人），事后在「日志」页看得见人在哪一步说了什么
   const planCmd = (sub, slice, extra, okText) => {
