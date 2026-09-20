@@ -103,7 +103,9 @@ if (args.includes('--列')) {
   process.exit(0)
 }
 
-const want = args.find((a) => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--细' && args[args.indexOf(a) - 1] !== '--读')
+// 会话 id 就是那个不带 -- 的参数。`--细` 后面跟的是趟次号，不是会话，排掉；
+// `--读` 后面跟的恰恰是会话 id（`--读 <会话id>`），从前连它一起排了，指定哪一段都回落到最近一段。
+const want = args.find((a) => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--细')
 const all = sessions()
 const sess = want ? all.find((s) => s.id === want) ?? die(`找不到会话 ${want}；--列 看有哪些`) : all[0]
 const cmd = rounds(sess.file)

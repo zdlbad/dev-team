@@ -27,7 +27,8 @@
  *                       → 原型按计划写 → plan check → 校验 ② → pre-pr 审查（A/B/D）→ 人看报告 → 人在原型上走故事
  *                       实现切片：接口角色定契约（contract.js）→ 人确认 → 编码计划 → 人确认 → 编码 → plan check → 校验 ② → pre-pr（C/E/F）→ 合并
  *   node tools/slice.js proofread <项目目录> <切片id>          文职总校完了记一笔（stages.model.proofreadAt）；段落切片里文职只跑这一趟（第八十九批）
- *   node tools/slice.js advance <项目目录> <切片id> <model|code|validate> <pending|in-progress|done> [说明]
+ *   node tools/slice.js advance <项目目录> <切片id> <business|model|code|validate> <pending|in-progress|done> [说明]
+ *                                                            business done 带着没答的问题会被拒；末尾的说明是绕过用的，记进切片日志
  *   node tools/slice.js apply <项目目录> <报告 json> [--slice <切片id>]   把人的裁决写回 decisions[] 与切片 log
  *   node tools/slice.js log <项目目录> <切片id> <model|code|validate|slice> <文字>
  *
@@ -753,16 +754,13 @@ if (cmd === 'pending') {
   const rel = (p) => path.relative(process.cwd(), p) || '.'
   const id = args[2] ?? die('用法：slice pending <项目目录> <切片id>')
   const slice = loadSlice(id)
-  const cur = require('./lib/project').currentStory(root, id)
-  // 挡业务这一关：答案一变，上游的语句、模型、判断都要跟着改一轮
-  const upstream = []
-  for (const q of openQuestions(id)) upstream.push(['等人答', `${q.id}　${q.question}`])
-  for (const c of cur?.story?.choices ?? []) if (!c.ruling) upstream.push(['没裁的卡', (c.question ?? c.text ?? JSON.stringify(c)).replace(/\s+/g, ' ').slice(0, 100)])
-  for (const g of cur?.story?.gaps ?? []) if (!g.resolved) upstream.push(['走查缺口', `${g.round ? '第' + g.round + '轮　' : ''}${(g.text ?? g.why ?? JSON.stringify(g)).replace(/\s+/g, ' ').slice(0, 100)}`])
-  try {
-    const cand = readJson(candidatesPath())
-    for (const x of cand.items ?? []) if ((x.status ?? 'open') === 'open' && (x.touches ?? []).includes(id)) upstream.push(['候选修改', `#${x.n}　${x.text.replace(/\s+/g, ' ').slice(0, 100)}`])
-  } catch {}
+  // 挡业务这一关：答案一变，上游的语句、模型、判断都要跟着改一轮。
+  // 这一组的算法在 lib/project.js 的 businessBlockers 里，工作台顶栏读的是同一个函数——
+  // 命令行说卡着四件、页面说没有等你的事，那个数就没人信了（第一百八十二批）
+  const items = require('./lib/project').businessBlockers(root, id)
+  const line = (b) => (b.id ? `${b.id}　` : '') + b.text
+  const upstream = items.filter((b) => b.blocking).map((b) => [b.kind, line(b)])
+  const later = items.filter((b) => !b.blocking).map((b) => [b.kind, line(b)])
   // 挡模型这一关收口：他在审模型页上要按的那些
   const downstream = []
   const r1 = reportOf(1, id)
@@ -782,6 +780,9 @@ if (cmd === 'pending') {
     ? '这一关的活就是把它清空。还没挂上看板的，现在就 scene ask 挂上去——做到一半才发现要问，上游已经建好的语句、模型、判断都得跟着改一轮。'
     : `业务这一关没有挡路的了：node tools/slice.js advance ${rel(root)} ${id} business done`)
   print('挡住模型这一关收口（他在审模型页上按）', downstream, downstream.length ? '这些不挡业务，也不挡模型师开工；模型要收口才要它们清完。' : '')
+  // 缺口不挡这一关（项目所有者 2026-09-21 裁）：它是下一版故事的候选，重走那一趟才捡起来。
+  // 摆在这里是为了让人看见「这一段主线之外还欠着什么」，不进要清空的那一组。
+  if (later.length) print('留给下一轮（不挡这一关）', later, '走查缺口＝下一版故事的候选。要现在做的，用 candidate add 开成候选修改，或者 scene ask 挂成问题。')
   process.exit(0)
 }
 

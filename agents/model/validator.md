@@ -6,13 +6,21 @@ reads:
   常驻:
     - common/discipline.md
     - common/project-layout.md#写入权
-    - model/validation.md
+  # 方向 ①：一整份报告的判断都你填
   判模型:
+    - model/validation.md#-三、方向 ②
     - model/shapes.md#领域对象
     - model/shapes.md#事件与错误
     - model/shapes.md#service
     - business/layers.md
+  # 「判几条」：方向 ①，但只有三五条——改动小、报告上新浮起来的那几条
+  判几条:
+    - model/validation.md#-三、方向 ②,-六、未定
+    - model/shapes.md#领域对象
+    - business/layers.md#七种种类
+  # 方向 ②：代码解回来跟模型比
   判代码:
+    - model/validation.md#-二、方向 ①
     - model/shapes.md
     - business/layers.md
 ---
