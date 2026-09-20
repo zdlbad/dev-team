@@ -666,9 +666,25 @@ if (cmd === 'next') {
       if (sc.machine && sc.machine !== me) console.log(`⚠ 现场上一次是在「${sc.machine}」写的，本机是「${me}」——先确认 git pull 过了；交接看 scene 一屏或页面`)
     } catch {}
   }
+  // 这条切片上还有几件等人答：等着的时候不往下派（项目所有者 2026-09-20：「上游有待定的事项，
+  // 模型师本不应开工」）。今天真出过——m-004 的三个问题挂着没答，业务分析先立了语句、模型校验
+  // 先判了三条；他的答复一到，模型又改一轮，那三条判断全部重浮，一趟 2.8M 白花。
+  const pending = (() => {
+    try {
+      const sc = JSON.parse(fs.readFileSync(sceneP, 'utf8'))
+      return (sc.questions ?? []).filter((q) => q.slice === slice.id && !q.answeredAt)
+    } catch { return [] }
+  })()
+  n.pending = pending.map((q) => ({ id: q.id, who: q.who, phase: q.phase, question: q.question }))
   if (args.includes('--json')) console.log(JSON.stringify(n, null, 2))
   else {
     console.log(`切片 ${slice.id}「${slice.title}」　模型 ${slice.stages.model.status} · 编码 ${slice.stages.code.status} · 校验 ${slice.stages.validate.status}`)
+    if (pending.length) {
+      console.log(`\n⛔ 这条切片还有 ${pending.length} 件等人答，先别往下派：`)
+      for (const q of pending) console.log(`   ${q.id}（${q.who} 在${q.phase || '—'}这一关问的）：${q.question}`)
+      console.log(`   答复一到，已经建好的语句、模型、判断都可能要改一轮——今天 m-004 就这么白判了一趟。`)
+      console.log(`   人答了用 scene answer 记上；确实挡不住这一步的，自己判断往下走，并在裁定里记一笔为什么。\n`)
+    }
     console.log(`下一步：${n.role} — ${n.action}`)
     if (n.command) console.log(`执行：${n.command}`)
     console.log(`因为：${n.why}`)
