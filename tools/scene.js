@@ -356,6 +356,18 @@ if (cmd === 'answer') {
 function openQuestionsOf(sc, sliceId) {
   return (sc.questions ?? []).filter((q) => q.slice === sliceId && !q.answeredAt)
 }
+/** 机器上看得见的「等他」：校验与审查报告里还等他按的那些（审模型页、审代码页） */
+function humanTodoCount() {
+  let n = 0
+  for (const fn of ['validate-1.json', 'validate-2.json', 'pre-pr-proto.json', 'pre-pr-shell.json']) {
+    try {
+      const r = JSON.parse(fs.readFileSync(path.join(root, 'reports', fn), 'utf8'))
+      n += require('./lib/project').humanTodo(r).length
+    } catch {}
+  }
+  return n
+}
+
 /** 这条切片业务这一关的状态；读不到切片记录就当 done，不拦 */
 function businessStatusOf(sliceId) {
   try {
@@ -374,13 +386,17 @@ if (cmd === 'handoff') {
   if (!args.includes('--散文也行')) {
     const 像在说等人 = /等他|等你|等人|要他定|请他|待他|等项目所有者|等裁/.test(text)
     const open = openQuestionsOf(s, s.slice)
-    if (像在说等人 && !open.length) {
+    // 拦的是「说有人在等，可机器上一件都看不见」。看板上的问题算、审模型页与审代码页上
+    // 等他按的那些也算——那些他打开工作台就看得见，不会像散文那样被下一段接手的人当背景。
+    const todo = humanTodoCount()
+    if (像在说等人 && !open.length && !todo) {
       die(`交接里写着「等他定」这类话，可看板上这条切片（${s.slice ?? '—'}）一件没答的问题都没有。\n` +
         `先把它们挂上去，交接才写得出谁在等什么：\n` +
         `  node tools/scene.js ${args[0]} ask "<问题>" --who 开发指挥 --doing "<在做什么>" --context "<上下文>" --options "甲：…|乙：…" --lean "<偏向>" --confidence 中\n` +
         `写成散文的等于不存在——第二天接手的人会照着往下派。真要这么写：末尾加 --散文也行。`)
     }
     if (open.length) console.log(`  交接里这条切片有 ${open.length} 件等他答：${open.map((q) => q.id).join('、')}（看板上有，接手的人看得见）`)
+    if (todo) console.log(`  报告里还有 ${todo} 件等他按（审模型页 / 审代码页上看得见）`)
   }
   const now = new Date().toISOString()
   writeScene({
