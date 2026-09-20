@@ -14,6 +14,8 @@
  *                       --改 --来源 "<谁在哪儿点出的>" --动到 s-001,s-002：修改切片（id 用 m-xxx）——已走通的段落上被点出的一件事；正路是先记候选再 candidate open
  *   node tools/slice.js candidate <项目目录> add "<改什么，一句话>" --来源 "<试原型页 / 审阅页 / 裁定第几批>" [--动到 s-001,s-002] [--备注 "<一句>"]
  *   node tools/slice.js candidate <项目目录> list                列候选：审阅点出的事先记在这里，不当场改（第八十六批）
+ *   node tools/slice.js candidate <项目目录> done <序号> "<在哪一批、怎么做掉的>"   做掉了（第一百八十批：从前只记得下「不做」，账本因此长期失真）
+ *   node tools/slice.js candidate <项目目录> drop <序号> "<为什么不做>"
  *   node tools/slice.js background <项目目录> <切片id> add <R-xxx> "<为什么本段落不了>" | remove <R-xxx> | list
  *                                                          只作背景只改这一栏（候选 #9：角色整份写回切片会互相冲掉）
  *   node tools/slice.js scene <项目目录> <模块切片id> [--title "…"]   建下一场走查（第一百五十批；上一场没锁死不让建）
@@ -316,7 +318,15 @@ if (cmd === 'candidate') {
     x.status = 'dropped'; x.note = why; x.droppedAt = today
     writeJson(candidatesPath(), c)
     console.log(`候选 #${x.n} 标成不做：${why}`)
-  } else die('用法：slice candidate <项目目录> add|list|open|drop …')
+  } else if (sub === 'done') {
+    // 「做掉了」和「不做」是两回事，从前只记得下后者，账本因此长期失真（第一百八十批）
+    const x = find(args[3])
+    const why = args[4]
+    if (!why) die('用法：slice candidate <项目目录> done <序号> "<在哪一批、怎么做掉的>"')
+    x.status = 'done'; x.note = why; x.doneAt = today
+    writeJson(candidatesPath(), c)
+    console.log(`候选 #${x.n} 标成做掉了：${why}`)
+  } else die('用法：slice candidate <项目目录> add|list|open|done|drop …')
 }
 
 // ---------- next：路由的大脑 ----------

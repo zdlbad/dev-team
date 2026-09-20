@@ -45,6 +45,8 @@ const ROLES = {
   '编码': 'code/coder.md', 'coder': 'code/coder.md',
   'pre-pr 审查': 'code/pre-pr-reviewer.md', 'pre-pr-reviewer': 'code/pre-pr-reviewer.md', 'pre-pr': 'code/pre-pr-reviewer.md',
   '解读': 'casual/reader.md', 'reader': 'casual/reader.md',
+  // 分身不是十个角色之一：只读的一次性探子，派工书极小（第一百八十批）
+  '分身': 'common/scout.md', 'scout': 'common/scout.md',
 }
 
 function die(msg) { console.error('[brief] ' + msg); process.exit(2) }
