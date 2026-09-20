@@ -5,14 +5,21 @@ description: 业务分析。粗读原料出全景与模块候选，之后按段�
 reads:
   常驻:
     - common/discipline.md
-    - common/project-layout.md
+    - common/project-layout.md#写入权
+  立改语句:
+    - business/layers.md
+    - common/wording.md#-规则句,-错误说明,-一事一处   # 那三节说的是模型文字，业务分析不写
+  # 「登词条」：模型师提交的新词、新错误名登进词汇表，不判层不发编号
+  登词条:
+    - common/wording.md#总则
+    - common/wording.md#不用缩写
+    - common/wording.md#同一个概念
+    - common/wording.md#错误说明
+    - common/wording.md#坏字
+  起草一段业务:
     - business/layers.md
     - common/wording.md
-  立改语句:
     - model/shapes.md#领域对象
-  起草一段业务:
-    - model/shapes.md
-  - business/layers.md
 ---
 
 # 业务分析

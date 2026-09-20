@@ -5,7 +5,7 @@ description: 接口。实现切片开始前，把生产外壳的契约钉死—�
 reads:
   常驻:
     - common/discipline.md
-    - common/project-layout.md
+    - common/project-layout.md#写入权
   定契约:
     - model/shapes.md#command-handler
     - model/shapes.md#query-handler
@@ -13,7 +13,6 @@ reads:
     - model/shapes.md#领域对象
   通读模型:
     - model/shapes.md
-  - model/shapes.md
 ---
 
 # 接口

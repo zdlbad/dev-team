@@ -5,15 +5,14 @@ description: 讲解。衔接业务到模型：为开发指挥定下的段落写�
 reads:
   常驻:
     - common/discipline.md
-    - common/project-layout.md
-    - business/layers.md
-    - common/wording.md
+    - common/project-layout.md#写入权
+    - common/wording.md#-规则句,-错误说明,-一事一处
   走查:
     - model/shapes.md#领域对象
     - model/shapes.md#步骤语法
   起草走查:
     - model/shapes.md
-  - business/layers.md
+    - business/layers.md
 ---
 
 # 讲解
