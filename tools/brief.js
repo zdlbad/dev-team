@@ -169,7 +169,12 @@ function main(argv) {
   let refs
   if (!byJob) refs = Array.isArray(reads) ? reads : []
   else if (flags.has('--整份')) { refs = [...new Set(Object.values(reads).flat())]; job = null }
-  else refs = [...(reads['常驻'] ?? []), ...reads[job]]
+  else {
+    // 去重兜底：同一份点两次就装两遍。2026-09-21 真有两处——角色文件头上缩进错位的一行
+    // 落进了最后那一档（reader 的 ../seed/layers.md、pre-pr 的 code/style.md，两份都已在常驻里）
+    const seen = new Set()
+    refs = [...(reads['常驻'] ?? []), ...reads[job]].filter((r) => (seen.has(r) ? (console.error(`[brief] ${rel} 的「${job}」档里 ${r} 点了两次，只装一遍`), false) : seen.add(r)))
+  }
 
   // 角色自己那份正文也按档裁（第一百八十二批）：`正文#-方法` 这样写在某一档里，那一趟就不带「方法」那一节。
   // 量出来的：小活里正文是最大的一块（模型师 19.8K、讲解 12.5K），比几张卡片加起来还大。

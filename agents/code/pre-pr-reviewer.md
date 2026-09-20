@@ -5,8 +5,7 @@ description: pre-pr 审查。代码写完、校验 ② 干净之后，找模型�
 reads:
   常驻:
     - common/discipline.md
-    - code/style.md
-  审代码:
+    审代码:
     - common/wording.md#规则句怎么写
     - common/wording.md#编号是佐证
     - common/wording.md#通顺、直白、不啰嗦、不省略
