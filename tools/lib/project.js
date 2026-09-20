@@ -223,12 +223,14 @@ function currentStory(root, id) {
  * slice pending 的上半截，也是工作台顶栏要算进「N 件等你」的那一截——只在命令行看得见的关卡对他
  * 等于不存在（一条老规矩）。两边读同一个函数，免得页面说没事、命令行说卡着四件。
  * 返回 [{ kind, id, text, blocking }]，kind 是「等人答」「没裁的卡」「走查缺口」「候选修改」，按这个顺序排。
- * **走查缺口 blocking 为 false**：它是下一版故事的候选，不是这一关的活（story.js 的走查页与 guide.md
- * 都这么说——第一轮只走主线，守卫、异常、怪事记进 gaps 标轮次，留给重走那一趟）。第一百七十八批把
- * 它一并算成挡路的，于是 k-001 三条人早已在正文里改成「（已答）…」的缺口永远挂在单子上（项目所有者
- * 2026-09-21 裁：缺口不挡业务，从这一组撤出来）。
+ * **挡路的只有等人答与没裁的卡**。走查缺口 blocking 为 false：它是下一版故事的候选，不是这一关的活
+ * （story.js 的走查页与 guide.md 都这么说——第一轮只走主线，守卫、异常、怪事记进 gaps 标轮次，留给
+ * 重走那一趟）；第一百七十八批把它算成挡路的，于是 k-001 三条人早已改成「（已答）…」的缺口永远挂在
+ * 单子上（项目所有者 2026-09-21 裁：缺口不挡业务）。候选修改也 false：第一百八十四批起候选只装
+ * 「等着某个还没建的模块」的事，那个模块没建之前谁也清不掉它，算成挡路等于这一关永远收不了口。
+ * `scene` 可以把已经读好的看板递进来，免得每次轮询再读一遍 _scene.json。
  */
-function businessBlockers(root, sliceId) {
+function businessBlockers(root, sliceId, scene = null) {
   const fsx = require('node:fs'), px = require('node:path')
   if (!sliceId) return []
   const one = (p) => { try { return JSON.parse(fsx.readFileSync(px.join(root, p), 'utf8')) } catch { return null } }
@@ -236,22 +238,31 @@ function businessBlockers(root, sliceId) {
   // 从前这里一律当对象取 text/why，缺口就落到 JSON.stringify 上，印出来带着引号和转义（k-001 三条都这样）。
   const cut = (x) => (typeof x === 'string' ? x : x?.question ?? x?.text ?? x?.why ?? JSON.stringify(x)).replace(/\s+/g, ' ').slice(0, 100)
   const out = []
-  for (const q of one('reports/_scene.json')?.questions ?? []) {
-    if (q.slice === sliceId && !q.answeredAt) out.push({ kind: '等人答', id: q.id, text: cut(q.question), blocking: true })
-  }
+  for (const q of openQuestions(root, sliceId, scene)) out.push({ kind: '等人答', id: q.id, text: cut(q.question), blocking: true })
   const story = currentStory(root, sliceId)?.story
   for (const c of story?.choices ?? []) {
     if (!c.ruling) out.push({ kind: '没裁的卡', id: c.id ?? null, text: cut(c), blocking: true })
   }
   for (const g of story?.gaps ?? []) out.push({ kind: '走查缺口', id: null, text: cut(g), blocking: false })
   for (const x of one('slices/_candidates.json')?.items ?? []) {
-    if ((x.status ?? 'open') === 'open' && (x.touches ?? []).includes(sliceId)) out.push({ kind: '候选修改', id: `#${x.n}`, text: cut(x.text), blocking: true })
+    if ((x.status ?? 'open') === 'open' && (x.touches ?? []).includes(sliceId)) out.push({ kind: '候选修改', id: `#${x.n}`, text: (x.waitFor ? `等 ${x.waitFor}　` : '') + cut(x.text), blocking: false })
   }
   return out
+}
+/**
+ * 看板上这条切片还没答的问题（第一百七十八批：业务这一关收口、模型这一关开工、scene dispatch 的门都看它）。
+ * 从前 slice.js 里写了两份、这里又一份，三份各自过滤——看板记答复的方式一变，三处就会数出三个数。只留这一份。
+ * `scene` 递进来就不再读文件。
+ */
+function openQuestions(root, sliceId, scene = null) {
+  const fsx = require('node:fs'), px = require('node:path')
+  let sc = scene
+  if (!sc) { try { sc = JSON.parse(fsx.readFileSync(px.join(root, 'reports', '_scene.json'), 'utf8')) } catch { return [] } }
+  return (sc.questions ?? []).filter((q) => q.slice === sliceId && !q.answeredAt)
 }
 /**
  * 走查里的铺垫步（候选 #11）：没挂编号、模型这一侧也没有动作（walk.kind 为 none 或没写），也不出题——
  * 交代「账已开、服务已做」这类背景，没有要人勾的。k-002 第 1～3 步就是，人点开才发现没东西可勾。
  */
 function isIntroStep(s) { return !(s.traces ?? []).length && (!s.walk || s.walk.kind === 'none') && !s.quiz }
-module.exports = { isIntroStep, storiesOfSlice, currentStory, businessBlockers, humanTodo, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }
+module.exports = { isIntroStep, storiesOfSlice, currentStory, businessBlockers, openQuestions, humanTodo, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }

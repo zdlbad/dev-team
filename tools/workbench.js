@@ -92,7 +92,9 @@ function gateOf(s) {
   // 故事点亮完——每一步该挂的编号都挂上了——就轮到他按。模块切片由 slice lit 登记编号时自动置 done、
   // 修改切片由开发指挥 advance，只有段落这一条从前谁都不管：文档与 schema 都写着「由故事点亮完置 done」，
   // 可 tools/ 里没有一行这么做，story.js 一处都不碰 stages.business（2026-09-21 分身核出来的第 1 条）。
-  if (['story', 'initial', 'increment'].includes(s.kind) && (s.stages?.business?.status ?? null) !== 'done') {
+  // 旧记录（第一百七十八批之前建的）没有这一关，当 done——跟 todo() 与 scene.js 的 businessStatusOf 一个口径；
+  // 从前这里把「没有」当成「没定」，老段落上会一直挂着这个按钮，按下去 advance 在 undefined 上写 status 就崩
+  if (['story', 'initial', 'increment'].includes(s.kind) && s.stages?.business && s.stages.business.status !== 'done') {
     const steps = require('./lib/project').currentStory(root, s.id)?.story?.steps ?? []
     const dark = steps.filter((x) => (x.needs ?? []).length && !(x.traces ?? []).length).length
     if (steps.length && !dark) {
@@ -185,7 +187,7 @@ function todo() {
   const cand = readSafe('slices/_candidates.json')
   const nCand = ((cand?.items ?? []).filter((x) => (x.status ?? 'open') === 'open')).length
   t.slices = gates.length + nCand
-  if (t.slices) why.slices = [...gates.map((x) => `${x.s.id}：${x.g.why}，按「${x.g.button}」`), nCand && `${nCand} 件候选修改攒着，等这一段收口后挑`].filter(Boolean).join('；')
+  if (t.slices) why.slices = [...gates.map((x) => `${x.s.id}：${x.g.why}，按「${x.g.button}」`), nCand && `${nCand} 件候选攒着，各等着它那个还没建的模块`].filter(Boolean).join('；')
 
   // 业务这一关卡在几件上（slice pending 的上半截，第一百七十八批）：这一组从前只有命令行看得见，
   // 而只能在命令行跑的关卡对他等于不存在。徽章摆在「谁在干什么」上，现场页把这几件逐条列出来。
@@ -494,9 +496,9 @@ function slicesPage() {
   const changes = all.filter((s) => s.kind === 'change')
   // 模块切片已经在「模块」栏里了，别让它在「其他」栏再出现一遍
   const others = all.filter((s) => !modules.includes(s) && !stories.includes(s) && !changes.includes(s))
-  const candCard = (x) => `<div class="cc ${esc(x.status)}"><div class="sh"><span class="id">#${x.n}</span><b>${esc(x.text)}</b><span class="sp"></span><span class="st ${esc(x.status)}">${x.status === 'open' ? '等着开' : x.status === 'opened' ? '已开成 ' + esc(x.openedAs) : x.status === 'done' ? '做掉了' : '不做'}</span></div><div class="it">来源：${esc(x.origin)}${(x.touches || []).length ? `　动到 ${x.touches.map(esc).join('、')}` : ''}　记于 ${esc(x.ts)}</div>${x.note ? `<div class="meta">${esc(x.note)}</div>` : ''}</div>`
+  const candCard = (x) => `<div class="cc ${esc(x.status)}"><div class="sh"><span class="id">#${x.n}</span><b>${esc(x.text)}</b><span class="sp"></span><span class="st ${esc(x.status)}">${x.status === 'open' ? '等着开' : x.status === 'opened' ? '已开成 ' + esc(x.openedAs) : x.status === 'done' ? '做掉了' : '不做'}</span></div><div class="it">来源：${esc(x.origin)}${x.waitFor ? `　等：${esc(x.waitFor)}` : ''}${(x.touches || []).length ? `　动到 ${x.touches.map(esc).join('、')}` : ''}　记于 ${esc(x.ts)}</div>${x.note ? `<div class="meta">${esc(x.note)}</div>` : ''}</div>`
   const openN = cands.items.filter((x) => x.status === 'open').length
-  return `<div class="ptree"><div class="ph">切片是迭代的步伐。<b>段落</b>一段一个最小业务动作，按故事线的先后走；<b>修改</b>只改已走通的段落上被试原型、审阅或裁定点出的一件事，编号 m-xxx；审阅页、试原型页上点出的事先记成<b>候选</b>、不当场改——当前段落收口后再从候选里挑一件开（第八十六批）。</div></div>
+  return `<div class="ptree"><div class="ph">切片是迭代的步伐。<b>段落</b>一段一个最小业务动作，按故事线的先后走；<b>修改</b>只改已走通的段落上被试原型、审阅或裁定点出的一件事，编号 m-xxx；审阅页、试原型页上点出的事，动的是已经建好的模块就当场开修改切片做掉；要等一个还没建的模块的才记成<b>候选</b>，那个模块一建就随它一起做（第一百八十四批）。</div></div>
 <div class="cols"><section>${modules.length ? `<h2>模块 <span class="n">${modules.length}</span></h2>${modules.map(card).join('')}` : ''}<h2>段落 <span class="n">${stories.length}</span></h2>${stories.map(card).join('') || '<p class="none">还没有段落。</p>'}</section>
 <section><h2>修改 <span class="n">${changes.length}</span></h2>${changes.map(card).join('') || '<p class="none">还没有修改切片。</p>'}${others.length ? `<h2>其他 <span class="n">${others.length}</span></h2>${others.map(card).join('')}` : ''}</section>
 <section><h2>候选 <span class="n">${openN} 等着开${cands.items.length > openN ? ` / 共 ${cands.items.length}` : ''}</span></h2>${cands.items.slice().reverse().map(candCard).join('') || '<p class="none">没有候选。审阅或试原型时点出的事，开发指挥用 <code>slice candidate add</code> 记在这里。</p>'}</section></div>`
