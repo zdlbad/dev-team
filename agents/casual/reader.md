@@ -13,7 +13,6 @@ reads:
     - model/shapes.md
     - ../seed/principles.md
     - ../seed/layers.md
-  - ../seed/layers.md
 ---
 
 # 解读
