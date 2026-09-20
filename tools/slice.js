@@ -123,10 +123,11 @@ function appendLog(slice, stage, text) {
 if (!cmd || !root || !fs.existsSync(path.join(root, 'project.json'))) {
   // 用法行漏一个，那个命令对读的人就等于不存在：2026-09-18 开发指挥照这一行断定「没有 slice lit」，
   // 还拿这句话去纠正业务分析两趟，而业务分析两趟都是对的。十个子命令一个不落地列全。
-  die('用法：node tools/slice.js <new|candidate|lit|pass|next|proofread|advance|apply|proto-go|log> <项目目录> …（项目目录须含 project.json）\n' +
+  die('用法：node tools/slice.js <new|candidate|lit|pass|next|pending|proofread|advance|apply|proto-go|log> <项目目录> …（项目目录须含 project.json）\n' +
     '  new       开一条新切片　　　　　candidate 把审阅点出的事开成修改切片\n' +
     '  lit       模块点亮完，把业务编号登记进模块切片　　pass      模块切片推到下一遍（骨架 → 行为）\n' +
     '  next      问这条切片下一步做什么　proofread 校对\n' +
+    '  pending   这条切片还有什么要人裁的（五处汇总）；业务这一关的活就是把它清空\n' +
     '  advance   推进某一阶段的状态　　 apply     把走查的裁定卡写进 raw/rulings.md\n' +
     '  proto-go  出原型那道门　　　　　 log       往切片日志里记一笔')
 }
@@ -160,6 +161,8 @@ if (cmd === 'new') {
     ...(opt('--业务故事') ? { businessStory: opt('--业务故事') } : {}),
     traces: list('--traces'),
     stages: {
+      // 业务这一关排在最前：范围内的语句立好改好、没有等人答的问题，模型这一关才开工（第一百七十八批）
+      business: { status: 'pending', confirmedAt: null, note: null },
       model: { status: 'pending', confirmedAt: null },
       code: { status: 'pending', at: null },
       validate: { status: 'pending', decodedVersion: null, reportAt: null },
@@ -298,7 +301,7 @@ if (cmd === 'candidate') {
       scope: { modules: list('--modules'), aggregates: list('--aggregates'), useCases: list('--use-cases') },
       origin: x.origin, touches, candidate: x.n,
       traces: list('--traces'),
-      stages: { model: { status: 'pending', confirmedAt: null }, code: { status: 'pending', at: null }, validate: { status: 'pending', decodedVersion: null, reportAt: null } },
+      stages: { business: { status: 'pending', confirmedAt: null, note: null }, model: { status: 'pending', confirmedAt: null }, code: { status: 'pending', at: null }, validate: { status: 'pending', decodedVersion: null, reportAt: null } },
       log: [{ ts: today, stage: 'slice', text: `修改切片建立（候选 #${x.n}）：${x.text}；来源：${x.origin}；动到 ${touches.join('、')}` }],
     }
     writeJson(slicePath(id), slice)
@@ -389,6 +392,18 @@ function computeNext(slice) {
   const scopeEmpty = story ? false : slice.kind === 'initial' ? !scopeNamed && !slice.traces.length : !scopeNamed
   const codebase = path.resolve(root, slice.codebase)
   const rel = (p) => path.relative(process.cwd(), p) || '.'
+  /**
+   * 业务这一关的门（第一百七十八批，项目所有者：「调用顺序本身是业务 → 模型，但如果没有业务的
+   * 确定，上游有待定的事项，模型师本不应开工」）。从前模型这一关的条件是「范围已定」，模型师
+   * 任何时候都派得出去——2026-09-20 m-004 的业务活就是在没有关、没有门的情况下做的，他的答复
+   * 一到，已经判过的三条判断全部重浮重填。三个「模型师开工」的入口都要过这道门。
+   */
+  const businessGate = () => {
+    if ((st.business?.status ?? 'done') === 'done') return null
+    const open = openQuestions(slice.id)
+    if (open.length) return step('人', `业务这一关卡在 ${open.length} 件等你答：\n${open.map((q) => `    ${q.id}　${q.question}`).join('\n')}`, `node tools/scene.js ${rel(root)} answer <问题号> "<你怎么答的>"`, '上游有待定的事项，模型师不开工（第一百七十八批）')
+    return step('开发指挥', '业务这一关收口：跑一趟 slice pending 看还有什么要人裁的、确认范围内的语句都立好改好了，再按下面这条', `node tools/slice.js advance ${rel(root)} ${slice.id} business done`, '调用顺序是业务 → 模型；业务定了模型才开工（第一百七十八批）')
+  }
   const validateCmd = (withCode) => `node tools/validate.js ${rel(root)}${withCode ? ` --code ${rel(codebase)}` : ''} --slice ${slice.id}`
   const step = (role, action, command, why) => ({ slice: slice.id, role, action, command: command ?? null, why })
   // 按裁定归档的切片只是记录，不再派活（看板也这么认）
@@ -415,7 +430,8 @@ function computeNext(slice) {
       const needV1 = s1.state === 'none' || (r1?.slice && r1.slice !== slice.id)
       if (passNow === '骨架') {
         if (!st.model.litAt) return step('业务分析', `模块点亮：把 ${mod} 在原料里提到的概念性语句一轮点亮——事实（记着什么）、能力（谁能做到什么）、顺带约束；写成正向陈述句、分层、标 (层-种类)、发编号。不等故事，这一轮给骨架初稿当底子。交回时列出编号，开发指挥用 slice lit 登记`, `node tools/slice.js lit ${rel(root)} ${slice.id} <R-xxx,G-xxx,…>`, '骨架照点亮的语句起草，元素才有编号可追（他选甲，第九十七批）')
-        if (st.model.status === 'pending') return step('模型师', `薄骨架（第一百五十六批）：在 model/${mod}/module.json 列出 ${mod} 有哪几个聚合，每个聚合根文件只写一句 aggregateNarrative 说它管什么；**不写字段**、不建守卫、不变量、行为、error、领域服务，不填 walk。允许不准，后面的场推翻它不算错。交稿前按 agents/common/wording.md 自检措辞`, `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '骨架初稿按模块一次起草，形状先铺开（第九十七批）')
+        if (st.model.status === 'pending') { const g = businessGate(); if (g) return g }
+    if (st.model.status === 'pending') return step('模型师', `薄骨架（第一百五十六批）：在 model/${mod}/module.json 列出 ${mod} 有哪几个聚合，每个聚合根文件只写一句 aggregateNarrative 说它管什么；**不写字段**、不建守卫、不变量、行为、error、领域服务，不填 walk。允许不准，后面的场推翻它不算错。交稿前按 agents/common/wording.md 自检措辞`, `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '骨架初稿按模块一次起草，形状先铺开（第九十七批）')
         if (!st.model.proofreadAt) return step('文职', `总校一趟：${mod} 这一轮点亮的语句与初稿里给人读的文字，只改字不改意；改完跑 validate --重新定基 接回裁决，再标记`, `node tools/slice.js proofread ${rel(root)} ${slice.id}`, '文职一趟，排在人看之前（第八十九批）')
         if (needV1) return step('开发指挥', '跑校验 ①（机械检查；骨架只查事实的落点，其余留给走查）', validateCmd(false), '初稿也要过机械检查')
         if (s1.state === 'blocked') return step('模型师', `修正初稿：方向 ① 有 ${s1.errors} 个错误（警告不挡：修得掉就顺手修，修不掉的留给人驳回）`, validateCmd(false), '机械检查未过，先改再重跑')
@@ -428,7 +444,8 @@ function computeNext(slice) {
       const ssM = storyState(story, { quizRequired: false })
       if (ssM.state === 'challenged') return step('路由', `核对人对走查的 ${ssM.count} 处质疑：对照语句、裁定与手册逐条回应；人对了就落成裁定并派讲解或模型师改`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人质疑了走查的业务内容，先解决再往下')
       if (ssM.state === 'notes') return step('路由', `读人在走查上留下的 ${ssM.count} 条想法：逐条回应；成立的落成裁定或派给业务分析、讲解、模型师`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人的想法要有人看、有人回')
-      if (st.model.status === 'pending') return step('模型师', `${story?.scene ? '走第 ' + story.scene + ' 场' : '走'}（${storyRelM}）：**只建或改这一场碰到的**字段、创建、方法、不变量、领域服务、error，后面的场才用到的一律不建；方法、创建、领域服务操作照 agents/model/modeler.md「方法怎么写」写七段（作用、入参、做法每步改哪几栏、规则、错误、事件、返回）；**前面的场建过的只改非改不可的**，顺手改措辞会让那一块白白重浮，交回时报「本想顺手改、忍住了」的几处。每步填 walk（调哪个方法、改了什么）；建立、搜索这类不是聚合行为，walk 标 leftTo: 应用。本场落不了的语句用 slice background add 登记，别整份改写切片文件。不建 event、命令、查询、端口（第一百五十六批）`, `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '行为从走查里长出来，过程中精进聚合（第九十七批）')
+      if (st.model.status === 'pending') { const g = businessGate(); if (g) return g }
+    if (st.model.status === 'pending') return step('模型师', `${story?.scene ? '走第 ' + story.scene + ' 场' : '走'}（${storyRelM}）：**只建或改这一场碰到的**字段、创建、方法、不变量、领域服务、error，后面的场才用到的一律不建；方法、创建、领域服务操作照 agents/model/modeler.md「方法怎么写」写七段（作用、入参、做法每步改哪几栏、规则、错误、事件、返回）；**前面的场建过的只改非改不可的**，顺手改措辞会让那一块白白重浮，交回时报「本想顺手改、忍住了」的几处。每步填 walk（调哪个方法、改了什么）；建立、搜索这类不是聚合行为，walk 标 leftTo: 应用。本场落不了的语句用 slice background add 登记，别整份改写切片文件。不建 event、命令、查询、端口（第一百五十六批）`, `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '行为从走查里长出来，过程中精进聚合（第九十七批）')
       if (ssM.state === 'no-walk') return step('模型师', `走查还有 ${ssM.count} 步没填 walk：动了哪个聚合、变了什么；不是聚合行为的标 leftTo: 应用`, storyRelM, '每一步都要走到')
       if (!st.model.proofreadAt) return step('文职', `总校一趟：走查场景与这一轮新建、改动的模型元素给人读的文字，只改字不改意；改完跑 validate --重新定基 接回裁决，再标记`, `node tools/slice.js proofread ${rel(root)} ${slice.id}`, '文职一趟，排在校验角色填判断之前（第八十九批）')
       if (needV1) return step('开发指挥', '跑校验 ①（机械检查 + 生成判断清单；这一步查事实、约束、公式、情形的落点）', validateCmd(false), '还没有本切片这一步的方向 ① 报告')
@@ -465,6 +482,7 @@ function computeNext(slice) {
     const mnP = path.join(root, 'reports', '_model-notes.json')
     const mnOpen = fs.existsSync(mnP) ? Object.entries(readJson(mnP)).flatMap(([f, ns]) => ns.filter((n) => !n.handled).map((n) => ({ f, ...n }))) : []
     if (mnOpen.length) return step('路由', `读人对模型的 ${mnOpen.length} 条意见（reports/_model-notes.json）：逐条回应；要改的派模型师，改完把 handled 置真`, null, '人在模型图上留了意见，先回应再推进')
+    if (st.model.status === 'pending') { const g = businessGate(); if (g) return g }
     if (st.model.status === 'pending') return step('模型师', story ? (story.basedOn ? `只建这一版新增那段所需的最少模型（上一版 ${story.basedOn} 的模型已在）；给每一步填 walk——老步骤也要重走，保证老路没被新东西弄断；做过的选择列进 choices。人还没走故事，他走时质疑或裁定不同再回流；交稿前按 agents/common/wording.md 自检措辞` : '按故事建走通它所需的最少模型；写完给每一步填 walk，把做过的选择列进 choices（每条带 current 与 recommended）。人还没走故事，他走时质疑或裁定不同再回流；交稿前按 agents/common/wording.md 自检措辞') : '在范围内建模 / 改模', `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, story ? '模型建在人走故事之前，人一坐看全（第八十九批）' : '范围已定，模型阶段尚未开始')
     if (ss?.state === 'no-walk') return step('模型师', `走故事：给 ${ss.count} 步填 walk（命令 / 事件 / 查询、动了哪个聚合、变了什么；走不通的填 gap），把做过的选择列进 choices（每条带 current 与 recommended）`, storyRel, '模型建好后先在故事上走一遍')
     // 文职只跑一趟：人审之前，是最后一个动文字的人；校完把裁决按对照接回，再 slice proofread 记一笔
@@ -597,6 +615,14 @@ if (cmd === 'pass') {
  * 修改切片也用它（第一百七十五批）：m-004 改到一半发现模型里建着「被拒的钱放回时账上另记合计、留痕」，
  * 业务里一条语句都没有；业务分析补了 R-250，不登记进切片，校验就不给它出判断，模型里那一条从此没人判。
  */
+/** 看板上这条切片还没答的问题（第一百七十八批：业务这一关收口、模型这一关开工都看它） */
+function openQuestions(sliceId) {
+  try {
+    const sc = JSON.parse(fs.readFileSync(path.join(root, 'reports', '_scene.json'), 'utf8'))
+    return (sc.questions ?? []).filter((q) => q.slice === sliceId && !q.answeredAt)
+  } catch { return [] }
+}
+
 if (cmd === 'lit') {
   const id = args[2], ids = (args[3] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
   if (!id || !ids.length) die('用法：slice lit <项目目录> <切片id> <R-001,G-002,…>　业务分析点亮完（模块切片）或补了新语句（修改切片），开发指挥把编号登记进切片')
@@ -608,7 +634,13 @@ if (cmd === 'lit') {
   if (missing.length) die(`这些编号在 business/ 里不存在：${missing.join('、')}`)
   slice.traces = [...new Set([...slice.traces, ...ids])].sort()
   const isChange = slice.kind === 'change'
-  if (!isChange) slice.stages.model.litAt = today
+  if (!isChange) {
+    slice.stages.model.litAt = today
+    // 模块切片点亮登记完，业务这一关就算定了（第一百七十八批把这件事显式化）
+    const open = openQuestions(id)
+    if (!open.length) { slice.stages.business.status = 'done'; slice.stages.business.confirmedAt = today }
+    else console.error(`  ⚠ 业务这一关没收口：${id} 上还有 ${open.length} 件等人答（${open.map((q) => q.id).join('、')}）`)
+  }
   appendLog(slice, 'model', isChange ? `补的语句登记 ${ids.length} 条：${ids.join('、')}` : `模块点亮登记 ${ids.length} 条：${ids.join('、')}`)
   writeJson(slicePath(id), slice)
   console.log(`${id}：登记了 ${ids.length} 条编号，共 ${slice.traces.length} 条。下一步 ${isChange ? '跑一趟 validate，新编号会出一条判断，交给模型校验填' : 'slice next（模型师起草骨架初稿）'}`)
@@ -679,7 +711,8 @@ if (cmd === 'next') {
   if (args.includes('--json')) console.log(JSON.stringify(n, null, 2))
   else {
     console.log(`切片 ${slice.id}「${slice.title}」　模型 ${slice.stages.model.status} · 编码 ${slice.stages.code.status} · 校验 ${slice.stages.validate.status}`)
-    if (pending.length) {
+    // 业务这一关还没定时，下面的「下一步」本身就是「等你答」，这里不再重复列一遍（第一百七十八批）
+    if (pending.length && (slice.stages.business?.status ?? 'done') === 'done') {
       console.log(`\n⛔ 这条切片还有 ${pending.length} 件等人答，先别往下派：`)
       for (const q of pending) console.log(`   ${q.id}（${q.who} 在${q.phase || '—'}这一关问的）：${q.question}`)
       console.log(`   答复一到，已经建好的语句、模型、判断都可能要改一轮——今天 m-004 就这么白判了一趟。`)
@@ -701,15 +734,67 @@ if (cmd === 'proofread') {
 }
 
 // ---------- advance ----------
+/**
+ * 这条切片上还有什么要人裁的：一张单子，业务这一关的活就是把它清空（第一百七十八批）。
+ * 散在五处——看板上没答的问题、故事里标了轮次的缺口、动到这条切片的候选、校验报告里的需人确认、
+ * 走查里没裁的卡。从前要一处一处翻，翻漏了就成了「做到一半才发现要问」。
+ */
+if (cmd === 'pending') {
+  const rel = (p) => path.relative(process.cwd(), p) || '.'
+  const id = args[2] ?? die('用法：slice pending <项目目录> <切片id>')
+  const slice = loadSlice(id)
+  const cur = require('./lib/project').currentStory(root, id)
+  // 挡业务这一关：答案一变，上游的语句、模型、判断都要跟着改一轮
+  const upstream = []
+  for (const q of openQuestions(id)) upstream.push(['等人答', `${q.id}　${q.question}`])
+  for (const c of cur?.story?.choices ?? []) if (!c.ruling) upstream.push(['没裁的卡', (c.question ?? c.text ?? JSON.stringify(c)).replace(/\s+/g, ' ').slice(0, 100)])
+  for (const g of cur?.story?.gaps ?? []) if (!g.resolved) upstream.push(['走查缺口', `${g.round ? '第' + g.round + '轮　' : ''}${(g.text ?? g.why ?? JSON.stringify(g)).replace(/\s+/g, ' ').slice(0, 100)}`])
+  try {
+    const cand = readJson(candidatesPath())
+    for (const x of cand.items ?? []) if ((x.status ?? 'open') === 'open' && (x.touches ?? []).includes(id)) upstream.push(['候选修改', `#${x.n}　${x.text.replace(/\s+/g, ' ').slice(0, 100)}`])
+  } catch {}
+  // 挡模型这一关收口：他在审模型页上要按的那些
+  const downstream = []
+  const r1 = reportOf(1, id)
+  if (r1) for (const t of require('./lib/project').humanTodo(r1)) {
+    if (t.name) downstream.push(['方法块', `${t.name}　写得对不对`])
+    else if (t.target) downstream.push(['判断／警告', `${t.target}　${(t.ask ?? t.text ?? '').replace(/\s+/g, ' ').slice(0, 90)}`])
+  }
+  const bs = slice.stages.business?.status ?? '（旧记录，没有这一关）'
+  console.log(`${id}「${slice.title}」　业务 ${bs} · 模型 ${slice.stages.model.status}`)
+  const print = (title, rows, tail) => {
+    console.log(`\n${title}：${rows.length} 件`)
+    let last = null
+    for (const [kind, text] of rows) { if (kind !== last) { console.log(`  【${kind}】`); last = kind } console.log('   ' + text) }
+    if (tail) console.log('  ' + tail)
+  }
+  print('挡住业务这一关', upstream, upstream.length
+    ? '这一关的活就是把它清空。还没挂上看板的，现在就 scene ask 挂上去——做到一半才发现要问，上游已经建好的语句、模型、判断都得跟着改一轮。'
+    : `业务这一关没有挡路的了：node tools/slice.js advance ${rel(root)} ${id} business done`)
+  print('挡住模型这一关收口（他在审模型页上按）', downstream, downstream.length ? '这些不挡业务，也不挡模型师开工；模型要收口才要它们清完。' : '')
+  process.exit(0)
+}
+
 if (cmd === 'advance') {
   const [, , id, stage, status, ...rest] = args
-  if (!id || !['model', 'code', 'validate'].includes(stage) || !['pending', 'in-progress', 'done'].includes(status)) {
-    die('用法：slice advance <项目目录> <切片id> <model|code|validate> <pending|in-progress|done> [说明]')
+  if (!id || !['business', 'model', 'code', 'validate'].includes(stage) || !['pending', 'in-progress', 'done'].includes(status)) {
+    die('用法：slice advance <项目目录> <切片id> <business|model|code|validate> <pending|in-progress|done> [说明]')
   }
   const slice = loadSlice(id)
   const s = slice.stages[stage]
   const from = s.status
   s.status = status
+  if (stage === 'business') {
+    // 收口前挡一道：这条切片还有等人答的问题，业务就不算定了（第一百七十八批）
+    if (status === 'done') {
+      const open = openQuestions(id)
+      if (open.length && !rest.length) {
+        die(`${id} 上还有 ${open.length} 件等人答，业务这一关不能收口：\n${open.map((q) => `  ${q.id}　${q.question}`).join('\n')}\n人答了用 scene answer 记上；确实挡不住这一关的，把理由写在命令末尾当说明，它会记进切片日志。`)
+      }
+      s.note = rest.join(' ') || null
+    }
+    s.confirmedAt = status === 'done' ? today : null
+  }
   if (stage === 'model') s.confirmedAt = status === 'done' ? today : null
   // 模型阶段开工时记下基线提交：model-delta 拿它算「这一段改了什么」，人只确认增量
   if (stage === 'model' && status === 'in-progress' && !s.baseline) { const g = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }); s.baseline = g.status === 0 ? g.stdout.trim() : null }
@@ -819,4 +904,4 @@ if (cmd === 'log') {
   console.log(`已记录到 ${id}`)
 }
 
-if (!['new', 'candidate', 'pass', 'lit', 'proto-go', 'next', 'proofread', 'advance', 'apply', 'log'].includes(cmd)) die(`未知子命令：${cmd}`)
+if (!['new', 'candidate', 'pass', 'lit', 'proto-go', 'next', 'pending', 'proofread', 'advance', 'apply', 'log'].includes(cmd)) die(`未知子命令：${cmd}`)

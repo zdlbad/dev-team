@@ -352,10 +352,36 @@ if (cmd === 'answer') {
 }
 
 // ---------- handoff：收工交接 ----------
+/** 这条切片上还没答的问题（第一百七十八批） */
+function openQuestionsOf(sc, sliceId) {
+  return (sc.questions ?? []).filter((q) => q.slice === sliceId && !q.answeredAt)
+}
+/** 这条切片业务这一关的状态；读不到切片记录就当 done，不拦 */
+function businessStatusOf(sliceId) {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(root, 'slices', sliceId + '.json'), 'utf8'))
+    return j.stages?.business?.status ?? 'done'
+  } catch { return 'done' }
+}
+
 if (cmd === 'handoff') {
   const text = args.slice(2).filter((a) => !a.startsWith('--')).join(' ').trim()
   if (!text) die('用法：scene handoff <项目> "<一段话：停在哪、等谁、有什么坑>"')
   const s = readScene()
+  // 要人裁的事写成散文，机器一件也看不见：slice next 看不见、工作台看不见、下一段接手的人当它是背景。
+  // 2026-09-20 真出过——三个问题只写在交接第 3 条「三个问题等他定」，第二天接手就照着往下派，
+  // 立完语句、判完三条，他的答复一到全部重来（第一百七十八批）。
+  if (!args.includes('--散文也行')) {
+    const 像在说等人 = /等他|等你|等人|要他定|请他|待他|等项目所有者|等裁/.test(text)
+    const open = openQuestionsOf(s, s.slice)
+    if (像在说等人 && !open.length) {
+      die(`交接里写着「等他定」这类话，可看板上这条切片（${s.slice ?? '—'}）一件没答的问题都没有。\n` +
+        `先把它们挂上去，交接才写得出谁在等什么：\n` +
+        `  node tools/scene.js ${args[0]} ask "<问题>" --who 开发指挥 --doing "<在做什么>" --context "<上下文>" --options "甲：…|乙：…" --lean "<偏向>" --confidence 中\n` +
+        `写成散文的等于不存在——第二天接手的人会照着往下派。真要这么写：末尾加 --散文也行。`)
+    }
+    if (open.length) console.log(`  交接里这条切片有 ${open.length} 件等他答：${open.map((q) => q.id).join('、')}（看板上有，接手的人看得见）`)
+  }
   const now = new Date().toISOString()
   writeScene({
     ...s,
@@ -378,15 +404,51 @@ if (cmd === 'dispatch') {
   if (!who || !ROLES.includes(who)) die(`用法：scene dispatch <项目> <角色> "<派了什么活>"；角色名：${ROLES.join('、')}`)
   if (!text) die('要写派了什么活，一句')
   const s = readScene()
+  // 上游有待定，下游不开工（第一百七十八批）。业务这一关没定就别派模型及其下游；
+  // 业务侧那几个角色照派——把问题问清楚、把语句立好本来就是他们的活。
+  const 业务侧 = ['业务分析', '讲解', '文职']
+  const bs = s.slice ? businessStatusOf(s.slice) : 'done'
+  const open = openQuestionsOf(s, s.slice)
+  const 硬派 = args.indexOf('--带着问题派')
+  if (!业务侧.includes(who) && (bs !== 'done' || open.length) && 硬派 < 0) {
+    die(`⛔ ${s.slice ?? '当前切片'} 的业务这一关是「${bs}」${open.length ? `，还有 ${open.length} 件等他答` : ''}，先不派${who}。\n` +
+      open.map((q) => `   ${q.id}　${q.question}`).join('\n') + (open.length ? '\n' : '') +
+      `调用顺序是业务 → 模型：上游没定，下游做出来的多半要重来（2026-09-20 就重来过一趟）。\n` +
+      `  人答了：node tools/scene.js ${args[0]} answer <问题号> "<他怎么答的>"\n` +
+      `  业务定了：node tools/slice.js advance <项目> ${s.slice ?? '<切片>'} business done\n` +
+      `  确实挡不住这一趟：末尾加 --带着问题派 "<为什么这几条不影响它>"，理由会记进日志。`)
+  }
   const now = new Date().toISOString()
-  journal({ ts: now, kind: 'dispatch', who, by: '开发指挥', slice: s.slice, phase: s.phase, text })
+  const 硬派理由 = 硬派 >= 0 ? (args[硬派 + 1] ?? '') : null
+  if (硬派 >= 0 && !硬派理由) die('--带着问题派 后面要写一句为什么这几条不影响这一趟')
+  journal({ ts: now, kind: 'dispatch', who, by: '开发指挥', slice: s.slice, phase: s.phase, text, ...(硬派理由 ? { 带着问题派: 硬派理由 } : {}) })
   console.log(`派工已记：${who} · ${text}`)
+  if (硬派理由) console.log(`  ⚠ 带着 ${open.length} 件没答的问题派的，理由已记进日志：${硬派理由}`)
   // 2026-09-17：角色不写细步，人就只看得见「开工了」。派工时提醒开发指挥把这句写进提示词。
   // 2026-09-18：光提醒不够——开发指挥得自己现编命令，编错了还不响（业务分析那一趟四句细步全记成了「业务分析」）。
   // 改成把两行命令连角色名一起印出来，直接抄进提示词。
-  console.log(`  提示词里把这两行原样带上（接活先一句、每改完一组文件一句、久了没产出也报一句）：`)
-  console.log(`    细步：node tools/scene.js ${args[0]} progress ${who} "<一句：做了什么，具体到名字、从什么到什么>"`)
-  console.log(`    交回：node tools/scene.js ${args[0]} back ${who} "<交回摘要，一句>"`)
+  const job = opt('--活')
+  const briefTip = job
+    ? `node tools/brief.js ${who} --活 ${job} --写 <scratchpad>/brief-${who}.md`
+    : `node tools/brief.js ${who} --活 <这趟干什么> --写 <scratchpad>/brief-${who}.md`
+  console.log(`
+  ——————— 提示骨架，改完直接用（第一百七十六、一百七十八批）———————
+  先跑：${briefTip}
+  然后：
+
+  你是 dev-team 的「${who}」。你的规矩在 <上面那个路径>，先用 Read 整份读一遍（一次读完，别分段）。
+
+  项目目录：<绝对路径>        dev-team 目录：<绝对路径>（下称 $DEV_TEAM）
+  切片：${s.slice ?? '<id>'}（标题；scope；traces）
+  任务：${text}
+
+  ★ 你已经知道、别让它去查的：<现成的格式、一条样例、文件在哪一行、上一趟的结论>
+    ——这一栏空着就别发。2026-09-20 一句「照词汇表里现有错误的写法定」让角色花了 12 轮考古，
+    贴一条现成词条只要 300 个 token。要它自己看、自己判的那些别贴，那种轮数省不得。
+
+  细步：node tools/scene.js ${args[0]} progress ${who} "<一句：做了什么，具体到名字、从什么到什么>"
+  交回：node tools/scene.js ${args[0]} back ${who} "<交回摘要，一句>"　　二十行以内
+  ————————————————————————————————————————`)
   process.exit(0)
 }
 if (cmd === 'back') {
