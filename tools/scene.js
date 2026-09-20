@@ -923,7 +923,7 @@ function listen(port, tries = 12) {
       const sc = readScene()
       // 业务这一关上还摆着的那几件，跟 slice pending、工作台顶栏读同一个函数（第一百八十二批）。
       // 这一关收口了就不摆——剩下的那些是别处的活，挂在它名下这个数就说假话了
-      const blockers = sc.slice && businessStatusOf(sc.slice) !== 'done' ? require('./lib/project').businessBlockers(root, sc.slice) : []
+      const blockers = sc.slice && businessStatusOf(sc.slice) !== 'done' ? require('./lib/project').businessBlockers(root, sc.slice, sc) : []
       return res.end(JSON.stringify({ scene: sc, slices: slices(), machine: ME, warning: machineWarning(sc), blockers }))
     }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })

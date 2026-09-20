@@ -168,7 +168,8 @@ function main(argv) {
   }
   let refs
   if (!byJob) refs = Array.isArray(reads) ? reads : []
-  else if (flags.has('--整份')) { refs = [...new Set(Object.values(reads).flat())]; job = null }
+  // --整份 是整份：正文按档裁的那几条（正文#…）不带进来，不然「整份」里正文反倒是裁过的
+  else if (flags.has('--整份')) { refs = [...new Set(Object.values(reads).flat())].filter((r) => !r.startsWith('正文#')); job = null }
   else {
     // 去重兜底：同一份点两次就装两遍。2026-09-21 真有两处——角色文件头上缩进错位的一行
     // 落进了最后那一档（reader 的 ../seed/layers.md、pre-pr 的 code/style.md，两份都已在常驻里）
@@ -202,6 +203,7 @@ function main(argv) {
     const add = (line) => { if (!indexLines.includes(line)) indexLines.push(line) }
     for (const ref of [...new Set(Object.values(reads).flat())]) {
       const r = ref.split('#')[0]
+      if (r === '正文') continue // 「正文」不是一份文件，是角色自己那份的代号；裁掉的小节在下面单独列
       if (!took.has(r)) add(`  ${r}（整份）`)
     }
     if (bodyCarried) for (const sec of sections(body)) if (!bodyCarried.has(sec.title)) add(`  ${rel}#${sec.title}　（你自己那份里的）`)

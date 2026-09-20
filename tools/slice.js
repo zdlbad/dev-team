@@ -316,7 +316,7 @@ if (cmd === 'candidate') {
     console.log(`候选 #${n} 记下了：${text}（来源：${origin}）。等着「${waitFor}」建起来，到时候随它一起做。`)
   } else if (sub === 'list') {
     if (!c.items.length) console.log('没有候选。')
-    for (const x of c.items) console.log(`#${x.n} [${x.status === 'open' ? '等着开' : x.status === 'opened' ? '已开成 ' + x.openedAs : '不做'}] ${x.text}　来源：${x.origin}${x.touches?.length ? '　动到 ' + x.touches.join('、') : ''}${x.note ? '　备注：' + x.note : ''}`)
+    for (const x of c.items) console.log(`#${x.n} [${x.status === 'open' ? '等着开' : x.status === 'opened' ? '已开成 ' + x.openedAs : '不做'}] ${x.text}　来源：${x.origin}${x.waitFor ? '　等：' + x.waitFor : ''}${x.touches?.length ? '　动到 ' + x.touches.join('、') : ''}${x.note ? '　备注：' + x.note : ''}`)
   } else if (sub === 'open') {
     const x = find(args[3])
     const id = args[4]
@@ -653,12 +653,9 @@ if (cmd === 'pass') {
  * 修改切片也用它（第一百七十五批）：m-004 改到一半发现模型里建着「被拒的钱放回时账上另记合计、留痕」，
  * 业务里一条语句都没有；业务分析补了 R-250，不登记进切片，校验就不给它出判断，模型里那一条从此没人判。
  */
-/** 看板上这条切片还没答的问题（第一百七十八批：业务这一关收口、模型这一关开工都看它） */
+/** 看板上这条切片还没答的问题（第一百七十八批：业务这一关收口、模型这一关开工都看它）。算法只有 lib/project.js 那一份 */
 function openQuestions(sliceId) {
-  try {
-    const sc = JSON.parse(fs.readFileSync(path.join(root, 'reports', '_scene.json'), 'utf8'))
-    return (sc.questions ?? []).filter((q) => q.slice === sliceId && !q.answeredAt)
-  } catch { return [] }
+  return require('./lib/project').openQuestions(root, sliceId)
 }
 
 if (cmd === 'lit') {
@@ -739,12 +736,7 @@ if (cmd === 'next') {
   // 这条切片上还有几件等人答：等着的时候不往下派（项目所有者 2026-09-20：「上游有待定的事项，
   // 模型师本不应开工」）。今天真出过——m-004 的三个问题挂着没答，业务分析先立了语句、模型校验
   // 先判了三条；他的答复一到，模型又改一轮，那三条判断全部重浮，一趟 2.8M 白花。
-  const pending = (() => {
-    try {
-      const sc = JSON.parse(fs.readFileSync(sceneP, 'utf8'))
-      return (sc.questions ?? []).filter((q) => q.slice === slice.id && !q.answeredAt)
-    } catch { return [] }
-  })()
+  const pending = openQuestions(slice.id)
   n.pending = pending.map((q) => ({ id: q.id, who: q.who, phase: q.phase, question: q.question }))
   if (args.includes('--json')) console.log(JSON.stringify(n, null, 2))
   else {
@@ -809,7 +801,7 @@ if (cmd === 'pending') {
   print('挡住模型这一关收口（他在审模型页上按）', downstream, downstream.length ? '这些不挡业务，也不挡模型师开工；模型要收口才要它们清完。' : '')
   // 缺口不挡这一关（项目所有者 2026-09-21 裁）：它是下一版故事的候选，重走那一趟才捡起来。
   // 摆在这里是为了让人看见「这一段主线之外还欠着什么」，不进要清空的那一组。
-  if (later.length) print('留给下一轮（不挡这一关）', later, '走查缺口＝下一版故事的候选。要现在做的，用 candidate add 开成候选修改，或者 scene ask 挂成问题。')
+  if (later.length) print('留给以后（不挡这一关）', later, '走查缺口＝下一版故事的候选；候选修改＝等着某个还没建的模块（第一百八十四批）。要现在就做的，动已建好模块的直接 slice new m-xxx --改，要问人的 scene ask 挂上。')
   process.exit(0)
 }
 
@@ -819,6 +811,8 @@ if (cmd === 'advance') {
     die('用法：slice advance <项目目录> <切片id> <business|model|code|validate> <pending|in-progress|done> [说明]')
   }
   const slice = loadSlice(id)
+  // 旧记录（第一百七十八批之前建的）没有 business 这一关：第一次推它时补上这一栏，别在 undefined 上写 status 崩掉
+  if (!slice.stages[stage] && stage === 'business') slice.stages.business = { status: 'pending', confirmedAt: null, note: null }
   const s = slice.stages[stage]
   const from = s.status
   s.status = status
