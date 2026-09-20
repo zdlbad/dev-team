@@ -38,7 +38,7 @@ const os = require('os')
 const ME = os.hostname()
 const mel = require('./lib/time') // 打印给人看的钟点用墨尔本；写进文件的仍是 UTC 的 ISO 串
 
-const ROLES = ['人', '开发指挥', '业务分析', '讲解', '文职', '模型师', '原型', '接口', '编码', '模型校验', 'pre-pr 审查', '解读']
+const ROLES = ['人', '开发指挥', '业务分析', '讲解', '文职', '模型师', '原型', '接口', '编码', '模型校验', 'pre-pr 审查', '解读', '分身']
 const PHASES = ['业务', '模型', '编码', '校验']
 /** 问答模式：逐个＝人在电脑前，角色问完就停下等答；问卷＝人不在，角色照偏向先做，问题攒起来一次性答 */
 const ASK_MODES = ['逐个', '问卷']
@@ -422,7 +422,8 @@ if (cmd === 'dispatch') {
   const s = readScene()
   // 上游有待定，下游不开工（第一百七十八批）。业务这一关没定就别派模型及其下游；
   // 业务侧那几个角色照派——把问题问清楚、把语句立好本来就是他们的活。
-  const 业务侧 = ['业务分析', '讲解', '文职']
+  // 分身只读、不写任何工件，业务定没定都拦不着它（第一百八十批）
+  const 业务侧 = ['业务分析', '讲解', '文职', '分身']
   const bs = s.slice ? businessStatusOf(s.slice) : 'done'
   const open = openQuestionsOf(s, s.slice)
   const 硬派 = args.indexOf('--带着问题派')
@@ -452,7 +453,7 @@ if (cmd === 'dispatch') {
   先跑：${briefTip}
   然后：
 
-  你是 dev-team 的「${who}」。你的规矩在 <上面那个路径>，先用 Read 整份读一遍（一次读完，别分段）。
+  你是 dev-team 的「${who}」。你的规矩在 <上面那个路径>，先用 Read 整份读一遍（一次读完，别分段）。${who === '分身' ? '\n  （只读、不写、不派人、不跑 git；交回二十行以内，只给结论与佐证的位置。）' : ''}
 
   项目目录：<绝对路径>        dev-team 目录：<绝对路径>（下称 $DEV_TEAM）
   切片：${s.slice ?? '<id>'}（标题；scope；traces）
