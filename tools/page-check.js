@@ -28,7 +28,7 @@ const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] :
 const port = Number(opt('--port', 4870))
 
 // 工作台上人点得到的每一页（顶上那一排页签，加上页签里点得进去的几页）
-const PAGES = ['/', '/p/scene/', '/p/scene/questions', '/slices', '/journal', '/source', '/p/story/', '/p/story/story', '/p/story/model', '/p/story/glossary', '/p/review/', '/p/codemodel/', '/p/prepr/', '/p/proto/', '/plan', '/delta']
+const PAGES = ['/', '/p/scene/', '/p/scene/questions', '/slices', '/journal', '/demo', '/source', '/p/story/', '/p/story/story', '/p/story/model', '/p/story/glossary', '/p/review/', '/p/codemodel/', '/p/prepr/', '/p/proto/', '/plan', '/delta']
 // 页面一打开就取的数据：这几条不通，页面就是空的
 const DATA = ['/state', '/todo', '/p/scene/data', '/p/story/data', '/p/story/data-map', '/p/review/data', '/p/codemodel/data', '/p/proto/data', '/p/proto/tree']
 
