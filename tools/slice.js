@@ -659,7 +659,8 @@ function openQuestions(sliceId) {
 }
 
 if (cmd === 'lit') {
-  const id = args[2], ids = (args[3] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  // 逗号隔开、空格隔开都认：从前只读 args[3]，`lit m-005 R-115 R-116` 会闷声只登记头一条（2026-09-21 真踩到）
+  const id = args[2], ids = args.slice(3).flatMap((x) => x.split(',')).map((s) => s.trim()).filter(Boolean)
   if (!id || !ids.length) die('用法：slice lit <项目目录> <切片id> <R-001,G-002,…>　业务分析点亮完（模块切片）或补了新语句（修改切片），开发指挥把编号登记进切片')
   const slice = loadSlice(id)
   if (slice.kind !== 'module' && slice.kind !== 'change') die(`${id} 既不是模块切片也不是修改切片；段落的编号由故事点亮回填，不用登记`)

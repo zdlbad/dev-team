@@ -17,7 +17,7 @@ description: 模型驱动的开发团队。业务 → 模型 → 原型 → 代�
 |---|---|---|
 | `new <目录> <系统名> [--codebase <代码库>]` | 新建项目（git init；可顺带拷入构建块） | `node $DEV_TEAM/tools/new-project.js …` |
 | `slice new <项目> <id> <标题> [--story --意图 <一句话> [--业务故事 <线>]] [--重构] [--implements <段落id,…>] [--modules …] [--aggregates …] [--use-cases …] [--traces …]` | 建切片记录。`--story` = **段落切片**（同时建故事骨架，`--意图` 写单一业务意图）；`--重构` = **改说法切片**（不走故事不走卡不算计划，门禁见 `seed/slices.md` 与 `rename-check`）；`--implements` = **实现切片**（给几条已在原型上走通的段落换生产外壳）。`--改 --来源 "<…>" --动到 s-001,…`（id 用 m-xxx）= **修改切片**（只改已走通的段落上被点出的一件事。动的是已经建好的模块就直接这么开，不进候选——第一百八十四批）。`--module <Module>`（id 用 k-xxx）= **模块切片**（第九十七批：一个模块的模型按模块一次做——骨架初稿 → 业务走查；只有业务与模型，不写代码；同时建走查用的故事文件）。五种的周期见「段落切片」节与 `seed/slices.md`「五种切片」。`--based-on` 是旧的滚雪球法，不用 | `node $DEV_TEAM/tools/slice.js new …` |
-| `slice lit <项目> <k-xxx> <R-001,G-002,…>` | 业务分析模块点亮完，把编号登记进模块切片；有了它模型师才起草骨架初稿 | `node $DEV_TEAM/tools/slice.js lit …` |
+| `slice lit <项目> <k-xxx|m-xxx> <R-001,G-002,…>` | 业务分析模块点亮完，把编号登记进模块切片；有了它模型师才起草骨架初稿。修改切片补了语句也用它。编号逗号隔开、空格隔开都认 | `node $DEV_TEAM/tools/slice.js lit …` |
 | `slice pass <项目> <k-xxx> 行为` | **模块切片从骨架初稿推到业务走查**：他在模型图上定了初稿之后跑；模型关重新开，点亮的语句留着。只许往前 | `node $DEV_TEAM/tools/slice.js pass <项目> k-001 行为` |
 | `slice scene <项目> <k-xxx> [--title "<这一场演什么>"]` | **建下一场走查**（第一百五十批）：`slices/<k-xxx>.w<场次>.story.json`，先写 `premises` 给人确认再写步骤；上一场没锁死不让建；模型状态退回 pending，这一场从头走（第一百五十六批） | `node $DEV_TEAM/tools/slice.js scene …` |
 | `story seal <项目> <k-xxx.wN>` | **一场走查审完锁死**：有没审的步、没裁的卡不让锁；锁死后页面拒绝存盘，真要改走修改切片 | `node $DEV_TEAM/tools/story.js seal …` |
