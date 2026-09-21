@@ -761,6 +761,20 @@ const server = http.createServer((req, res) => {
   if (url === '/journal') return html(wrap(journalPage(q.date)))
   // 「演示」（2026-09-21）：讲解写的演示文档（导读/演示-*.md）摆成可切换的竖向时间轴，给人现场演示用
   if (url === '/demo') return html(wrap(require('./lib/demo').demoPage(root, q.file)))
+  // 演示页卡片下留一句 / 删一句（2026-09-21）。文件名只认 导读/ 里现有的演示文档，键是「切换名|第 n 步」
+  if ((url === '/demo/note' || url === '/demo/note/delete') && req.method === 'POST') {
+    const demo = require('./lib/demo')
+    const bad = (m) => { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); res.end(m) }
+    const file = q.file ?? ''
+    if (!/^演示[^/\\]*\.md$/.test(file) || !fs.existsSync(path.join(root, '导读', file))) return bad('没指到哪一份演示文档')
+    if (!q.key || !/\|第 \d+ 步$/.test(q.key)) return bad('没指到哪一步')
+    const out = (list) => { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(list)) }
+    if (url === '/demo/note/delete') return out(demo.deleteNote(root, file, q.key, Number(q.i)))
+    const chunks = [] // 攒 Buffer 再一次解码：一个汉字的三个字节可能分在两块里，逐块拼字符串会出乱码
+    req.on('data', (c) => chunks.push(c))
+    req.on('end', () => { const text = Buffer.concat(chunks).toString('utf8').trim(); if (!text) return bad('先写一句'); out(demo.addNote(root, file, q.key, text)) })
+    return
+  }
   // 计划页的按钮：确认 / 撤销 / 留话都不另写逻辑，直接跑命令行那一个（plan.js confirm | unconfirm | comment），门禁、日志、切片记录同一套；
   // 留话顺手记进现场日志（scene progress --who 人），事后在「日志」页看得见人在哪一步说了什么
   const planCmd = (sub, slice, extra, okText) => {
