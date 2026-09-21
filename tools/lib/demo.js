@@ -141,11 +141,12 @@ const CSS = `<style>
 .demo .sc>h2{font-size:20px;margin:0 0 16px}
 .demo h3{font-size:16px;color:#57606a;margin:26px 0 10px;letter-spacing:.02em}
 .demo .tl{position:relative;margin:0 0 6px 0;padding-left:0}
-${tl.css({ sel: '.demo .st', when: 136, gap: 14, top: 26, narrow: 720 })}
+${tl.css({ sel: '.demo .st', when: 136, gap: 14, top: 26, narrow: 720, padY: 14 })}
 .demo .st{margin:0 0 18px;align-items:start}
 .demo .st>.when{font-size:14px}.demo .st>.when b{font-size:15px}
 .demo .st>.dot{border-color:#1f6feb}
-.demo .st>.card{padding:14px 20px 16px;border-radius:12px;box-shadow:0 1px 3px rgba(31,35,40,.08),0 6px 18px rgba(31,35,40,.06);font-size:17.5px;line-height:1.65}
+.demo .st>.card{font-size:17.5px;line-height:1.65}
+.demo .st+.st>.card{border-top:1px solid #f2f4f6}
 .demo .st .n{font-size:13.5px;color:#8c959f;margin-right:8px}
 .demo .st .act{font-weight:600}
 .demo .st .res{margin-top:8px;color:#1f2328}.demo .st .res::before{content:"→ ";color:#1f6feb;font-weight:700}
@@ -153,15 +154,15 @@ ${tl.css({ sel: '.demo .st', when: 136, gap: 14, top: 26, narrow: 720 })}
 .demo .st .basis .from{color:#1f6feb;text-decoration:none;border:1px solid #d6e4fb;background:#f4f8ff;border-radius:999px;padding:1px 10px;white-space:nowrap}
 .demo .st .basis .from:hover{border-color:#1f6feb;background:#eaf2ff}
 .demo .en{font-size:.85em;color:#6e7781;font-weight:400;letter-spacing:0}
-.demo .note{margin:0 0 16px 178px;padding:12px 18px;color:#57606a;font-size:16px;background:#f6f8fa;border-radius:10px;border:1px dashed #d0d7de}
-.demo .notes{grid-column:3;margin:-8px 0 0;padding:0 6px}
+.demo .note{margin:0 0 10px 178px;padding:2px 0 2px 12px;color:#57606a;font-size:16px;border-left:2px solid #e6e8eb}
+.demo .notes{grid-column:3;margin:-10px 0 0;padding:0 0 4px 2px}
 .demo .notes .nt{display:flex;gap:10px;align-items:baseline;font-size:15px;color:#57606a;padding:4px 0}.demo .notes .nt .at{font-size:12.5px;color:#8c959f;white-space:nowrap}.demo .notes .nt .tx{flex:1;color:#1f2328}
 .demo .notes .nt .del{border:0;background:none;color:#8c959f;cursor:pointer;font-size:14px;padding:0 4px}.demo .notes .nt .del:hover{color:#cf222e}
 .demo .notes .add{font-size:13.5px;color:#8c959f;cursor:pointer;background:none;border:0;padding:2px 0}.demo .notes .add:hover{color:#1f6feb}
 .demo .notes textarea{display:block;width:100%;box-sizing:border-box;font:inherit;font-size:15px;padding:8px 10px;border:1px solid #d0d7de;border-radius:8px;margin:4px 0 6px;min-height:60px}
 .demo .notes .save{font:inherit;font-size:14px;padding:5px 14px;border-radius:6px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;cursor:pointer}.demo .notes .cancel{font:inherit;font-size:14px;margin-left:8px;border:0;background:none;color:#57606a;cursor:pointer}
 .demo .notes.has .add{color:#57606a}
-.demo .empty{padding:24px;color:#57606a;background:#f6f8fa;border-radius:8px}
+.demo .empty{padding:16px 0 16px 14px;color:#57606a;border-left:3px solid #e6e8eb}
 .demo .files{margin:0 0 12px;font-size:14px;color:#57606a}.demo .files a{color:#1f6feb;margin-right:12px}
 @media (max-width:720px){.demo .notes{grid-column:1}.demo .note{margin-left:0}.demo{margin-left:0}}
 </style>`

@@ -324,12 +324,13 @@ if (cmd === 'serve') {
   .step.agree > .dot { border-color:#2da44e; }
   .step.challenge > .dot { border-color:#cf222e; box-shadow:0 0 0 4px rgba(207,34,46,.1); }
   .step.todo-step > .dot { border-color:#e3a008; box-shadow:0 0 0 4px rgba(227,160,8,.12); }
-  .step.agree > .card { border-color:#cfe7d3; }
-  .step.challenge > .card { border-color:#f0c8c8; background:#fffbfb; }
-  .step.todo-step > .card { border-color:#ecd9a8; }
-  .step.collapsed > .card { padding:9px 16px; background:#fcfcfd; box-shadow:none; }
-  .step.collapsed > .card:hover { background:#fff; }
+  .step > .card { border-left:2px solid transparent; padding-left:12px; }
+  .step.agree > .card { border-left-color:#d7e9da; }
+  .step.challenge > .card { border-left-color:#e5a0a0; }
+  .step.todo-step > .card { border-left-color:#f2c57c; }
+  .step.collapsed > .card { padding-top:7px; padding-bottom:7px; }
   .step.locked > .card { opacity:.45; }
+  .step + .step > .card { border-top:1px solid #f2f4f6; }
   .step .head .fold { color:var(--muted); font-size:11px; width:12px; }
   .step .head .sum { font-size:12px; color:var(--muted); margin-left:auto; white-space:nowrap; }
   .step .head .sum.todo-sum { color:#8a5a00; background:#fff7e6; border:1px solid #f2c57c; border-radius:999px; padding:1px 9px; }
