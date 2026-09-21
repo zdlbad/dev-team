@@ -642,12 +642,12 @@ header .sp{flex:1}header .now{color:var(--dim);font-size:12.5px;white-space:nowr
 main{flex:1;position:relative}iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--page,#fff)}
 </style></head><body>
 <header><h1>工作台<span>${esc(projectName)}</span></h1>
-<button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="slices">切片</button><button data-t="journal">日志</button><button data-t="story">走故事</button><button data-t="model">模型图</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="proto">试原型</button>
+<button data-t="scene" class="on">谁在干什么</button><button data-t="ask">等你答</button><button data-t="slices">切片</button><button data-t="journal">日志</button><button data-t="story">走故事</button><button data-t="demo">演示</button><button data-t="model">模型图</button><button data-t="review">审模型</button><button data-t="codemodel">审代码对模型</button><button data-t="prepr">审代码</button><button data-t="proto">试原型</button>
 <span class="sp"></span><span class="td" id="todo"></span><span class="now" id="now"></span><button id="theme" title="白天 / 黑夜">🌙</button><a id="open" href="#" target="_blank" title="在新窗口打开这一页">新窗口 ↗</a></header>
 <main><iframe id="f" src="/p/scene/"></iframe></main>
 <script>
 let cur='scene';let slice=null;let who=null
-const url=(t)=>({scene:'/p/scene/',ask:'/p/scene/questions',slices:'/slices',journal:'/journal',source:'/source'+(slice?'?slice='+slice:''),story:'/p/story/story'+(slice?'?slice='+slice:''),model:'/p/story/model',delta:'/delta'+(slice?'?slice='+slice:''),review:'/p/review/',codemodel:'/p/codemodel/',prepr:'/p/prepr/',plan:'/plan'+(slice?'?slice='+slice:''),proto:'/p/proto/'})[t]
+const url=(t)=>({scene:'/p/scene/',ask:'/p/scene/questions',slices:'/slices',journal:'/journal',demo:'/demo',source:'/source'+(slice?'?slice='+slice:''),story:'/p/story/story'+(slice?'?slice='+slice:''),model:'/p/story/model',delta:'/delta'+(slice?'?slice='+slice:''),review:'/p/review/',codemodel:'/p/codemodel/',prepr:'/p/prepr/',plan:'/plan'+(slice?'?slice='+slice:''),proto:'/p/proto/'})[t]
 const f=document.getElementById('f'),open=document.getElementById('open')
 function show(t){cur=t;for(const b of document.querySelectorAll('header button'))b.classList.toggle('on',b.dataset.t===t);f.src=url(t);open.href=url(t);try{localStorage.setItem('wb-tab',t)}catch{}}
 for(const b of document.querySelectorAll('header button'))b.addEventListener('click',()=>show(b.dataset.t))
@@ -759,6 +759,8 @@ const server = http.createServer((req, res) => {
   if (url === '/todo') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify(todo())) }
   if (url === '/slices') return html(wrap(slicesPage()))
   if (url === '/journal') return html(wrap(journalPage(q.date)))
+  // 「演示」（2026-09-21）：讲解写的演示文档（导读/演示-*.md）摆成可切换的竖向时间轴，给人现场演示用
+  if (url === '/demo') return html(wrap(require('./lib/demo').demoPage(root, q.file)))
   // 计划页的按钮：确认 / 撤销 / 留话都不另写逻辑，直接跑命令行那一个（plan.js confirm | unconfirm | comment），门禁、日志、切片记录同一套；
   // 留话顺手记进现场日志（scene progress --who 人），事后在「日志」页看得见人在哪一步说了什么
   const planCmd = (sub, slice, extra, okText) => {
