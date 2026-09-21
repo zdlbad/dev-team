@@ -20,6 +20,8 @@ const path = require('node:path')
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
 /** 行内的 `代码`、**加粗** 两种最常见的标记转成 HTML，其余原样 */
 const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+  // 术语后面括号里的英文法定名（「持续服务资金账户（OngoingServicesAccount）」，2026-09-21 项目所有者要的）压成小字灰字，别抢中文
+  .replace(/（([A-Z][A-Za-z0-9]*(?:\s[A-Z][A-Za-z0-9]*)*)）/g, '<span class="en">（$1）</span>')
 
 /** 一行「第 n 步 · 日期 · 谁 · 做了什么 → 结果 · 依据」拆成几栏；拆不出来返回 null */
 function parseStep(line) {
@@ -84,6 +86,7 @@ const CSS = `<style>
 .demo .st .act{font-weight:600}
 .demo .st .res{margin-top:4px;color:#1f2328}.demo .st .res::before{content:"→ ";color:#1f6feb;font-weight:700}
 .demo .st .basis{margin-top:6px;font-size:12px;color:#57606a}.demo .st .basis code{background:#f6f8fa;padding:1px 6px;border-radius:4px}
+.demo .en{font-size:.85em;color:#6e7781;font-weight:400;letter-spacing:0}
 .demo .note{margin:0 0 12px 174px;padding:8px 12px;color:#57606a;font-size:13px;background:#f6f8fa;border-radius:6px;border:1px dashed #d0d7de}
 .demo .empty{padding:24px;color:#57606a;background:#f6f8fa;border-radius:8px}
 .demo .files{margin:0 0 12px;font-size:13px;color:#57606a}.demo .files a{color:#1f6feb;margin-right:12px}
