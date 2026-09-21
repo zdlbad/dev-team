@@ -265,8 +265,8 @@ if (cmd === 'serve') {
   const port = portIdx >= 0 ? Number(args[portIdx + 1]) : 4871
   const CSS = `
   :root { --fg:#1f2328; --muted:#57606a; --line:#e6e8eb; --bg:#fff; --lo:#f6f8fa; --ok:#1a7f37; --bad:#cf222e; --walk:#eef4ff; --gap:#fff1f0; --rec:#fff8e1; --biz:#f3f7ee; }
-  body { margin:0; font: 14px/1.6 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; color:var(--fg); background:var(--bg); }
-  header { position:sticky; top:0; background:#fff; border-bottom:1px solid var(--line); padding:10px 20px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; z-index:3; }
+  body { margin:0; font: 15px/1.7 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; color:var(--fg); background:var(--bg); -webkit-font-smoothing:antialiased; }
+  header { position:sticky; top:0; background:rgba(255,255,255,.92); backdrop-filter:saturate(180%) blur(8px); border-bottom:1px solid var(--line); padding:10px 20px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; z-index:3; }
   #rail { flex-basis:100%; display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
   #rail:empty { display:none; }
   #rail a { display:inline-flex; align-items:center; gap:3px; min-width:24px; height:24px; padding:0 7px; border:1px solid var(--line); border-radius:6px; font-size:12px; text-decoration:none; color:var(--muted); background:#fff; }
@@ -277,25 +277,26 @@ if (cmd === 'serve') {
   #rail a i { font-style:normal; font-size:10px; }
   #rail .lab { font-size:12px; color:var(--muted); margin-right:2px; }
   #rail button.fold { height:24px; padding:0 8px; font-size:12px; margin-left:6px; }
-  .todo { background:#fff7e6; border:1px solid #f2c57c; border-radius:8px; padding:9px 11px; margin-bottom:12px; font-size:13px; }
+  .todo { background:#fff7e6; border:1px solid #f2c57c; border-radius:10px; padding:11px 13px; margin-bottom:14px; font-size:13.5px; }
   .todo.clear { background:#f0fbf2; border-color:#9ccc9c; }
   .todo b { display:block; margin-bottom:5px; }
   .todo a { display:block; color:#0969da; text-decoration:none; padding:2px 0; border-top:1px solid rgba(0,0,0,.06); }
   .todo a:first-of-type { border-top:0; }
   .todo a:hover { text-decoration:underline; }
   .todo .why { color:var(--muted); }
-  header h1 { font-size:16px; margin:0; flex:1; }
-  #scenes { position:sticky; top:43px; z-index:2; background:#fff; border-bottom:1px solid var(--line); padding:6px 20px; display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  header h1 { font-size:17px; margin:0; flex:1; letter-spacing:.01em; }
+  #scenes { position:sticky; top:44px; z-index:2; background:rgba(255,255,255,.92); backdrop-filter:saturate(180%) blur(8px); border-bottom:1px solid var(--line); padding:8px 20px; display:flex; gap:7px; flex-wrap:wrap; align-items:center; }
   #scenes:empty { display:none; }
   #scenes .lab { font-size:12px; color:var(--muted); margin-right:2px; }
-  #scenes a { display:inline-flex; gap:6px; align-items:baseline; text-decoration:none; color:var(--fg); background:#fff; border:1px solid #d0d7de; border-radius:999px; padding:3px 11px; font-size:13px; cursor:pointer; }
-  #scenes a:hover { border-color:#1f6feb; }
-  #scenes a.on { border-color:#1f6feb; background:#eef4ff; font-weight:600; }
-  #scenes a.done { color:#166534; border-color:#9ccc9c; }
+  #scenes a { display:inline-flex; gap:6px; align-items:baseline; text-decoration:none; color:var(--fg); background:#fff; border:1px solid #d8dee4; border-radius:999px; padding:4px 13px; font-size:13.5px; cursor:pointer; transition:border-color .12s, background .12s; }
+  #scenes a:hover { border-color:#1f6feb; background:#f7faff; }
+  #scenes a.on { border-color:#1f6feb; background:#1f6feb; color:#fff; font-weight:600; box-shadow:0 1px 4px rgba(31,111,235,.3); }
+  #scenes a.done { color:#166534; border-color:#b7dfc0; background:#f4fbf6; }
+  #scenes a.on.done { color:#fff; border-color:#1f6feb; background:#1f6feb; }
   #scenes a .d { color:var(--muted); font-weight:400; font-size:11px; }
-  #scenes a.on .d { color:#1f6feb; }
-  #sceneHead { margin:14px 0 6px; padding:8px 12px; background:var(--lo); border-left:3px solid #1f6feb; border-radius:0 6px 6px 0; }
-  #sceneHead b { font-size:14px; } #sceneHead span { color:var(--muted); font-size:12.5px; margin-left:8px; }
+  #scenes a.on .d { color:rgba(255,255,255,.8); }
+  #sceneHead { margin:18px 0 10px; padding:12px 16px; background:linear-gradient(90deg,#f2f7ff,#fbfcfe); border:1px solid #dbe6f7; border-left:3px solid #1f6feb; border-radius:0 10px 10px 0; }
+  #sceneHead b { font-size:15.5px; } #sceneHead span { color:var(--muted); font-size:13px; margin-left:10px; }
   #segs { position:sticky; top:43px; z-index:3; background:var(--lo); border-bottom:1px solid var(--line); padding:5px 20px; font-size:12px; }
   #segs .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:2px 0; opacity:.55; }
   #segs .row.here { opacity:1; }
@@ -307,7 +308,9 @@ if (cmd === 'serve') {
   #segs a .d { color:var(--muted); font-weight:400; font-size:11px; }
   #segs .arrow { color:#9ca3af; }
   header a { color:#0969da; font-size:13px; }
-  button { font:inherit; padding:6px 14px; border:1px solid #d0d7de; border-radius:6px; background:#f6f8fa; cursor:pointer; }
+  button { font:inherit; font-size:14px; padding:6px 14px; border:1px solid #d0d7de; border-radius:7px; background:#f6f8fa; cursor:pointer; transition:background .12s, border-color .12s; }
+  button:hover:not(:disabled) { background:#eef1f4; border-color:#b9c0c8; }
+  button.primary:hover:not(:disabled) { background:#1a60d0; border-color:#1a60d0; }
   button.primary { background:#1f6feb; color:#fff; border-color:#1f6feb; }
   button:disabled { opacity:.5; cursor:default; }
   main { display:grid; grid-template-columns: minmax(0, 1fr) 380px; gap:20px; padding:16px 20px 80px; align-items:start; }
@@ -317,20 +320,23 @@ if (cmd === 'serve') {
   .flash { outline:2px solid #f59e0b; outline-offset:2px; }
   .step .head { cursor:pointer; user-select:none; }
   /* 时间轴：左边一栏日子与谁、中间一条线一颗点、右边是这一步的卡片。与演示页同一种摆法 */
-  .step { display:grid; grid-template-columns:104px 26px minmax(0,1fr); gap:0 10px; position:relative; }
-  .step::before { content:""; position:absolute; left:114px; top:-10px; bottom:-10px; border-left:2px solid var(--line); }
-  .step.tl-first::before { top:14px; }
-  .step.tl-last::before { bottom:auto; height:26px; }
-  .step > .when { text-align:right; color:var(--muted); font-size:12px; line-height:1.35; padding-top:11px; }
-  .step > .when b { display:block; color:var(--fg); font-size:12.5px; font-weight:600; }
-  .step > .dot { width:13px; height:13px; border-radius:50%; background:#fff; border:3px solid #d0d7de; margin:12px 0 0 1px; position:relative; z-index:1; }
+  .step { display:grid; grid-template-columns:106px 28px minmax(0,1fr); gap:0 12px; position:relative; }
+  .step::before { content:""; position:absolute; left:118px; top:-12px; bottom:-12px; border-left:2px solid #eaedf0; }
+  .step.tl-first::before { top:20px; }
+  .step.tl-last::before { bottom:auto; height:24px; }
+  .step > .when { text-align:right; color:var(--muted); font-size:12.5px; line-height:1.4; padding-top:13px; }
+  .step > .when b { display:block; color:var(--fg); font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .step > .dot { width:14px; height:14px; border-radius:50%; background:#fff; border:3px solid #cfd6dd; margin:15px 0 0 2px; position:relative; z-index:1; transition:border-color .12s, box-shadow .12s; }
   .step.agree > .dot { border-color:#2da44e; }
-  .step.challenge > .dot { border-color:#cf222e; }
-  .step.todo-step > .dot { border-color:#f2c57c; }
-  .step > .card { border:1px solid var(--line); border-radius:8px; padding:12px 14px; background:#fff; min-width:0; }
-  .step.agree > .card { border-color:#9ccc9c; }
-  .step.challenge > .card { border-color:#e5a0a0; }
-  .step.collapsed > .card { padding:8px 14px; }
+  .step.challenge > .dot { border-color:#cf222e; box-shadow:0 0 0 4px rgba(207,34,46,.1); }
+  .step.todo-step > .dot { border-color:#e3a008; box-shadow:0 0 0 4px rgba(227,160,8,.12); }
+  .step > .card { border:1px solid var(--line); border-radius:10px; padding:14px 16px; background:#fff; min-width:0; box-shadow:0 1px 2px rgba(31,35,40,.05); transition:box-shadow .12s, border-color .12s; }
+  .step > .card:hover { box-shadow:0 1px 3px rgba(31,35,40,.09), 0 6px 16px rgba(31,35,40,.05); }
+  .step.agree > .card { border-color:#cfe7d3; }
+  .step.challenge > .card { border-color:#f0c8c8; background:#fffbfb; }
+  .step.todo-step > .card { border-color:#ecd9a8; }
+  .step.collapsed > .card { padding:9px 16px; background:#fcfcfd; box-shadow:none; }
+  .step.collapsed > .card:hover { background:#fff; }
   .step.locked > .card { opacity:.45; }
   @media (max-width:900px) {
     .step { grid-template-columns:minmax(0,1fr); }
@@ -338,8 +344,8 @@ if (cmd === 'serve') {
     .step > .when { text-align:left; padding:0 0 2px; }
   }
   .step .head .fold { color:var(--muted); font-size:11px; width:12px; }
-  .step .head .sum { font-size:12px; color:var(--muted); margin-left:8px; }
-  .step .head .sum.todo-sum { color:#8a5a00; }
+  .step .head .sum { font-size:12px; color:var(--muted); margin-left:auto; white-space:nowrap; }
+  .step .head .sum.todo-sum { color:#8a5a00; background:#fff7e6; border:1px solid #f2c57c; border-radius:999px; padding:1px 9px; }
   .step.collapsed .body { display:none; }
   .persona { background:var(--lo); border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin-bottom:12px; }
   .lineage { margin-top:6px; font-size:13px; } .lineage b { color:#1f6feb; }
@@ -361,12 +367,11 @@ if (cmd === 'serve') {
   h2 { font-size:15px; margin:18px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
   h2:first-child { margin-top:0; }
   .step { margin:10px 0; }
-  .step .head { display:flex; gap:10px; align-items:baseline; }
-  .step .head .n { font-size:12px; }
-  .step .n { font-weight:700; color:var(--muted); }
-  .step .day { color:var(--muted); font-size:12px; }
-  .step .actor { font-weight:600; }
-  .step .text { margin:6px 0; }
+  .step .head { display:flex; gap:9px; align-items:baseline; }
+  .step .head .n { font-size:12px; font-weight:600; color:#8c959f; background:var(--lo); border-radius:5px; padding:1px 7px; white-space:nowrap; }
+  .step .head .ti { font-weight:650; font-size:15px; flex:1; min-width:0; }
+  .step.collapsed .head .ti { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .step .text { margin:8px 0 2px; color:#22262b; }
   a.term { color:inherit; text-decoration:none; border-bottom:1px dotted #0969da; }
   a.term:hover { color:#0969da; }
   .biz { background:var(--biz); border-radius:6px; padding:8px 10px; margin-top:8px; font-size:13px; }
@@ -593,7 +598,7 @@ function renderRail() {
     const td = stepTodo(s)
     const bad = s.review?.verdict === 'challenge'
     const cls = bad ? 'challenge' : (td.length ? 'todo' : 'done')
-    const tip = '第 ' + s.n + ' 步　' + s.day + '　' + s.actor + (td.length ? '　还差：' + td.map(x => x.text).join('；') : '　已过')
+    const tip = '第 ' + s.n + ' 步　' + (s.title ? s.title + '　' : '') + s.day + '　' + s.actor + (td.length ? '　还差：' + td.map(x => x.text).join('；') : '　已过')
     h += '<a href="#step-' + s.n + '" class="' + cls + (inherited(s) ? ' old' : '') + '" title="' + esc(tip) + '" data-go="#step-' + s.n + '">' + s.n + (td.length ? '<i>●</i>' : '') + '</a>'
   })
   const loose = data.choices.filter(c => !c.step || !data.steps.some(s => s.n === c.step))
@@ -608,7 +613,7 @@ function renderTodo() {
   const rows = []
   const sc = scenes()
   st.forEach(s => { const gi = sceneOfStep(s.n); const tag = sc.length > 1 && sc[gi] ? sc[gi].label + '·' : ''
-    for (const td of stepTodo(s)) rows.push({ href: '#step-' + s.n, label: tag + '第 ' + s.n + ' 步', why: td.text, kind: td.kind }) })
+    for (const td of stepTodo(s)) rows.push({ href: '#step-' + s.n, label: tag + (s.title || '第 ' + s.n + ' 步'), why: td.text, kind: td.kind }) })
   for (const c of data.choices) {
     if (c.ruling) continue
     if (c.step && st.some(s => s.n === c.step)) continue
@@ -673,7 +678,7 @@ function render() {
     const sum = td.length ? '<span class="sum todo-sum">还差：' + esc(td.map(x => x.text).join('；')) + '</span>' : '<span class="sum">已过</span>'
     h += '<div class="' + cls + '" id="step-' + s.n + '" data-i="' + i + '">' +
       '<div class="when"><b>' + esc(s.day) + '</b>' + esc(s.actor) + '</div><div class="dot"></div><div class="card">' +
-      '<div class="head" data-fold="' + i + '"><span class="fold">' + (shut ? '▸' : '▾') + '</span><span class="n">第 ' + s.n + ' 步</span>' + sum + (base ? '<span class="badge ' + (old ? 'old">上一版已有' : 'new">本版新增') + '</span>' : '') + '</div>'
+      '<div class="head" data-fold="' + i + '"><span class="fold">' + (shut ? '▸' : '▾') + '</span><span class="n">' + s.n + '</span>' + (s.title ? '<span class="ti">' + esc(s.title) + '</span>' : '<span class="ti">第 ' + s.n + ' 步</span>') + sum + (base ? '<span class="badge ' + (old ? 'old">上一版已有' : 'new">本版新增') + '</span>' : '') + '</div>'
     h += '<div class="body"><div class="text">' + linkTerms(s.text) + '</div>'
     if (s.traces?.length) {
       const fresh = s.traces.filter(t => seenAt[t] === s.n)
