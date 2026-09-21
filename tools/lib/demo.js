@@ -69,28 +69,30 @@ function parseDemo(text) {
 }
 
 const CSS = `<style>
-.demo h1{font-size:20px;margin:0 0 6px}.demo .pre{color:#57606a;font-size:13px;margin:0 0 14px}
-.demo .tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px;position:sticky;top:0;background:#fff;padding:6px 0;z-index:2}
-.demo .tabs button{font:inherit;padding:6px 14px;border-radius:999px;border:1px solid #d0d7de;background:#f6f8fa;color:#1f2328;cursor:pointer}
+/* 字号与行宽（2026-09-21 项目所有者：字体大一些、换行早一些，正文最多约六成页宽） */
+.demo{font-size:16px;line-height:1.55}
+.demo h1{font-size:24px;margin:0 0 8px}.demo .pre{color:#57606a;font-size:15px;margin:0 0 16px;max-width:60vw}
+.demo .tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px;position:sticky;top:0;background:#fff;padding:8px 0;z-index:2}
+.demo .tabs button{font:inherit;font-size:15px;padding:7px 16px;border-radius:999px;border:1px solid #d0d7de;background:#f6f8fa;color:#1f2328;cursor:pointer}
 .demo .tabs button.on{background:#1f6feb;border-color:#1f6feb;color:#fff}
 .demo .sc{display:none}.demo .sc.on{display:block}
-.demo .sc>h2{font-size:17px;margin:0 0 14px}
-.demo h3{font-size:14px;color:#57606a;margin:22px 0 8px;letter-spacing:.02em}
+.demo .sc>h2{font-size:20px;margin:0 0 16px;max-width:60vw}
+.demo h3{font-size:16px;color:#57606a;margin:26px 0 10px;letter-spacing:.02em}
 .demo .tl{position:relative;margin:0 0 6px 0;padding-left:0}
 .demo .tl::before{content:"";position:absolute;left:150px;top:6px;bottom:6px;border-left:2px solid #e6e8eb}
-.demo .st{display:grid;grid-template-columns:136px 28px 1fr;gap:0 10px;margin:0 0 14px;align-items:start}
-.demo .st .when{text-align:right;color:#57606a;font-size:12.5px;line-height:1.35;padding-top:3px}.demo .st .when b{display:block;color:#1f2328;font-size:13px}
-.demo .st .dot{width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #1f6feb;margin:5px 0 0 1px;position:relative;z-index:1}
-.demo .st .what{padding:6px 12px 8px;border:1px solid #e6e8eb;border-radius:8px;background:#fff}
-.demo .st .n{font-size:11.5px;color:#8c959f;margin-right:6px}
+.demo .st{display:grid;grid-template-columns:136px 28px minmax(0,1fr);gap:0 12px;margin:0 0 16px;align-items:start}
+.demo .st .when{text-align:right;color:#57606a;font-size:14px;line-height:1.4;padding-top:4px}.demo .st .when b{display:block;color:#1f2328;font-size:15px}
+.demo .st .dot{width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #1f6feb;margin:7px 0 0 1px;position:relative;z-index:1}
+.demo .st .what{padding:8px 14px 10px;border:1px solid #e6e8eb;border-radius:8px;background:#fff;max-width:60vw;box-sizing:border-box}
+.demo .st .n{font-size:13px;color:#8c959f;margin-right:6px}
 .demo .st .act{font-weight:600}
-.demo .st .res{margin-top:4px;color:#1f2328}.demo .st .res::before{content:"→ ";color:#1f6feb;font-weight:700}
-.demo .st .basis{margin-top:6px;font-size:12px;color:#57606a}.demo .st .basis code{background:#f6f8fa;padding:1px 6px;border-radius:4px}
+.demo .st .res{margin-top:6px;color:#1f2328}.demo .st .res::before{content:"→ ";color:#1f6feb;font-weight:700}
+.demo .st .basis{margin-top:8px;font-size:13.5px;color:#57606a}.demo .st .basis code{background:#f6f8fa;padding:1px 6px;border-radius:4px}
 .demo .en{font-size:.85em;color:#6e7781;font-weight:400;letter-spacing:0}
-.demo .note{margin:0 0 12px 174px;padding:8px 12px;color:#57606a;font-size:13px;background:#f6f8fa;border-radius:6px;border:1px dashed #d0d7de}
+.demo .note{margin:0 0 14px 176px;padding:10px 14px;color:#57606a;font-size:15px;background:#f6f8fa;border-radius:6px;border:1px dashed #d0d7de;max-width:60vw;box-sizing:border-box}
 .demo .empty{padding:24px;color:#57606a;background:#f6f8fa;border-radius:8px}
-.demo .files{margin:0 0 12px;font-size:13px;color:#57606a}.demo .files a{color:#1f6feb;margin-right:12px}
-@media (max-width:720px){.demo .st{grid-template-columns:1fr}.demo .tl::before{display:none}.demo .st .dot{display:none}.demo .st .when{text-align:left}.demo .note{margin-left:0}}
+.demo .files{margin:0 0 12px;font-size:14px;color:#57606a}.demo .files a{color:#1f6feb;margin-right:12px}
+@media (max-width:720px){.demo .st{grid-template-columns:1fr}.demo .tl::before{display:none}.demo .st .dot{display:none}.demo .st .when{text-align:left}.demo .note{margin-left:0}.demo .st .what,.demo .note,.demo .pre,.demo .sc>h2{max-width:none}}
 </style>`
 
 function stepHtml(s) {
