@@ -260,6 +260,34 @@
         }
       }
     },
+    "scenes": {
+      "type": "array",
+      "description": "分场：走查页按它把步骤分成一场一场，一次看一场（2026-09-21 项目所有者：「调整走查的页面，也按照场景分一下」）。不写就整条一口气排下来",
+      "items": {
+        "type": "object",
+        "required": [
+          "from",
+          "label"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "这一场头一步的步号；一场管到下一场的 from 减一。第一场必须是 1，往后递增"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 12,
+            "description": "切换按钮上的短名，六个字以内"
+          },
+          "title": {
+            "type": "string",
+            "description": "一句话：这一场走的是什么"
+          }
+        }
+      }
+    },
     "traces": {
       "$ref": "urn:dev-team:common#/$defs/traces",
       "description": "故事用到的全部编号；认可后成为切片的 traces"
