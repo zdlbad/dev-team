@@ -285,7 +285,18 @@ if (cmd === 'serve') {
   .todo a:hover { text-decoration:underline; }
   .todo .why { color:var(--muted); }
   header h1 { font-size:16px; margin:0; flex:1; }
-  #segs { position:sticky; top:43px; z-index:2; background:var(--lo); border-bottom:1px solid var(--line); padding:5px 20px; font-size:12px; }
+  #scenes { position:sticky; top:43px; z-index:2; background:#fff; border-bottom:1px solid var(--line); padding:6px 20px; display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  #scenes:empty { display:none; }
+  #scenes .lab { font-size:12px; color:var(--muted); margin-right:2px; }
+  #scenes a { display:inline-flex; gap:6px; align-items:baseline; text-decoration:none; color:var(--fg); background:#fff; border:1px solid #d0d7de; border-radius:999px; padding:3px 11px; font-size:13px; cursor:pointer; }
+  #scenes a:hover { border-color:#1f6feb; }
+  #scenes a.on { border-color:#1f6feb; background:#eef4ff; font-weight:600; }
+  #scenes a.done { color:#166534; border-color:#9ccc9c; }
+  #scenes a .d { color:var(--muted); font-weight:400; font-size:11px; }
+  #scenes a.on .d { color:#1f6feb; }
+  #sceneHead { margin:14px 0 6px; padding:8px 12px; background:var(--lo); border-left:3px solid #1f6feb; border-radius:0 6px 6px 0; }
+  #sceneHead b { font-size:14px; } #sceneHead span { color:var(--muted); font-size:12.5px; margin-left:8px; }
+  #segs { position:sticky; top:43px; z-index:3; background:var(--lo); border-bottom:1px solid var(--line); padding:5px 20px; font-size:12px; }
   #segs .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:2px 0; opacity:.55; }
   #segs .row.here { opacity:1; }
   #segs .row .chain { min-width:190px; }
@@ -430,12 +441,27 @@ function linkTerms(text) {
 <body>
 <header><a href="/">← 框架图</a><h1 id="title">走故事</h1><a href="/board" target="board">谁在做什么 ↗</a><a href="/glossary" target="glossary">名词目录 ↗</a><a href="/model" target="model">模型图 ↗</a><span id="status"></span><button id="approve">业务理解一致</button><button id="save" class="primary">保存</button><div id="rail"></div></header>
 <nav id="segs"></nav>
+<nav id="scenes"></nav>
 <main><section id="story"></section><aside id="side"></aside></main>
 <script>
 ${SHARED_JS}
 let data = null, biz = {}
 let revealed = {}
 let collapsed = {}, collapsedInit = false
+// 分场（2026-09-21 项目所有者：「调整走查的页面，也按照场景分一下」）：故事里写了 scenes 就一次只排一场，
+// 88 步、120 步的走查一口气排下来没人审得动。cur 是第几场，'all' 是整条都排。
+let cur = 'all'
+function scenes() { return (data?.scenes ?? []).filter((x) => x && Number.isInteger(x.from)) }
+/** 第 i 场管哪几步（下标，不是步号） */
+function sceneRange(gi) {
+  const sc = scenes(), st = data.steps
+  const from = sc[gi].from, to = gi + 1 < sc.length ? sc[gi + 1].from : Infinity
+  return st.map((x, i) => (x.n >= from && x.n < to ? i : -1)).filter((i) => i >= 0)
+}
+function sceneOfStep(n) { const sc = scenes(); let at = -1; sc.forEach((x, i) => { if (n >= x.from) at = i }); return at }
+function inCur(s) { return cur === 'all' || sceneOfStep(s.n) === cur }
+const sceneKey = () => 'story-scene:' + (data?.slice ?? '')
+function setScene(v) { cur = v; try { localStorage.setItem(sceneKey(), String(v)) } catch (e) {} render(); window.scrollTo({ top: 0 }) }
 function fmt(v) { return typeof v === 'number' ? (Number.isInteger(v) && Math.abs(v) < 1000 ? String(v) : v.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : esc(v) }
 function numEq(a, b) { const x = Number(String(a).replace(/[,$\\s]/g,'')), y = Number(String(b).replace(/[,$\\s]/g,'')); return Number.isFinite(x) && Number.isFinite(y) && Math.abs(x-y) < 0.005 }
 function isCorrect(q, ans) { return q.kind === 'number' ? numEq(ans, q.answer) : String(ans).trim() === String(q.answer).trim() }
@@ -471,8 +497,16 @@ function stepTodo(s) {
   return out
 }
 function jump(sel) {
-  const el = document.querySelector(sel)
-  if (!el) return
+  let el = document.querySelector(sel)
+  if (!el) {
+    // 要跳的那一步在别的场里（右边栏的「还差 N 处」是整条算的）：先切到它那一场
+    const m = /^#step-(\d+)$/.exec(sel)
+    const gi = m ? sceneOfStep(Number(m[1])) : -1
+    if (gi < 0) return
+    setScene(gi)
+    el = document.querySelector(sel)
+    if (!el) return
+  }
   const host = el.closest('.step')
   if (host?.classList.contains('collapsed')) { collapsed[Number(host.dataset.i)] = false; host.classList.remove('collapsed') }
   el.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -510,8 +544,30 @@ function wireUsage() {
   })
 }
 
-function renderRail() {
+function renderScenes() {
+  const box = document.getElementById('scenes')
+  if (!box) return
+  const sc = scenes()
+  if (sc.length < 2) { box.innerHTML = ''; return }
   const st = data.steps
+  const chip = (v, name, steps) => {
+    const left = steps.filter((i) => !stepComplete(st[i])).length
+    const cls = (v === cur ? ' on' : '') + (left ? '' : ' done')
+    return '<a class="' + cls.trim() + '" data-scene="' + v + '">' + esc(name) +
+      '<span class="d">' + steps.length + ' 步' + (left ? '·还差 ' + left : '·已过') + '</span></a>'
+  }
+  let h = '<span class="lab">这一场：</span>'
+  h += sc.map((x, gi) => chip(gi, x.label, sceneRange(gi))).join('')
+  h += chip('all', '整条', st.map((x, i) => i))
+  box.innerHTML = h
+  box.querySelectorAll('[data-scene]').forEach((el) => el.addEventListener('click', (ev) => {
+    ev.preventDefault()
+    const v = el.dataset.scene
+    setScene(v === 'all' ? 'all' : Number(v))
+  }))
+}
+function renderRail() {
+  const st = data.steps.filter(inCur)
   let h = '<span class="lab">跳到：</span>'
   st.forEach(s => {
     const td = stepTodo(s)
@@ -520,7 +576,7 @@ function renderRail() {
     const tip = '第 ' + s.n + ' 步　' + s.day + '　' + s.actor + (td.length ? '　还差：' + td.map(x => x.text).join('；') : '　已过')
     h += '<a href="#step-' + s.n + '" class="' + cls + (inherited(s) ? ' old' : '') + '" title="' + esc(tip) + '" data-go="#step-' + s.n + '">' + s.n + (td.length ? '<i>●</i>' : '') + '</a>'
   })
-  const loose = data.choices.filter(c => !c.step || !st.some(s => s.n === c.step))
+  const loose = data.choices.filter(c => !c.step || !data.steps.some(s => s.n === c.step))
   const looseOpen = loose.filter(c => !c.ruling)
   if (looseOpen.length) h += '<a href="#card-' + esc(looseOpen[0].id) + '" class="todo" title="' + esc('不挂在某一步上的卡还有 ' + looseOpen.length + ' 张没裁') + '" data-go="#card-' + esc(looseOpen[0].id) + '">卡<i>●</i></a>'
   const shut = data.steps.every((s, i) => collapsed[i])
@@ -530,7 +586,9 @@ function renderRail() {
 function renderTodo() {
   const st = data.steps
   const rows = []
-  st.forEach(s => { for (const td of stepTodo(s)) rows.push({ href: '#step-' + s.n, label: '第 ' + s.n + ' 步', why: td.text, kind: td.kind }) })
+  const sc = scenes()
+  st.forEach(s => { const gi = sceneOfStep(s.n); const tag = sc.length > 1 && sc[gi] ? sc[gi].label + '·' : ''
+    for (const td of stepTodo(s)) rows.push({ href: '#step-' + s.n, label: tag + '第 ' + s.n + ' 步', why: td.text, kind: td.kind }) })
   for (const c of data.choices) {
     if (c.ruling) continue
     if (c.step && st.some(s => s.n === c.step)) continue
@@ -575,8 +633,17 @@ function render() {
   const total = st.reduce((n, s) => n + (s.traces||[]).length, 0), conf = st.reduce((n, s) => n + confirmedSet(s).size, 0)
   let h = '<div class="persona"><b>' + esc(data.persona.name) + '</b>　' + linkTerms(data.persona.description) + '<div class="summary">已过 ' + done + '/' + st.length + ' 步，语句确认 ' + conf + '/' + total + '，质疑 ' + challenged + (quizzes ? '　·　预测 ' + answered + '/' + quizzes + '，答对 ' + right : '') + '　·　裁定 ' + ruled + '/' + data.choices.length + '</div>' + (data.basedOn ? '<div class="lineage">上一版：<a href="/story?slice=' + esc(data.basedOn) + '">' + esc(data.basedOn) + (base ? '「' + esc(base.title) + '」' : '') + '</a>　这一版加了：<b>' + esc(data.adds || '') + '</b>' + (base ? '　·　新步骤 ' + st.filter(s => !inherited(s)).length + ' 步，老步骤 ' + st.filter(inherited).length + ' 步（灰标）' : '') + '</div>' : '') + (data.previously ? '<div class="prev"><div class="t">前情提要 — 上一版结束时</div>' + linkTerms(data.previously.text) + (data.previously.facts && Object.keys(data.previously.facts).length ? '<div class="facts">' + Object.entries(data.previously.facts).map(([k, v]) => '<div class="fact"><b>' + esc(k) + '</b><span>' + fmt(v) + '</span></div>').join('') + '</div>' : '') + '</div>' : '') + (st.length ? '<div class="hint">每一步下面是它依据的业务语句，看懂一条勾一条；全勾了就是同意这一步。觉得不对点「质疑」写理由。带虚线的词点一下看名词目录。裁定挂在它发生的那一步下面。</div>' : '<div class="hint">这条切片还没有走查场景，这一页要你做的就是下面这几张卡：模型师起草骨架时在形状上拿不准的地方，每张给了几个答案与它现在的选法。带虚线的词点一下看名词目录。</div>') + '</div>'
   let lock = false
+  // 分场的时候整条照旧走一遍（题的闸、前面看过的语句都按整条算），只是不属于本场的不往页面上排
+  if (scenes().length > 1) {
+    const gi = cur === 'all' ? -1 : cur
+    const one = gi >= 0 ? scenes()[gi] : null
+    h += '<div id="sceneHead">' + (one
+      ? '<b>' + esc(one.label) + '</b>' + (one.title ? '<span>' + esc(one.title) + '</span>' : '') + '<span>第 ' + one.from + ' 步起，共 ' + sceneRange(gi).length + ' 步</span>'
+      : '<b>整条走查</b><span>' + st.length + ' 步，' + scenes().length + ' 场一起排；上面那一条按钮一次看一场</span>') + '</div>'
+  }
   st.forEach((s, i) => {
     const open = !s.quiz || s.human || revealed[i]
+    if (!inCur(s)) { if (s.quiz && !s.human && !revealed[i]) lock = true; return }
     const old = inherited(s)
     const td = stepTodo(s)
     const shut = !!collapsed[i]
@@ -650,6 +717,7 @@ function render() {
   h += usageBlock()
   $('#story').innerHTML = h
   wireUsage()
+  renderScenes()
   renderRail()
   let a = renderTodo()
   // 有步骤时，不挂在任何一步上的卡仍旧摆在边栏；一步都没有时它们已经在正中间了，别再摆一遍
@@ -765,7 +833,18 @@ async function load() { const r = await (await fetch('/data?slice=' + SLICE)).js
     renderSegs(has)
     return
   }
-  data = r.story; base = r.base; biz = r.business; rev = r.rev; buildTerms(r.glossary); render(); renderSegs(r.segs) }
+  data = r.story; base = r.base; biz = r.business; rev = r.rev; buildTerms(r.glossary)
+  // 上次看到哪一场就回哪一场；没看过就挑头一个还没走完的，整条都走完了看整条
+  cur = 'all'
+  const sc = scenes()
+  if (sc.length > 1) {
+    let saved = null
+    try { saved = localStorage.getItem(sceneKey()) } catch (e) {}
+    if (saved === 'all') cur = 'all'
+    else if (saved !== null && sc[Number(saved)]) cur = Number(saved)
+    else { const at = sc.findIndex((x, gi) => sceneRange(gi).some((i) => !stepComplete(data.steps[i]))); cur = at >= 0 ? at : 'all' }
+  }
+  render(); renderSegs(r.segs) }
 function inherited(s) { return !!(base && base.texts.includes(s.text)) }
 async function save(auto) {
   if (!auto) { const bad = data.steps.filter(s => s.review?.verdict === 'challenge' && !s.review.note); if (bad.length) { alert('第 ' + bad.map(s => s.n).join('、') + ' 步点了质疑但没写理由'); return false } }
