@@ -9,6 +9,9 @@
  *   # 标题
  *   ## 场景 1：<一句话>            ← 一个场景
  *   > 切换名：两本账主线            ← 给切换按钮用的短名（可省，省了用场景标题）
+ *   > 模块：资金账户                 ← 这个场景属于哪个模块（可省；省了归「总览」）。页面顶部一排标签页按模块切、
+ *                                       下面一排按场景切（2026-09-21 项目所有者：「演示的场景按模块分，顶部标签页切换」）
+ *   > 模块顺序：资金账户、可申报账目  ← 写在第一个 ## 之前，定顶部标签页的先后（可省；省了按文中先出现的先排，「总览」最前）
  *   ### 一、开资金账户              ← 阶段标题（### 或 ####，或整行加粗）
  *   第 1 步 · 2026-03-03 · 案例经理 · 做了什么 → 账上发生了什么（金额）· R-101、R-102
  *   ...
@@ -43,7 +46,7 @@ function parseStep(line) {
 /** 一份演示文档 → { title, scenarios: [{ title, label, blocks: [{ heading, items: [{ step } | { note }] }] }] } */
 function parseDemo(text) {
   const lines = text.split('\n')
-  const doc = { title: '', preface: [], scenarios: [] }
+  const doc = { title: '', preface: [], scenarios: [], moduleOrder: [], groups: [] }
   let sc = null, block = null
   const ensureBlock = () => { if (!sc) return null; if (!block) { block = { heading: null, items: [] }; sc.blocks.push(block) } return block }
   for (const raw of lines) {
@@ -53,6 +56,8 @@ function parseDemo(text) {
     if ((m = /^#\s+(.*)$/.exec(line))) { doc.title = m[1].trim(); continue }
     if ((m = /^##\s+(.*)$/.exec(line))) { sc = { title: m[1].trim(), label: null, blocks: [] }; block = null; doc.scenarios.push(sc); continue }
     if ((m = /^>\s*切换名[：:]\s*(.*)$/.exec(line)) && sc) { sc.label = m[1].trim(); continue }
+    if ((m = /^>\s*模块顺序[：:]\s*(.*)$/.exec(line))) { doc.moduleOrder = m[1].split(/[、,，]\s*/).map((x) => x.trim()).filter(Boolean); continue }
+    if ((m = /^>\s*模块[：:]\s*(.*)$/.exec(line)) && sc) { sc.module = m[1].trim(); continue }
     if ((m = /^#{3,4}\s+(.*)$/.exec(line)) || (m = /^\*\*([^*]+)\*\*\s*$/.exec(line))) {
       if (!sc) { doc.preface.push(line); continue }
       block = { heading: m[1].trim(), items: [] }; sc.blocks.push(block); continue
@@ -65,6 +70,14 @@ function parseDemo(text) {
   }
   // 没写切换名的：场景标题去掉「场景 n：」当按钮名；不是场景的节（开场、编号怎么查）用整个标题
   for (const s of doc.scenarios) if (!s.label) s.label = /^场景\s*\d+/.test(s.title) ? s.title.replace(/^场景\s*\d+\s*[：:]\s*/, '').slice(0, 10) : s.title.slice(0, 14)
+  // 按模块分组：没标模块的节归「总览」（开场、编号怎么查、总表都是）；顺序照「模块顺序」，没写的按先出现排，「总览」最前
+  const OVERVIEW = '总览'
+  const names = []
+  for (const s of doc.scenarios) { const g = s.module || OVERVIEW; if (!names.includes(g)) names.push(g) }
+  const order = [...doc.moduleOrder.filter((n) => names.includes(n))]
+  if (names.includes(OVERVIEW) && !order.includes(OVERVIEW)) order.unshift(OVERVIEW)
+  for (const n of names) if (!order.includes(n)) order.push(n)
+  doc.groups = order.map((name) => ({ name, scenarios: doc.scenarios.map((s, i) => ((s.module || OVERVIEW) === name ? i : -1)).filter((i) => i >= 0) }))
   return doc
 }
 
@@ -72,7 +85,12 @@ const CSS = `<style>
 /* 字号与版面（2026-09-21 项目所有者两次要求：字体大一些；时间轴放在中间偏左、两侧留白；右侧描述再放大、卡片方式显示） */
 .demo{font-size:16px;line-height:1.55;max-width:1120px;margin-left:max(0px,calc((100% - 1120px)*.4))}
 .demo h1{font-size:24px;margin:0 0 8px}.demo .pre{color:#57606a;font-size:15px;margin:0 0 16px}
-.demo .tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px;position:sticky;top:0;background:#fff;padding:8px 0;z-index:2}
+.demo .bar{position:sticky;top:0;background:#fff;z-index:2;margin:0 0 20px}
+.demo .mods{display:flex;flex-wrap:wrap;gap:0 4px;border-bottom:2px solid #e6e8eb;margin:0 0 10px}
+.demo .mods button{font:inherit;font-size:17px;font-weight:600;padding:10px 18px 8px;border:0;border-bottom:3px solid transparent;margin-bottom:-2px;background:none;color:#57606a;cursor:pointer}
+.demo .mods button.on{color:#1f2328;border-bottom-color:#1f6feb}
+.demo .mods button .cnt{font-size:13px;font-weight:400;color:#8c959f;margin-left:6px}
+.demo .tabs{display:none;flex-wrap:wrap;gap:8px;padding:4px 0}.demo .tabs.on{display:flex}
 .demo .tabs button{font:inherit;font-size:15px;padding:7px 16px;border-radius:999px;border:1px solid #d0d7de;background:#f6f8fa;color:#1f2328;cursor:pointer}
 .demo .tabs button.on{background:#1f6feb;border-color:#1f6feb;color:#fff}
 .demo .sc{display:none}.demo .sc.on{display:block}
@@ -112,24 +130,36 @@ function demoPage(root, which = null) {
   const file = which && files.includes(which) ? which : files[0]
   const doc = parseDemo(fs.readFileSync(path.join(dir, file), 'utf8'))
   const picker = files.length > 1 ? `<div class="files">几份演示文档：${files.map((f) => f === file ? `<b>${esc(f)}</b>　` : `<a href="/demo?file=${encodeURIComponent(f)}">${esc(f)}</a>`).join('')}</div>` : ''
-  const tabs = doc.scenarios.map((s, i) => `<button data-sc="${i}"${i === 0 ? ' class="on"' : ''}>${esc(s.label)}</button>`).join('')
+  const mods = doc.groups.map((g, gi) => `<button data-g="${gi}"${gi === 0 ? ' class="on"' : ''}>${esc(g.name)}<span class="cnt">${g.scenarios.length}</span></button>`).join('')
+  const tabs = doc.groups.map((g, gi) => `<div class="tabs${gi === 0 ? ' on' : ''}" data-g="${gi}">` +
+    g.scenarios.map((i) => `<button data-sc="${i}"${i === g.scenarios[0] ? ' class="on"' : ''}>${esc(doc.scenarios[i].label)}</button>`).join('') + `</div>`).join('')
+  const first = doc.groups[0]?.scenarios[0] ?? 0
   const body = doc.scenarios.map((s, i) => {
     const blocks = s.blocks.map((b) => (b.heading ? `<h3>${inline(b.heading)}</h3>` : '') + `<div class="tl">` +
       b.items.map((it) => it.step ? stepHtml(it.step) : `<div class="note">${inline(it.note)}</div>`).join('') + `</div>`).join('')
-    return `<section class="sc${i === 0 ? ' on' : ''}" data-sc="${i}"><h2>${inline(s.title)}</h2>${blocks}</section>`
+    return `<section class="sc${i === first ? ' on' : ''}" data-sc="${i}"><h2>${inline(s.title)}</h2>${blocks}</section>`
   }).join('')
   const preface = doc.preface.length ? `<div class="pre">${doc.preface.map(inline).join('<br>')}</div>` : ''
-  return CSS + `<div class="demo">${picker}<h1>${inline(doc.title || file.replace(/\.md$/, ''))}</h1>${preface}<div class="tabs">${tabs}</div>${body}</div>
+  return CSS + `<div class="demo">${picker}<h1>${inline(doc.title || file.replace(/\.md$/, ''))}</h1>${preface}<div class="bar">${doc.groups.length > 1 ? `<div class="mods">${mods}</div>` : ''}${tabs}</div>${body}</div>
 <script>
 (function(){
-  var btns=document.querySelectorAll('.demo .tabs button'),secs=document.querySelectorAll('.demo .sc')
+  var groups=${JSON.stringify(doc.groups.map((g) => g.scenarios))}
+  var mods=document.querySelectorAll('.demo .mods button'),rows=document.querySelectorAll('.demo .tabs'),btns=document.querySelectorAll('.demo .tabs button'),secs=document.querySelectorAll('.demo .sc')
   var key='demo-sc:'+${JSON.stringify(file)}
-  function show(i){btns.forEach(function(b){b.classList.toggle('on',b.dataset.sc===String(i))});secs.forEach(function(s){s.classList.toggle('on',s.dataset.sc===String(i))});try{localStorage.setItem(key,String(i))}catch(e){}}
-  btns.forEach(function(b){b.addEventListener('click',function(){show(b.dataset.sc)})})
+  function groupOf(i){for(var g=0;g<groups.length;g++)if(groups[g].indexOf(Number(i))>=0)return g;return 0}
+  function show(i){i=String(i);var g=String(groupOf(i))
+    mods.forEach(function(b){b.classList.toggle('on',b.dataset.g===g)});rows.forEach(function(r){r.classList.toggle('on',r.dataset.g===g)})
+    btns.forEach(function(b){b.classList.toggle('on',b.dataset.sc===i)});secs.forEach(function(s){s.classList.toggle('on',s.dataset.sc===i)})
+    try{localStorage.setItem(key,i)}catch(e){}}
+  // 顶部按模块切：进这个模块时回到它上次看的那个场景，没看过就第一个
+  var last={}
+  mods.forEach(function(b){b.addEventListener('click',function(){var g=Number(b.dataset.g);show(last[g]!=null?last[g]:groups[g][0])})})
+  btns.forEach(function(b){b.addEventListener('click',function(){last[groupOf(b.dataset.sc)]=b.dataset.sc;show(b.dataset.sc)})})
   var saved=null;try{saved=localStorage.getItem(key)}catch(e){}
-  if(saved!==null&&document.querySelector('.demo .sc[data-sc="'+saved+'"]'))show(saved)
-  // 左右方向键切场景：演示时手不用离开键盘
-  document.addEventListener('keydown',function(e){if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;var cur=[].findIndex.call(secs,function(s){return s.classList.contains('on')});var next=cur+(e.key==='ArrowRight'?1:-1);if(next>=0&&next<secs.length)show(next)})
+  if(saved!==null&&document.querySelector('.demo .sc[data-sc="'+saved+'"]')){last[groupOf(saved)]=saved;show(saved)}
+  // 左右方向键在本模块内切场景：演示时手不用离开键盘
+  document.addEventListener('keydown',function(e){if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;var cur=[].find.call(secs,function(s){return s.classList.contains('on')});if(!cur)return
+    var list=groups[groupOf(cur.dataset.sc)],at=list.indexOf(Number(cur.dataset.sc)),next=at+(e.key==='ArrowRight'?1:-1);if(next>=0&&next<list.length){last[groupOf(list[next])]=String(list[next]);show(list[next])}})
 })()
 </script>`
 }
