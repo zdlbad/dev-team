@@ -69,6 +69,11 @@
             "minLength": 1,
             "description": "谁做的：业务角色、政府、时间"
           },
+          "title": {
+            "type": "string",
+            "maxLength": 24,
+            "description": "这一步的小标题：十二个字以内，一眼看出这一步在做什么（2026-09-21 项目所有者要的）。走查页排在步号旁边，收起来的时候只剩它"
+          },
           "text": {
             "type": "string",
             "minLength": 1,
