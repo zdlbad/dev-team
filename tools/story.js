@@ -733,7 +733,8 @@ let base = null
 function renderSegs(segs) {
   const box = $('#segs')
   if (!box) return
-  if (!segs || segs.length < 2) { box.style.display = 'none'; return }
+  if (!segs || !segs.length || (segs.length < 2 && data)) { box.style.display = 'none'; return }
+  box.style.display = ''
   // 按业务故事分行，行内按故事里最早那一天排；没归到链上的（比如走完整条链的老切片）单独一行
   const groups = []
   for (const s of segs) {
@@ -744,17 +745,27 @@ function renderSegs(segs) {
   }
   const chip = (s) => {
     const when = s.day ? s.day.slice(5).split('-').join('/') : '待写'
-    const on = s.slice === data.slice ? ' on' : ''
+    const on = data && s.slice === data.slice ? ' on' : ''
     return '<a class="seg' + on + '" href="/story?slice=' + esc(s.slice) + '" title="' + esc(s.intent || '') + '">' + esc(s.title) + '<span class="d">' + when + '·' + s.steps + '步' + (s.approved ? '' : '·待认可') + '</span></a>'
   }
   box.innerHTML = groups.map((g) => {
-    const here = g.items.some((s) => s.slice === data.slice)
+    const here = !!data && g.items.some((s) => s.slice === data.slice)
     const label = g.key ? '业务故事「' + esc(g.key) + '」' : '没归到业务故事链上'
     return '<div class="row' + (here ? ' here' : '') + '"><span class="chain">' + label + '</span>' + g.items.map(chip).join('<span class="arrow">→</span>') + '</div>'
   }).join('')
 }
 let rev = null
-async function load() { const r = await (await fetch('/data?slice=' + SLICE)).json(); if (!r.story) { $('#story').innerHTML = '<p>没有这条故事：' + esc(SLICE) + '</p>'; return } data = r.story; base = r.base; biz = r.business; rev = r.rev; buildTerms(r.glossary); render(); renderSegs(r.segs) }
+async function load() { const r = await (await fetch('/data?slice=' + SLICE)).json()
+  if (!r.story) {
+    // 这条切片没有故事文件（修改切片、实现切片都没有）。别把人晾在这儿：把有故事的那几条摆出来让他点
+    const has = r.segs ?? []
+    data = null
+    $('#story').innerHTML = '<p>' + (SLICE ? '「' + esc(SLICE) + '」这条切片没有故事文件' : '看板没指到哪一条切片') +
+      (has.length ? '，下面这几条有：' : '，也没有别的切片有故事。') + '</p>'
+    renderSegs(has)
+    return
+  }
+  data = r.story; base = r.base; biz = r.business; rev = r.rev; buildTerms(r.glossary); render(); renderSegs(r.segs) }
 function inherited(s) { return !!(base && base.texts.includes(s.text)) }
 async function save(auto) {
   if (!auto) { const bad = data.steps.filter(s => s.review?.verdict === 'challenge' && !s.review.note); if (bad.length) { alert('第 ' + bad.map(s => s.n).join('、') + ' 步点了质疑但没写理由'); return false } }
