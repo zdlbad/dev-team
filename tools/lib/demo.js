@@ -30,7 +30,9 @@ function parseStep(line) {
   const [date, who, ...rest] = parts
   // 「做了什么 → 结果」可能自己带着分隔符（金额里的顿号不算），所以从后往前认依据：形如 R-xxx、第几批、G-xxx 的那一段
   let basis = ''
-  if (rest.length > 1 && /^(?:[RGU]-\d+|第[一二三四五六七八九十百零〇\d]+批)/.test(rest[rest.length - 1])) basis = rest.pop()
+  // 讲解写的是「· 依据 R-012、R-028」，带着「依据」两个字；只认编号开头会把整段依据落进结果那一栏（2026-09-21 第一份就这样）
+  const last = rest.length > 1 ? rest[rest.length - 1].replace(/^依据[：:]?\s*/, '') : ''
+  if (last && /^(?:[RGU]-\d+|第[一二三四五六七八九十百零〇\d]+批|走查)/.test(last)) { rest.pop(); basis = last }
   const body = rest.join(' · ')
   const arrow = body.split(/\s*(?:→|->|=>)\s*/)
   return { n: Number(m[1]), date, who, action: arrow[0] ?? '', result: arrow.slice(1).join(' → '), basis }
@@ -59,7 +61,8 @@ function parseDemo(text) {
     if (step) b.items.push({ step })
     else b.items.push({ note: line.replace(/^[-*>]\s*/, '') })
   }
-  for (const s of doc.scenarios) if (!s.label) s.label = s.title.replace(/^场景\s*\d+\s*[：:]\s*/, '').slice(0, 8)
+  // 没写切换名的：场景标题去掉「场景 n：」当按钮名；不是场景的节（开场、编号怎么查）用整个标题
+  for (const s of doc.scenarios) if (!s.label) s.label = /^场景\s*\d+/.test(s.title) ? s.title.replace(/^场景\s*\d+\s*[：:]\s*/, '').slice(0, 10) : s.title.slice(0, 14)
   return doc
 }
 
