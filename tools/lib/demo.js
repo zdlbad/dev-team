@@ -16,15 +16,42 @@
  *   第 1 步 · 2026-03-03 · 案例经理 · 做了什么 → 账上发生了什么（金额）· R-101、R-102
  *   ...
  * 对不上「第 n 步」格式的行，原样当成说明摆在那个位置，不丢。
+ *
+ * 卡片下留言（2026-09-21 项目所有者：「卡片下给我一个留 note 的 feature」）：看的人在每一步卡片下写一句，
+ * 存在 导读/<演示文件名>.notes.json，键是「切换名|第 n 步」（场景改号也不丢），值是 [{ at: 本地时间, text }]。
+ * 讲解下一趟改文档前先读这份文件——留言就是他对那一步的话。
  */
 const fs = require('node:fs')
 const path = require('node:path')
+const mel = require('./time')
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
 /** 行内的 `代码`、**加粗** 两种最常见的标记转成 HTML，其余原样 */
 const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
   // 术语后面括号里的英文法定名（「持续服务资金账户（OngoingServicesAccount）」，2026-09-21 项目所有者要的）压成小字灰字，别抢中文
   .replace(/（([A-Z][A-Za-z0-9]*(?:\s[A-Z][A-Za-z0-9]*)*)）/g, '<span class="en">（$1）</span>')
+
+const notesPath = (root, file) => path.join(root, '导读', file.replace(/\.md$/, '') + '.notes.json')
+const readNotes = (root, file) => { try { return JSON.parse(fs.readFileSync(notesPath(root, file), 'utf8')) } catch { return {} } }
+const writeNotes = (root, file, notes) => fs.writeFileSync(notesPath(root, file), JSON.stringify(notes, null, 2) + '\n')
+const localNow = () => { const p = mel.parts(new Date()); return p ? `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}` : new Date().toISOString() }
+/** 在某一步下留一句；返回这一步现在的全部留言 */
+function addNote(root, file, key, text) {
+  const notes = readNotes(root, file)
+  ;(notes[key] ??= []).push({ at: localNow(), text })
+  writeNotes(root, file, notes)
+  return notes[key]
+}
+/** 删掉某一步的第 i 句 */
+function deleteNote(root, file, key, i) {
+  const notes = readNotes(root, file)
+  if (!notes[key] || !notes[key][i]) return notes[key] ?? []
+  notes[key].splice(i, 1)
+  if (!notes[key].length) delete notes[key]
+  writeNotes(root, file, notes)
+  return notes[key] ?? []
+}
+const noteKey = (label, n) => `${label}|第 ${n} 步`
 
 /** 一行「第 n 步 · 日期 · 谁 · 做了什么 → 结果 · 依据」拆成几栏；拆不出来返回 null */
 function parseStep(line) {
@@ -108,16 +135,28 @@ const CSS = `<style>
 .demo .st .basis{margin-top:10px;font-size:14px;color:#57606a}.demo .st .basis code{background:#f6f8fa;padding:1px 6px;border-radius:4px}
 .demo .en{font-size:.85em;color:#6e7781;font-weight:400;letter-spacing:0}
 .demo .note{margin:0 0 16px 178px;padding:12px 18px;color:#57606a;font-size:16px;background:#f6f8fa;border-radius:10px;border:1px dashed #d0d7de}
+.demo .notes{grid-column:3;margin:-8px 0 0;padding:0 6px}
+.demo .notes .nt{display:flex;gap:10px;align-items:baseline;font-size:15px;color:#57606a;padding:4px 0}.demo .notes .nt .at{font-size:12.5px;color:#8c959f;white-space:nowrap}.demo .notes .nt .tx{flex:1;color:#1f2328}
+.demo .notes .nt .del{border:0;background:none;color:#8c959f;cursor:pointer;font-size:14px;padding:0 4px}.demo .notes .nt .del:hover{color:#cf222e}
+.demo .notes .add{font-size:13.5px;color:#8c959f;cursor:pointer;background:none;border:0;padding:2px 0}.demo .notes .add:hover{color:#1f6feb}
+.demo .notes textarea{display:block;width:100%;box-sizing:border-box;font:inherit;font-size:15px;padding:8px 10px;border:1px solid #d0d7de;border-radius:8px;margin:4px 0 6px;min-height:60px}
+.demo .notes .save{font:inherit;font-size:14px;padding:5px 14px;border-radius:6px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;cursor:pointer}.demo .notes .cancel{font:inherit;font-size:14px;margin-left:8px;border:0;background:none;color:#57606a;cursor:pointer}
+.demo .notes.has .add{color:#57606a}
 .demo .empty{padding:24px;color:#57606a;background:#f6f8fa;border-radius:8px}
 .demo .files{margin:0 0 12px;font-size:14px;color:#57606a}.demo .files a{color:#1f6feb;margin-right:12px}
-@media (max-width:720px){.demo .st{grid-template-columns:1fr}.demo .tl::before{display:none}.demo .st .dot{display:none}.demo .st .when{text-align:left}.demo .note{margin-left:0}.demo{margin-left:0}}
+@media (max-width:720px){.demo .st{grid-template-columns:1fr}.demo .notes{grid-column:1}.demo .tl::before{display:none}.demo .st .dot{display:none}.demo .st .when{text-align:left}.demo .note{margin-left:0}.demo{margin-left:0}}
 </style>`
 
-function stepHtml(s) {
+function noteItemsHtml(list) {
+  return (list ?? []).map((n, i) => `<div class="nt"><span class="at">${esc(n.at)}</span><span class="tx">${esc(n.text)}</span><button class="del" data-i="${i}" title="删掉这一句">×</button></div>`).join('')
+}
+function stepHtml(s, key, notes) {
+  const list = notes?.[key] ?? []
   return `<div class="st"><div class="when"><b>${esc(s.date)}</b>${esc(s.who)}</div><div class="dot"></div><div class="what">` +
     `<div><span class="n">第 ${s.n} 步</span><span class="act">${inline(s.action)}</span></div>` +
     (s.result ? `<div class="res">${inline(s.result)}</div>` : '') +
-    (s.basis ? `<div class="basis">依据 <code>${esc(s.basis)}</code></div>` : '') + `</div></div>`
+    (s.basis ? `<div class="basis">依据 <code>${esc(s.basis)}</code></div>` : '') + `</div>` +
+    `<div class="notes${list.length ? ' has' : ''}" data-key="${esc(key)}"><div class="list">${noteItemsHtml(list)}</div><button class="add">＋ 留一句</button></div></div>`
 }
 
 /** 整页的 HTML 正文（不含 <html> 外壳，工作台用 wrap 包） */
@@ -129,6 +168,7 @@ function demoPage(root, which = null) {
   }
   const file = which && files.includes(which) ? which : files[0]
   const doc = parseDemo(fs.readFileSync(path.join(dir, file), 'utf8'))
+  const notes = readNotes(root, file)
   const picker = files.length > 1 ? `<div class="files">几份演示文档：${files.map((f) => f === file ? `<b>${esc(f)}</b>　` : `<a href="/demo?file=${encodeURIComponent(f)}">${esc(f)}</a>`).join('')}</div>` : ''
   const mods = doc.groups.map((g, gi) => `<button data-g="${gi}"${gi === 0 ? ' class="on"' : ''}>${esc(g.name)}<span class="cnt">${g.scenarios.length}</span></button>`).join('')
   const tabs = doc.groups.map((g, gi) => `<div class="tabs${gi === 0 ? ' on' : ''}" data-g="${gi}">` +
@@ -136,7 +176,7 @@ function demoPage(root, which = null) {
   const first = doc.groups[0]?.scenarios[0] ?? 0
   const body = doc.scenarios.map((s, i) => {
     const blocks = s.blocks.map((b) => (b.heading ? `<h3>${inline(b.heading)}</h3>` : '') + `<div class="tl">` +
-      b.items.map((it) => it.step ? stepHtml(it.step) : `<div class="note">${inline(it.note)}</div>`).join('') + `</div>`).join('')
+      b.items.map((it) => it.step ? stepHtml(it.step, noteKey(s.label, it.step.n), notes) : `<div class="note">${inline(it.note)}</div>`).join('') + `</div>`).join('')
     return `<section class="sc${i === first ? ' on' : ''}" data-sc="${i}"><h2>${inline(s.title)}</h2>${blocks}</section>`
   }).join('')
   const preface = doc.preface.length ? `<div class="pre">${doc.preface.map(inline).join('<br>')}</div>` : ''
@@ -157,11 +197,30 @@ function demoPage(root, which = null) {
   btns.forEach(function(b){b.addEventListener('click',function(){last[groupOf(b.dataset.sc)]=b.dataset.sc;show(b.dataset.sc)})})
   var saved=null;try{saved=localStorage.getItem(key)}catch(e){}
   if(saved!==null&&document.querySelector('.demo .sc[data-sc="'+saved+'"]')){last[groupOf(saved)]=saved;show(saved)}
+  // 卡片下留一句：POST /demo/note?file=&key= 正文是那一句；删：POST /demo/note/delete?file=&key=&i=
+  var file=${JSON.stringify(file)}
+  function q(k){return '?file='+encodeURIComponent(file)+'&key='+encodeURIComponent(k)}
+  function render(box,list){box.classList.toggle('has',list.length>0);box.querySelector('.list').innerHTML=list.map(function(n,i){return '<div class="nt"><span class="at">'+n.at+'</span><span class="tx">'+n.text.replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})+'</span><button class="del" data-i="'+i+'" title="删掉这一句">×</button></div>'}).join('')}
+  document.querySelectorAll('.demo .notes').forEach(function(box){
+    var key=box.dataset.key,add=box.querySelector('.add')
+    add.addEventListener('click',function(){
+      if(box.querySelector('textarea'))return
+      var ta=document.createElement('textarea');ta.placeholder='对这一步说一句，讲解下一趟照它改'
+      var save=document.createElement('button');save.className='save';save.textContent='存'
+      var cancel=document.createElement('button');cancel.className='cancel';cancel.textContent='算了'
+      var wrap=document.createElement('div');wrap.appendChild(ta);wrap.appendChild(save);wrap.appendChild(cancel);box.insertBefore(wrap,add);ta.focus()
+      cancel.onclick=function(){wrap.remove()}
+      save.onclick=function(){var t=ta.value.trim();if(!t)return;save.disabled=true
+        fetch('/demo/note'+q(key),{method:'POST',body:t}).then(function(r){return r.ok?r.json():r.text().then(function(m){throw new Error(m)})}).then(function(list){render(box,list);wrap.remove()}).catch(function(e){alert(e.message);save.disabled=false})}
+    })
+    box.addEventListener('click',function(e){var b=e.target.closest('.del');if(!b)return
+      fetch('/demo/note/delete'+q(key)+'&i='+b.dataset.i,{method:'POST'}).then(function(r){return r.json()}).then(function(list){render(box,list)})})
+  })
   // 左右方向键在本模块内切场景：演示时手不用离开键盘
-  document.addEventListener('keydown',function(e){if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;var cur=[].find.call(secs,function(s){return s.classList.contains('on')});if(!cur)return
+  document.addEventListener('keydown',function(e){if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;if(e.target&&/^(TEXTAREA|INPUT)$/.test(e.target.tagName))return;var cur=[].find.call(secs,function(s){return s.classList.contains('on')});if(!cur)return
     var list=groups[groupOf(cur.dataset.sc)],at=list.indexOf(Number(cur.dataset.sc)),next=at+(e.key==='ArrowRight'?1:-1);if(next>=0&&next<list.length){last[groupOf(list[next])]=String(list[next]);show(list[next])}})
 })()
 </script>`
 }
 
-module.exports = { demoPage, parseDemo, parseStep }
+module.exports = { demoPage, parseDemo, parseStep, addNote, deleteNote, readNotes }
