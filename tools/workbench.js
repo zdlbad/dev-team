@@ -757,6 +757,11 @@ const server = http.createServer((req, res) => {
   // 不是看板里那个字段的原样——看板漏记一笔，页签不该跟着指不到地方
   if (url === '/state') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ...scene(), slice: currentSlice() })) }
   if (url === '/todo') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify(todo())) }
+  // 这三条 2026-09-20（第一百六十五～一百七十二批）重排路由时被误删，页签还挂着、点进去 404，2026-09-21 补回。
+  // 页签的地址在 url() 那张表里，表里有一项这儿就得有一条，改一边要看另一边；page-check 会把每个页签都点一遍
+  if (url === '/delta') return html(deltaPage(q.slice || currentSlice()) ?? wrap('<p>还没指到哪一段。</p>'))
+  if (url === '/plan') return html(wrap(planPage(q.slice || currentSlice())))
+  if (url === '/source') return html(wrap(sourcePage(q.slice || currentSlice())))
   if (url === '/slices') return html(wrap(slicesPage()))
   if (url === '/journal') return html(wrap(journalPage(q.date)))
   // 「演示」（2026-09-21）：讲解写的演示文档（导读/演示-*.md）摆成可切换的竖向时间轴，给人现场演示用
