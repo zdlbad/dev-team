@@ -26,12 +26,16 @@
  * @param {number} o.top      点的圆心离这一行顶上多远（px）；卡片抬头在哪一行，点就对到哪一行
  * @param {string} o.line     线的颜色
  * @param {number} o.narrow   窄到多少 px 就不画轴、改成一栏
+ * @param {number} o.padY     卡片上下留多少白（px）
+ *
+ * 卡片没有框、没有底色、没有影子（2026-09-21 项目所有者：「把卡片风格拿掉吧」）——一行的边界靠那条竖线
+ * 与上下留白认，别拿框去围。要标状态就上点的颜色，或者给 .card 加一条左边线，别把框加回来。
  */
 function css(o = {}) {
   const sel = o.sel ?? '.step'
   const when = o.when ?? 118, gap = o.gap ?? 12, dotCol = o.dotCol ?? 28
   const dot = o.dot ?? 14, ring = o.ring ?? 3, top = o.top ?? 25
-  const line = o.line ?? '#dfe3e8', narrow = o.narrow ?? 900
+  const line = o.line ?? '#dfe3e8', narrow = o.narrow ?? 900, padY = o.padY ?? 12
   const outer = dot + ring * 2
   const pad = Math.max(0, Math.round((dotCol - outer) / 2)) // 点在它那一栏里居中
   const center = when + gap + pad + outer / 2               // 圆心离这一行左边多远——线要画在这儿
@@ -43,8 +47,7 @@ function css(o = {}) {
   ${sel} > .when { text-align:right; color:var(--muted,#57606a); font-size:12.5px; line-height:1.4; padding-top:${top - 12}px; word-break:break-word; }
   ${sel} > .when b { display:block; color:var(--fg,#1f2328); font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
   ${sel} > .dot { width:${dot}px; height:${dot}px; border-radius:50%; background:#fff; border:${ring}px solid #cfd6dd; margin:${top - outer / 2}px 0 0 ${pad}px; position:relative; z-index:1; transition:border-color .12s, box-shadow .12s; }
-  ${sel} > .card { border:1px solid var(--line,#e6e8eb); border-radius:10px; padding:14px 16px; background:#fff; min-width:0; box-shadow:0 1px 2px rgba(31,35,40,.05); transition:box-shadow .12s, border-color .12s; }
-  ${sel} > .card:hover { box-shadow:0 1px 3px rgba(31,35,40,.09), 0 6px 16px rgba(31,35,40,.05); }
+  ${sel} > .card { padding:${padY}px 0 ${padY}px 2px; min-width:0; }
   @media (max-width:${narrow}px) {
     ${sel} { grid-template-columns:minmax(0,1fr); }
     ${sel}::before, ${sel} > .dot { display:none; }
