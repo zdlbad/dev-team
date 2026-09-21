@@ -860,7 +860,10 @@ async function load() { const r = await (await fetch('/data?slice=' + SLICE)).js
     else if (saved !== null && sc[Number(saved)]) cur = Number(saved)
     else { const at = sc.findIndex((x, gi) => sceneRange(gi).some((i) => !stepComplete(data.steps[i]))); cur = at >= 0 ? at : 'all' }
   }
-  render(); renderSegs(r.segs) }
+  render(); renderSegs(r.segs)
+  // 地址里带着 #step-71 进来（演示页每一步「走查 k-001 第 71 步 ↗」那个链接就是这么指的）：
+  // 那一步多半不在默认打开的那一场里，jump 会自己切过去再滚过去
+  if (location.hash) jump(decodeURIComponent(location.hash)) }
 function inherited(s) { return !!(base && base.texts.includes(s.text)) }
 async function save(auto) {
   if (!auto) { const bad = data.steps.filter(s => s.review?.verdict === 'challenge' && !s.review.note); if (bad.length) { alert('第 ' + bad.map(s => s.n).join('、') + ' 步点了质疑但没写理由'); return false } }
@@ -1215,9 +1218,10 @@ load()
       return res.end(JSON.stringify(fs.existsSync(modelNotesP) ? readJson(modelNotesP) : {}))
     }
     if (req.method === 'POST' && url === '/model-notes') {
-      let body = ''
-      req.on('data', (c) => (body += c))
+      const chunks = [] // 攒 Buffer 再一次解码：一个汉字的三个字节可能分在两块里，逐块拼字符串会出乱码（2026-09-21）
+      req.on('data', (c) => chunks.push(c))
       req.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8')
         try {
           const { file, text } = JSON.parse(body)
           if (!file || !text) throw new Error('缺 file 或 text')
@@ -1264,9 +1268,10 @@ load()
       return res.end(JSON.stringify({ story, base, business, glossary: loadGlossary(root).terms, termNotes, segs, rev: storyRev(sid) }))
     }
     if (req.method === 'POST' && url === '/usage-confirm') {
-      let body = ''
-      req.on('data', (c) => (body += c))
+      const chunks = [] // 攒 Buffer 再一次解码：一个汉字的三个字节可能分在两块里，逐块拼字符串会出乱码（2026-09-21）
+      req.on('data', (c) => chunks.push(c))
       req.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8')
         let out
         try { out = confirmUsage(JSON.parse(body || '{}').slice, '网页') } catch (e) { out = { ok: false, error: String(e.message) } }
         if (out.ok) console.log(out.message)
@@ -1276,9 +1281,10 @@ load()
       return
     }
     if (req.method === 'POST' && (url === '/save' || url === '/term-notes')) {
-      let body = ''
-      req.on('data', (c) => (body += c))
+      const chunks = [] // 攒 Buffer 再一次解码：一个汉字的三个字节可能分在两块里，逐块拼字符串会出乱码（2026-09-21）
+      req.on('data', (c) => chunks.push(c))
       req.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8')
         try {
           const obj = JSON.parse(body)
           if (url === '/save') {

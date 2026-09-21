@@ -900,9 +900,10 @@ const wanted = Number(opt('--port', '4873'))
 function listen(port, tries = 12) {
   const srv = http.createServer((req, res) => {
     if (req.method === 'POST' && req.url.startsWith('/answer')) {
-      let body = ''
-      req.on('data', (d) => (body += d))
+      const chunks = [] // 攒 Buffer 再一次解码：一个汉字的三个字节可能分在两块里，逐块拼字符串会出乱码（2026-09-21）
+      req.on('data', (d) => chunks.push(d))
       req.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8')
         let out
         try {
           const { id, text } = JSON.parse(body || '{}')

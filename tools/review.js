@@ -1047,11 +1047,11 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify(obj))
   }
   if (req.method === 'POST' && req.url === '/save') {
-    let body = ''
-    req.on('data', (c) => (body += c))
+    const chunks = [] // 攒 Buffer 再一次解码：一个汉字的三个字节可能分在两块里，逐块拼字符串会出乱码（2026-09-21）
+    req.on('data', (c) => chunks.push(c))
     req.on('end', () => {
       try {
-        const posted = JSON.parse(body)
+        const posted = JSON.parse(Buffer.concat(chunks).toString('utf8'))
         // 不整份覆盖：页面加载之后，校验角色可能又补了判断、校验器可能重跑过。
         // 先读盘上现在这份，只把人填的 human 按条合进去（同一条 = 目标、检查、两侧文字都一样）。
         const key = (x) => [x.target, x.check, x.sides?.business ?? '', x.sides?.model ?? '', x.sides?.code ?? ''].join(' ')

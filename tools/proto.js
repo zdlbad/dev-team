@@ -410,8 +410,10 @@ async function serve() {
       if (url.startsWith('/api/')) {
         if (!child) return json(200, url.endsWith('/manifest') ? { commands: [], queries: [], repositories: [] } : url.endsWith('/state') ? {} : url.endsWith('/events') ? [] : { ok: false, error: { name: 'NoHost', message: '原型宿主没在跑：先修代码再点重新编译' }, events: [] })
         if (req.method === 'GET') return json(200, await hostGet(url.slice(4)))
-        let body = ''; req.on('data', (d) => (body += d))
-        req.on('end', async () => { try { json(200, await hostReq('POST', url.slice(4), body ? JSON.parse(body) : {})) } catch (e) { json(500, { ok: false, error: { name: 'ProxyError', message: String(e.message) }, events: [] }) } })
+        const chunks = []; req.on('data', (d) => chunks.push(d)) // 攒 Buffer 再一次解码：一个汉字的三个字节可能分在两块里，逐块拼字符串会出乱码（2026-09-21）
+        req.on('end', async () => {
+          const body = Buffer.concat(chunks).toString('utf8')
+          try { json(200, await hostReq('POST', url.slice(4), body ? JSON.parse(body) : {})) } catch (e) { json(500, { ok: false, error: { name: 'ProxyError', message: String(e.message) }, events: [] }) } })
         return
       }
       res.writeHead(404); res.end()

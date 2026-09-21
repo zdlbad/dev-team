@@ -109,7 +109,8 @@ function parseDemo(text) {
     if (!sc) { doc.preface.push(line); continue }
     const b = ensureBlock()
     if (step) b.items.push({ step })
-    else b.items.push({ note: line.replace(/^[-*>]\s*/, '') })
+    // 列表符号要带空格才算：不然「**人物**（…）」开头的星号会被当成列表符号啃掉一个，页面上显示成「*人物**」
+    else b.items.push({ note: line.replace(/^(?:[-*]\s+|>\s*)/, '') })
   }
   // 没写切换名的：场景标题去掉「场景 n：」当按钮名；不是场景的节（开场、编号怎么查）用整个标题
   for (const s of doc.scenarios) if (!s.label) s.label = /^场景\s*\d+/.test(s.title) ? s.title.replace(/^场景\s*\d+\s*[：:]\s*/, '').slice(0, 10) : s.title.slice(0, 14)
