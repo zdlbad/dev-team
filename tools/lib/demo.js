@@ -13,9 +13,14 @@
  *                                       下面一排按场景切（2026-09-21 项目所有者：「演示的场景按模块分，顶部标签页切换」）
  *   > 模块顺序：资金账户、可申报账目  ← 写在第一个 ## 之前，定顶部标签页的先后（可省；省了按文中先出现的先排，「总览」最前）
  *   ### 一、开资金账户              ← 阶段标题（### 或 ####，或整行加粗）
- *   第 1 步 · 2026-03-03 · 案例经理 · 做了什么 → 账上发生了什么（金额）· R-101、R-102
+ *   第 1 步 · 2026-03-03 · 案例经理 · 做了什么 → 账上发生了什么（金额）· R-101、R-102 · 走查 k-001 第 12～14 步
+ *                                                          ↑依据            ↑这一步出自走查的哪一步（可省）
  *   ...
  * 对不上「第 n 步」格式的行，原样当成说明摆在那个位置，不丢。
+ *
+ * 「· 走查 k-001 第 12 步」这一栏（2026-09-21 项目所有者：「演示步骤连回走查」）：演示是从走查改写来的，
+ * 一句话压掉走查的两三步、日子挪过、金额取整，看的人问「这一步原本是怎么走的」时得跳得回去。
+ * 写一步或一段都行（第 12 步 / 第 12～14 步），链接指到那一段的头一步。
  *
  * 卡片下留言（2026-09-21 项目所有者：「卡片下给我一个留 note 的 feature」）：看的人在每一步卡片下写一句，
  * 存在 导读/<演示文件名>.notes.json，键是「切换名|第 n 步」（场景改号也不丢），值是 [{ at: 本地时间, text }]。
@@ -24,6 +29,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const mel = require('./time')
+const tl = require('./timeline')
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
 /** 行内的 `代码`、**加粗** 两种最常见的标记转成 HTML，其余原样 */
@@ -59,6 +65,16 @@ function parseStep(line) {
   if (!m) return null
   const parts = m[2].split(/\s*[·・|]\s*/)
   if (parts.length < 3) return null
+  // 「· 走查 k-001 第 12～14 步」：这一步出自走查的哪一步，摘出来单摆，剩下的照旧认依据
+  let from = null
+  for (let i = parts.length - 1; i >= 2; i--) {
+    const f = /^走查\s*(k-\d{3})\s*第\s*(\d+)(?:\s*[～~-]\s*(\d+))?\s*步$/.exec(parts[i].trim())
+    if (!f) continue
+    from = { slice: f[1], n: Number(f[2]), to: f[3] ? Number(f[3]) : null }
+    from.text = `${from.slice} 第 ${from.n}${from.to ? '～' + from.to : ''} 步`
+    parts.splice(i, 1)
+    break
+  }
   const [date, who, ...rest] = parts
   // 「做了什么 → 结果」可能自己带着分隔符（金额里的顿号不算），所以从后往前认依据：形如 R-xxx、第几批、G-xxx 的那一段
   let basis = ''
@@ -67,7 +83,7 @@ function parseStep(line) {
   if (last && /^(?:[RGU]-\d+|第[一二三四五六七八九十百零〇\d]+批|走查)/.test(last)) { rest.pop(); basis = last }
   const body = rest.join(' · ')
   const arrow = body.split(/\s*(?:→|->|=>)\s*/)
-  return { n: Number(m[1]), date, who, action: arrow[0] ?? '', result: arrow.slice(1).join(' → '), basis }
+  return { n: Number(m[1]), date, who, action: arrow[0] ?? '', result: arrow.slice(1).join(' → '), basis, from }
 }
 
 /** 一份演示文档 → { title, scenarios: [{ title, label, blocks: [{ heading, items: [{ step } | { note }] }] }] } */
@@ -124,15 +140,17 @@ const CSS = `<style>
 .demo .sc>h2{font-size:20px;margin:0 0 16px}
 .demo h3{font-size:16px;color:#57606a;margin:26px 0 10px;letter-spacing:.02em}
 .demo .tl{position:relative;margin:0 0 6px 0;padding-left:0}
-.demo .tl::before{content:"";position:absolute;left:150px;top:6px;bottom:6px;border-left:2px solid #e6e8eb}
-.demo .st{display:grid;grid-template-columns:136px 28px minmax(0,1fr);gap:0 14px;margin:0 0 18px;align-items:start}
-.demo .st .when{text-align:right;color:#57606a;font-size:14px;line-height:1.4;padding-top:4px}.demo .st .when b{display:block;color:#1f2328;font-size:15px}
-.demo .st .dot{width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #1f6feb;margin:7px 0 0 1px;position:relative;z-index:1}
-.demo .st .what{padding:14px 20px 16px;border:1px solid #e6e8eb;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(31,35,40,.08),0 6px 18px rgba(31,35,40,.06);font-size:17.5px;line-height:1.65}
+${tl.css({ sel: '.demo .st', when: 136, gap: 14, top: 26, narrow: 720 })}
+.demo .st{margin:0 0 18px;align-items:start}
+.demo .st>.when{font-size:14px}.demo .st>.when b{font-size:15px}
+.demo .st>.dot{border-color:#1f6feb}
+.demo .st>.card{padding:14px 20px 16px;border-radius:12px;box-shadow:0 1px 3px rgba(31,35,40,.08),0 6px 18px rgba(31,35,40,.06);font-size:17.5px;line-height:1.65}
 .demo .st .n{font-size:13.5px;color:#8c959f;margin-right:8px}
 .demo .st .act{font-weight:600}
 .demo .st .res{margin-top:8px;color:#1f2328}.demo .st .res::before{content:"→ ";color:#1f6feb;font-weight:700}
-.demo .st .basis{margin-top:10px;font-size:14px;color:#57606a}.demo .st .basis code{background:#f6f8fa;padding:1px 6px;border-radius:4px}
+.demo .st .basis{margin-top:10px;font-size:14px;color:#57606a;display:flex;gap:12px;flex-wrap:wrap;align-items:baseline}.demo .st .basis code{background:#f6f8fa;padding:1px 6px;border-radius:4px}
+.demo .st .basis .from{color:#1f6feb;text-decoration:none;border:1px solid #d6e4fb;background:#f4f8ff;border-radius:999px;padding:1px 10px;white-space:nowrap}
+.demo .st .basis .from:hover{border-color:#1f6feb;background:#eaf2ff}
 .demo .en{font-size:.85em;color:#6e7781;font-weight:400;letter-spacing:0}
 .demo .note{margin:0 0 16px 178px;padding:12px 18px;color:#57606a;font-size:16px;background:#f6f8fa;border-radius:10px;border:1px dashed #d0d7de}
 .demo .notes{grid-column:3;margin:-8px 0 0;padding:0 6px}
@@ -144,19 +162,22 @@ const CSS = `<style>
 .demo .notes.has .add{color:#57606a}
 .demo .empty{padding:24px;color:#57606a;background:#f6f8fa;border-radius:8px}
 .demo .files{margin:0 0 12px;font-size:14px;color:#57606a}.demo .files a{color:#1f6feb;margin-right:12px}
-@media (max-width:720px){.demo .st{grid-template-columns:1fr}.demo .notes{grid-column:1}.demo .tl::before{display:none}.demo .st .dot{display:none}.demo .st .when{text-align:left}.demo .note{margin-left:0}.demo{margin-left:0}}
+@media (max-width:720px){.demo .notes{grid-column:1}.demo .note{margin-left:0}.demo{margin-left:0}}
 </style>`
 
 function noteItemsHtml(list) {
   return (list ?? []).map((n, i) => `<div class="nt"><span class="at">${esc(n.at)}</span><span class="tx">${esc(n.text)}</span><button class="del" data-i="${i}" title="删掉这一句">×</button></div>`).join('')
 }
-function stepHtml(s, key, notes) {
+function stepHtml(s, key, notes, pos = '') {
   const list = notes?.[key] ?? []
-  return `<div class="st"><div class="when"><b>${esc(s.date)}</b>${esc(s.who)}</div><div class="dot"></div><div class="what">` +
-    `<div><span class="n">第 ${s.n} 步</span><span class="act">${inline(s.action)}</span></div>` +
+  const card = `<div><span class="n">第 ${s.n} 步</span><span class="act">${inline(s.action)}</span></div>` +
     (s.result ? `<div class="res">${inline(s.result)}</div>` : '') +
-    (s.basis ? `<div class="basis">依据 <code>${esc(s.basis)}</code></div>` : '') + `</div>` +
-    `<div class="notes${list.length ? ' has' : ''}" data-key="${esc(key)}"><div class="list">${noteItemsHtml(list)}</div><button class="add">＋ 留一句</button></div></div>`
+    (s.basis || s.from ? `<div class="basis">` +
+      (s.basis ? `依据 <code>${esc(s.basis)}</code>` : '') +
+      (s.from ? `<a class="from" href="/p/story/story?slice=${encodeURIComponent(s.from.slice)}#step-${s.from.n}" target="story" title="到走查里看这一步">走查 ${esc(s.from.text)} ↗</a>` : '') +
+      `</div>` : '')
+  const extra = `<div class="notes${list.length ? ' has' : ''}" data-key="${esc(key)}"><div class="list">${noteItemsHtml(list)}</div><button class="add">＋ 留一句</button></div>`
+  return tl.row({ cls: ['st', pos].filter(Boolean).join(' '), date: s.date, who: s.who, card, extra })
 }
 
 /** 整页的 HTML 正文（不含 <html> 外壳，工作台用 wrap 包） */
@@ -176,7 +197,10 @@ function demoPage(root, which = null) {
   const first = doc.groups[0]?.scenarios[0] ?? 0
   const body = doc.scenarios.map((s, i) => {
     const blocks = s.blocks.map((b) => (b.heading ? `<h3>${inline(b.heading)}</h3>` : '') + `<div class="tl">` +
-      b.items.map((it) => it.step ? stepHtml(it.step, noteKey(s.label, it.step.n), notes) : `<div class="note">${inline(it.note)}</div>`).join('') + `</div>`).join('')
+      (() => { const steps = b.items.filter((x) => x.step); const first = steps[0]?.step, last = steps[steps.length - 1]?.step
+        return b.items.map((it) => it.step
+          ? stepHtml(it.step, noteKey(s.label, it.step.n), notes, [it.step === first ? 'tl-first' : '', it.step === last ? 'tl-last' : ''].filter(Boolean).join(' '))
+          : `<div class="note">${inline(it.note)}</div>`).join('') })() + `</div>`).join('')
     return `<section class="sc${i === first ? ' on' : ''}" data-sc="${i}"><h2>${inline(s.title)}</h2>${blocks}</section>`
   }).join('')
   const preface = doc.preface.length ? `<div class="pre">${doc.preface.map(inline).join('<br>')}</div>` : ''

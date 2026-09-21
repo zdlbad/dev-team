@@ -319,30 +319,17 @@ if (cmd === 'serve') {
   .step, .choice { scroll-margin-top:104px; }
   .flash { outline:2px solid #f59e0b; outline-offset:2px; }
   .step .head { cursor:pointer; user-select:none; }
-  /* 时间轴：左边一栏日子与谁、中间一条线一颗点、右边是这一步的卡片。与演示页同一种摆法 */
-  .step { display:grid; grid-template-columns:118px 28px minmax(0,1fr); gap:0 12px; position:relative; }
-  .step::before { content:""; position:absolute; left:141px; top:-12px; bottom:-12px; border-left:2px solid #dfe3e8; }
-  .step.tl-first::before { top:25px; }
-  .step.tl-last::before { bottom:auto; height:25px; }
-  .step > .when { text-align:right; color:var(--muted); font-size:12.5px; line-height:1.4; padding-top:13px; word-break:break-word; }
-  .step > .when b { display:block; color:var(--fg); font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
-  .step > .dot { width:14px; height:14px; border-radius:50%; background:#fff; border:3px solid #cfd6dd; margin:15px 0 0 2px; position:relative; z-index:1; transition:border-color .12s, box-shadow .12s; }
+  /* 时间轴的摆法与演示页共用一套：tools/lib/timeline.js。下面几条是走查页自己的——点的颜色跟着审没审走 */
+  ${require('./lib/timeline').css({ sel: '.step' })}
   .step.agree > .dot { border-color:#2da44e; }
   .step.challenge > .dot { border-color:#cf222e; box-shadow:0 0 0 4px rgba(207,34,46,.1); }
   .step.todo-step > .dot { border-color:#e3a008; box-shadow:0 0 0 4px rgba(227,160,8,.12); }
-  .step > .card { border:1px solid var(--line); border-radius:10px; padding:14px 16px; background:#fff; min-width:0; box-shadow:0 1px 2px rgba(31,35,40,.05); transition:box-shadow .12s, border-color .12s; }
-  .step > .card:hover { box-shadow:0 1px 3px rgba(31,35,40,.09), 0 6px 16px rgba(31,35,40,.05); }
   .step.agree > .card { border-color:#cfe7d3; }
   .step.challenge > .card { border-color:#f0c8c8; background:#fffbfb; }
   .step.todo-step > .card { border-color:#ecd9a8; }
   .step.collapsed > .card { padding:9px 16px; background:#fcfcfd; box-shadow:none; }
   .step.collapsed > .card:hover { background:#fff; }
   .step.locked > .card { opacity:.45; }
-  @media (max-width:900px) {
-    .step { grid-template-columns:minmax(0,1fr); }
-    .step::before, .step > .dot { display:none; }
-    .step > .when { text-align:left; padding:0 0 2px; }
-  }
   .step .head .fold { color:var(--muted); font-size:11px; width:12px; }
   .step .head .sum { font-size:12px; color:var(--muted); margin-left:auto; white-space:nowrap; }
   .step .head .sum.todo-sum { color:#8a5a00; background:#fff7e6; border:1px solid #f2c57c; border-radius:999px; padding:1px 9px; }
