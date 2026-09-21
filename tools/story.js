@@ -316,11 +316,31 @@ if (cmd === 'serve') {
   .step, .choice { scroll-margin-top:104px; }
   .flash { outline:2px solid #f59e0b; outline-offset:2px; }
   .step .head { cursor:pointer; user-select:none; }
+  /* 时间轴：左边一栏日子与谁、中间一条线一颗点、右边是这一步的卡片。与演示页同一种摆法 */
+  .step { display:grid; grid-template-columns:104px 26px minmax(0,1fr); gap:0 10px; position:relative; }
+  .step::before { content:""; position:absolute; left:114px; top:-10px; bottom:-10px; border-left:2px solid var(--line); }
+  .step.tl-first::before { top:14px; }
+  .step.tl-last::before { bottom:auto; height:26px; }
+  .step > .when { text-align:right; color:var(--muted); font-size:12px; line-height:1.35; padding-top:11px; }
+  .step > .when b { display:block; color:var(--fg); font-size:12.5px; font-weight:600; }
+  .step > .dot { width:13px; height:13px; border-radius:50%; background:#fff; border:3px solid #d0d7de; margin:12px 0 0 1px; position:relative; z-index:1; }
+  .step.agree > .dot { border-color:#2da44e; }
+  .step.challenge > .dot { border-color:#cf222e; }
+  .step.todo-step > .dot { border-color:#f2c57c; }
+  .step > .card { border:1px solid var(--line); border-radius:8px; padding:12px 14px; background:#fff; min-width:0; }
+  .step.agree > .card { border-color:#9ccc9c; }
+  .step.challenge > .card { border-color:#e5a0a0; }
+  .step.collapsed > .card { padding:8px 14px; }
+  .step.locked > .card { opacity:.45; }
+  @media (max-width:900px) {
+    .step { grid-template-columns:minmax(0,1fr); }
+    .step::before, .step > .dot { display:none; }
+    .step > .when { text-align:left; padding:0 0 2px; }
+  }
   .step .head .fold { color:var(--muted); font-size:11px; width:12px; }
   .step .head .sum { font-size:12px; color:var(--muted); margin-left:8px; }
   .step .head .sum.todo-sum { color:#8a5a00; }
   .step.collapsed .body { display:none; }
-  .step.collapsed { padding:8px 14px; }
   .persona { background:var(--lo); border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin-bottom:12px; }
   .lineage { margin-top:6px; font-size:13px; } .lineage b { color:#1f6feb; }
   .prev { margin-top:8px; background:#fff; border:1px solid var(--line); border-left:3px solid #1f6feb; border-radius:6px; padding:8px 11px; font-size:13px; }
@@ -340,9 +360,9 @@ if (cmd === 'serve') {
   .step.old-step { opacity:.82; }
   h2 { font-size:15px; margin:18px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
   h2:first-child { margin-top:0; }
-  .step { border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin:10px 0; }
-  .step.agree { border-color:#9ccc9c; } .step.challenge { border-color:#e5a0a0; }
+  .step { margin:10px 0; }
   .step .head { display:flex; gap:10px; align-items:baseline; }
+  .step .head .n { font-size:12px; }
   .step .n { font-weight:700; color:var(--muted); }
   .step .day { color:var(--muted); font-size:12px; }
   .step .actor { font-weight:600; }
@@ -641,15 +661,19 @@ function render() {
       ? '<b>' + esc(one.label) + '</b>' + (one.title ? '<span>' + esc(one.title) + '</span>' : '') + '<span>第 ' + one.from + ' 步起，共 ' + sceneRange(gi).length + ' 步</span>'
       : '<b>整条走查</b><span>' + st.length + ' 步，' + scenes().length + ' 场一起排；上面那一条按钮一次看一场</span>') + '</div>'
   }
+  const vis = st.filter(inCur)
+  const visFirst = vis[0]?.n, visLast = vis[vis.length - 1]?.n
   st.forEach((s, i) => {
     const open = !s.quiz || s.human || revealed[i]
     if (!inCur(s)) { if (s.quiz && !s.human && !revealed[i]) lock = true; return }
     const old = inherited(s)
     const td = stepTodo(s)
     const shut = !!collapsed[i]
-    const cls = 'step' + (s.review ? ' ' + s.review.verdict : '') + (lock ? ' locked' : '') + (old ? ' old-step' : '') + (shut ? ' collapsed' : '')
+    const cls = 'step' + (s.review ? ' ' + s.review.verdict : '') + (lock ? ' locked' : '') + (old ? ' old-step' : '') + (shut ? ' collapsed' : '') + (td.length ? ' todo-step' : '') + (s.n === visFirst ? ' tl-first' : '') + (s.n === visLast ? ' tl-last' : '')
     const sum = td.length ? '<span class="sum todo-sum">还差：' + esc(td.map(x => x.text).join('；')) + '</span>' : '<span class="sum">已过</span>'
-    h += '<div class="' + cls + '" id="step-' + s.n + '" data-i="' + i + '"><div class="head" data-fold="' + i + '"><span class="fold">' + (shut ? '▸' : '▾') + '</span><span class="n">' + s.n + '</span><span class="day">' + esc(s.day) + '</span><span class="actor">' + esc(s.actor) + '</span>' + sum + (base ? '<span class="badge ' + (old ? 'old">上一版已有' : 'new">本版新增') + '</span>' : '') + '</div>'
+    h += '<div class="' + cls + '" id="step-' + s.n + '" data-i="' + i + '">' +
+      '<div class="when"><b>' + esc(s.day) + '</b>' + esc(s.actor) + '</div><div class="dot"></div><div class="card">' +
+      '<div class="head" data-fold="' + i + '"><span class="fold">' + (shut ? '▸' : '▾') + '</span><span class="n">第 ' + s.n + ' 步</span>' + sum + (base ? '<span class="badge ' + (old ? 'old">上一版已有' : 'new">本版新增') + '</span>' : '') + '</div>'
     h += '<div class="body"><div class="text">' + linkTerms(s.text) + '</div>'
     if (s.traces?.length) {
       const fresh = s.traces.filter(t => seenAt[t] === s.n)
@@ -702,7 +726,7 @@ function render() {
     if (isIntro(s) && !s.review) h += '<div class="review" style="color:#57606a">铺垫：这一步没有要你勾的，看一眼过就行</div>'
     h += '<div class="review"' + (isIntro(s) && !s.review ? ' style="display:none"' : '') + '><div class="btns"><button class="agree' + (rv === 'agree' ? ' on' : '') + '" data-rev="agree" data-i="' + i + '">同意（勾全部）</button><button class="challenge' + (rv === 'challenge' ? ' on' : '') + '" data-rev="challenge" data-i="' + i + '">质疑</button>' + (stepComplete(s) ? '<span class="verdict ok">已过</span>' : '') + '</div>'
     h += '<textarea data-rnote="' + i + '" placeholder="' + (rv === 'challenge' ? '质疑的理由（必填）' : '你的想法：哪里不对、哪里没讲清、旧系统是怎么做的……') + '">' + esc(s.review?.note ?? '') + '</textarea></div>'
-    h += '</div></div>'
+    h += '</div></div></div>'
     if (s.quiz && !s.human && !revealed[i]) lock = true
   })
   // 模块切片的骨架初稿还没有走查场景，一步都没有，要人裁的只有形状那几张卡。
