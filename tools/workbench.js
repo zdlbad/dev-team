@@ -795,10 +795,10 @@ const server = http.createServer((req, res) => {
   if (url === '/plan/comment' && req.method === 'POST') {
     const slice = q.slice || currentSlice()
     if (!/^[sm]-[0-9]{3,}$/.test(slice ?? '') || !/^\d+$/.test(q.step ?? '')) { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('要指明哪一段第几步') }
-    let body = ''
-    req.on('data', (c) => { body += c })
+    const chunks = [] // 攒 Buffer 再一次解码：一个汉字的三个字节可能分在两块里，逐块拼字符串会出乱码（2026-09-21）
+    req.on('data', (c) => chunks.push(c))
     req.on('end', () => {
-      const text = body.trim()
+      const text = Buffer.concat(chunks).toString('utf8').trim()
       if (!text) { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('先写一句') }
       planCmd('comment', slice, [q.step, text], '记下了') // plan.js 自己把这一笔记进日志
     })
