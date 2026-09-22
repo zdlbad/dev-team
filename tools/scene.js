@@ -363,7 +363,7 @@ function humanTodoCount() {
   for (const fn of ['validate-1.json', 'validate-2.json', 'pre-pr-proto.json', 'pre-pr-shell.json']) {
     try {
       const r = JSON.parse(fs.readFileSync(path.join(root, 'reports', fn), 'utf8'))
-      n += require('./lib/project').humanTodo(r).length
+      n += require('./lib/project').humanWaiting(r).length
     } catch {}
   }
   return n

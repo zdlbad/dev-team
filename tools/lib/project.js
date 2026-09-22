@@ -196,6 +196,19 @@ function humanTodo(r) {
   return [...judgments, ...(r.confirms ?? []), ...(r.warnings ?? []), ...blocks].filter((x) => !x.human?.verdict)
 }
 /**
+ * 真轮到人的那几件。humanTodo 只管「有哪几件」，这一层管「这会儿是不是他」：
+ * 报告里还有错误、或者校验角色还没把判断填完，那都是角色的活，一件也不算他的。
+ * 由来：2026-09-22 这个口径从前只写在 workbench 的 todo() 里，scene 交接自己另算一套——
+ * 顶栏按口径数出 0、交接却印「12 件等他按」。开发指挥信了交接那句，把项目所有者喊去审模型页，
+ * 他点开看见「没有等你的事」。一件事一处算，顶栏与交接都调这一个。
+ */
+function humanWaiting(r) {
+  if (!r) return []
+  if ((r.errors ?? []).length) return []
+  if ((r.judgments ?? []).some((x) => !x.verdict)) return []
+  return humanTodo(r)
+}
+/**
  * 一个切片名下的走查（第一百五十批）：一整条 slices/<id>.story.json，或者一场一条 slices/<id>.w<场次>.story.json。
  * 返回 [{ id, file, scene, sealed, story }]，按场次排；读不动的跳过。
  */
@@ -265,4 +278,4 @@ function openQuestions(root, sliceId, scene = null) {
  * 交代「账已开、服务已做」这类背景，没有要人勾的。k-002 第 1～3 步就是，人点开才发现没东西可勾。
  */
 function isIntroStep(s) { return !(s.traces ?? []).length && (!s.walk || s.walk.kind === 'none') && !s.quiz }
-module.exports = { isIntroStep, storiesOfSlice, currentStory, businessBlockers, openQuestions, humanTodo, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }
+module.exports = { isIntroStep, storiesOfSlice, currentStory, businessBlockers, openQuestions, humanTodo, humanWaiting, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }
