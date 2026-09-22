@@ -235,7 +235,16 @@ function demoSources(root) {
   const rp = pth.join(root, 'raw', 'rulings.md')
   const rulings = fsx.existsSync(rp) ? fsx.readFileSync(rp, 'utf8') : ''
 
-  const 假绿 = [], 假蓝 = [], 没说清 = [], 色不对 = [], 没落实 = []
+  const 假绿 = [], 假蓝 = [], 没说清 = [], 色不对 = [], 没落实 = [], 没跟上 = []
+  // 第二百零一批：定下来之后页面要反映业务。黄的 settled 指着一条真有的语句或一批真有的裁定，
+  // 页面却还标着黄——那是落实了没改回来。指着候选或「不做」的不算，那两样本来就该继续黄着。
+  const 落实了该转色 = (s) => {
+    const ref = String(s?.ref ?? '').trim()
+    if (!ref) return false
+    if (String(s.as ?? '').includes('语句')) return ids.has(ref)
+    if (String(s.as ?? '').includes('裁定')) return rulings.includes(ref)
+    return false
+  }
   const 计 = { 绿: 0, 蓝: 0, 黄: 0 }
   for (const r of rows) {
     const 色 = String(r.color ?? '').trim()
@@ -251,9 +260,10 @@ function demoSources(root) {
       if (!String(r.why ?? '').trim()) 没说清.push(r)
       const s = r.settled
       if (!s || !String(s.as ?? '').trim() || !(String(s.ref ?? '').trim() || String(s.why ?? '').trim())) 没落实.push(r)
+      else if (落实了该转色(s)) 没跟上.push(r)
     }
   }
-  return { has: true, rows, 计, 假绿, 假蓝, 没说清, 色不对, 没落实, 错: 假绿.length + 假蓝.length + 没说清.length + 色不对.length }
+  return { has: true, rows, 计, 假绿, 假蓝, 没说清, 色不对, 没落实, 没跟上, 错: 假绿.length + 假蓝.length + 没说清.length + 色不对.length }
 }
 /**
  * 演示原型这道门（第一百九十四批）：段落切片与模块切片的业务走查上，业务定了之后、模型师开工之前，

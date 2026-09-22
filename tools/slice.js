@@ -863,6 +863,10 @@ if (cmd === 'advance') {
         `    他当场裁了　{"as":"裁定","ref":"第二百批"}\n` +
         `    明说不做　　{"as":"不做","why":"……"}\n` +
         `  确实挡不住这一趟：末尾写一句理由（会记进切片日志）。`)
+      if (r.has && r.没跟上.length) die(`${id} 上有 ${r.没跟上.length} 件已经落实、页面却没跟上，预演这一道门收不了口：\n` +
+        r.没跟上.map((x) => `  ${x.where}　${x.what}\n      已落实成 ${x.settled.as} ${x.settled.ref}，页面上还标着黄`).join('\n') +
+        `\n\n业务定下来之后，页面要反映业务（第二百零一批）——落实成语句的标那条语句转绿，他裁的标批次转蓝。\n` +
+        `  派预演改一趟页面与 demo/sources.json；确实挡不住这一趟：末尾写一句理由。`)
     }
     s.confirmedAt = status === 'done' ? today : null
     if (rest.length) s.note = rest.join(' ')
