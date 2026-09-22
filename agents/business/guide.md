@@ -153,9 +153,11 @@ reads:
 
 ## 自检
 
+**走查里演一个模块的那几步只说这个模块自己的事**：演消费的那一步可以写「记在她选的那本账名下」（指着）、「差额归 Contributions」（划给）、「拿到递进来的合计」（收它给的），不写「账上那一成钱按时长支取」（替 Funding 说它怎么行为）。判据在 [common/wording.md「只说自己的事」](../common/wording.md)：把那个模块整个拿掉，这一步还成立吗。
+
 ```
 node $DEV_TEAM/tools/check-schema.js <项目目录>      # 故事文件形状
 node $DEV_TEAM/tools/story.js state <项目目录> <切片id>
 ```
 
-点亮之后，故事里每个编号都必须存在于 `business/`（`node $DEV_TEAM/tools/validate.js <项目目录> --slice <切片id>` 看有没有报「编号不存在」）。`gaps` 里的每一条都要出现在问题清单里。
+点亮之后，故事里每个编号都必须存在于 `business/`（`node $DEV_TEAM/tools/validate.js <项目目录> --slice <切片id> --只看` 看有没有报「编号不存在」；校验一律带 `--只看`，不带的那一次由开发指挥跑）。`gaps` 里的每一条都要出现在问题清单里。

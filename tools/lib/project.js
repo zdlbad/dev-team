@@ -209,6 +209,22 @@ function humanWaiting(r) {
   return humanTodo(r)
 }
 /**
+ * 演示原型这道门（第一百九十四批）：段落切片与模块切片的业务走查上，业务定了之后、模型师开工之前，
+ * 原型照故事步骤出一叠静态页到 demo/<切片>/（一步一屏，不接模型），他按着走一遍、在「切片」页按「演示的逻辑对了」。
+ * 这里只算状态，slice next / scene dispatch / 工作台的门都调它——一件事一处算（第一百九十一批的教训）。
+ * applies：这条切片要不要这道门（有故事步骤的段落与模块切片才要；修改、改说法、实现切片不要）。
+ */
+function demoState(root, sliceId, slice = null) {
+  const pth = require('node:path'), fsx = require('node:fs')
+  let s = slice
+  if (!s) { try { s = readJson(pth.join(root, 'slices', sliceId + '.json')) } catch { s = null } }
+  if (!s || !['story', 'module'].includes(s.kind)) return { applies: false }
+  const steps = currentStory(root, sliceId)?.story?.steps ?? []
+  if (!steps.length) return { applies: false }
+  const dir = pth.join(root, 'demo', sliceId)
+  return { applies: true, done: (s.stages?.demo?.status ?? 'pending') === 'done', hasPages: fsx.existsSync(pth.join(dir, 'index.html')), dir: 'demo/' + sliceId, steps: steps.length }
+}
+/**
  * 一个切片名下的走查（第一百五十批）：一整条 slices/<id>.story.json，或者一场一条 slices/<id>.w<场次>.story.json。
  * 返回 [{ id, file, scene, sealed, story }]，按场次排；读不动的跳过。
  */
@@ -278,4 +294,4 @@ function openQuestions(root, sliceId, scene = null) {
  * 交代「账已开、服务已做」这类背景，没有要人勾的。k-002 第 1～3 步就是，人点开才发现没东西可勾。
  */
 function isIntroStep(s) { return !(s.traces ?? []).length && (!s.walk || s.walk.kind === 'none') && !s.quiz }
-module.exports = { isIntroStep, storiesOfSlice, currentStory, businessBlockers, openQuestions, humanTodo, humanWaiting, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }
+module.exports = { isIntroStep, storiesOfSlice, currentStory, businessBlockers, openQuestions, humanTodo, humanWaiting, demoState, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }
