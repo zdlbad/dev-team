@@ -221,8 +221,10 @@ function demoState(root, sliceId, slice = null) {
   if (!s || !['story', 'module'].includes(s.kind)) return { applies: false }
   const steps = currentStory(root, sliceId)?.story?.steps ?? []
   if (!steps.length) return { applies: false }
-  const dir = pth.join(root, 'demo', sliceId)
-  return { applies: true, done: (s.stages?.demo?.status ?? 'pending') === 'done', hasPages: fsx.existsSync(pth.join(dir, 'index.html')), dir: 'demo/' + sliceId, steps: steps.length }
+  // 第一百九十五批：一个 mock 产品整个项目共用（demo/index.html），按模块长；早先一叠一切片的 demo/<切片>/ 也认
+  const whole = fsx.existsSync(pth.join(root, 'demo', 'index.html'))
+  const own = fsx.existsSync(pth.join(root, 'demo', sliceId, 'index.html'))
+  return { applies: true, done: (s.stages?.demo?.status ?? 'pending') === 'done', hasPages: whole || own, dir: whole ? 'demo' : 'demo/' + sliceId, steps: steps.length }
 }
 /**
  * 一个切片名下的走查（第一百五十批）：一整条 slices/<id>.story.json，或者一场一条 slices/<id>.w<场次>.story.json。
