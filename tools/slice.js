@@ -24,7 +24,7 @@
  *   node tools/slice.js candidate <项目目录> drop <序号> "<为什么不做>"
  *   node tools/slice.js next <项目目录> <切片id>            算出下一步：谁上场、跑什么
  *                       修改切片：（业务语句要改的先改）→ 模型师改 → 文职 → 校验 ① → 人审 → 计划 → 关键逻辑 → 人确认 → 原型改 → 校验 ② → pre-pr（A/B/D/S）→ 人重走动到的段落 → 收口
- *                       段落切片：… → 理解一致 → 业务分析按五问补语句 → 人确认 → 模型 → … → 模型确认 → 编码计划（plan.js）→ 人确认计划
+ *                       段落切片：… → 理解一致 → 业务分析按五问补语句 → 人确认 → 原型出静态演示 → 人按「演示的逻辑对了」→ 模型 → … → 模型确认 → 编码计划（plan.js）→ 人确认计划
  *                       → 原型按计划写 → plan check → 校验 ② → pre-pr 审查（A/B/D）→ 人看报告 → 人在原型上走故事
  *                       实现切片：接口角色定契约（contract.js）→ 人确认 → 编码计划 → 人确认 → 编码 → plan check → 校验 ② → pre-pr（C/E/F）→ 合并
  *   node tools/slice.js proofread <项目目录> <切片id>          文职总校完了记一笔（stages.model.proofreadAt）；段落切片里文职只跑这一趟（第八十九批）
@@ -442,10 +442,20 @@ function computeNext(slice) {
     if (open.length) return step('人', `业务这一关卡在 ${open.length} 件等你答：\n${open.map((q) => `    ${q.id}　${q.question}`).join('\n')}`, `node tools/scene.js ${rel(root)} answer <问题号> "<你怎么答的>"`, '上游有待定的事项，模型师不开工（第一百七十八批）')
     return step('开发指挥', '业务这一关收口：跑一趟 slice pending 看还有什么要人裁的、确认范围内的语句都立好改好了，再按下面这条', `node tools/slice.js advance ${rel(root)} ${slice.id} business done`, '调用顺序是业务 → 模型；业务定了模型才开工（第一百七十八批）')
   }
+  // 演示原型这道门（第一百九十四批）：业务定了先把操作摆出来给他按，逻辑定了模型师才开工。
+  // 状态一处算（lib/project.js 的 demoState）；模块切片只在业务走查那一步有故事，骨架初稿不经这道门。
+  const demoGate = () => {
+    const d = require('./lib/project').demoState(root, slice.id, slice)
+    if (!d.applies || d.done) return null
+    if (!d.hasPages) return step('原型', `业务演示（第一百九十四批）：照走查的 ${d.steps} 步出一叠静态页到 ${d.dir}/index.html——按场分组、一步一屏，这一步谁在哪个页面按了什么、看到什么；按钮只跳下一屏，不接模型、不写领域代码。读故事步骤与它们点着的业务语句，不读模型。派工用 brief.js 原型 --活 业务演示`, `node tools/scene.js ${rel(root)} dispatch 原型 "出 ${slice.id} 的静态演示到 ${d.dir}/"`, '业务定了先把操作摆出来给他按，逻辑定了模型师才开工（第一百九十四批）')
+    return step('人', `在工作台「演示」页打开 ${d.dir} 按着走一遍：操作对不对、逻辑对不对。都对了在「切片」页按「演示的逻辑对了」；不对的当场说，改故事或语句再出一版`, `node tools/slice.js advance ${rel(root)} ${slice.id} demo done`, '静态演示出来了，等他说逻辑对了模型师才开工（第一百九十四批）')
+  }
   const validateCmd = (withCode) => `node tools/validate.js ${rel(root)}${withCode ? ` --code ${rel(codebase)}` : ''} --slice ${slice.id}`
   const step = (role, action, command, why) => ({ slice: slice.id, role, action, command: command ?? null, why })
   // 按裁定归档的切片只是记录，不再派活（看板也这么认）
   if (slice.archived) return step('—', '已归档：' + slice.archived.reason, null, '这条切片按裁定归档，不再推进')
+  // 回溯（第一百九十四批他答「门吧，回溯」）：模型已经定了、演示还没出的也补上——k-001、k-002 这一轮走通的都要
+  if (st.model?.status === 'done') { const g = demoGate(); if (g) return g }
 
   // 阶段一：模型。业务描述是模型的上游：没有它就无从定范围
   // 只改说法或结构的那一类不动模型，模型这一关对它不适用
@@ -483,6 +493,7 @@ function computeNext(slice) {
       if (ssM.state === 'challenged') return step('路由', `核对人对走查的 ${ssM.count} 处质疑：对照语句、裁定与手册逐条回应；人对了就落成裁定并派讲解或模型师改`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人质疑了走查的业务内容，先解决再往下')
       if (ssM.state === 'notes') return step('路由', `读人在走查上留下的 ${ssM.count} 条想法：逐条回应；成立的落成裁定或派给业务分析、讲解、模型师`, `node tools/story.js apply ${rel(root)} ${slice.id}`, '人的想法要有人看、有人回')
       if (st.model.status === 'pending') { const g = businessGate(); if (g) return g }
+      if (st.model.status === 'pending') { const g = demoGate(); if (g) return g }
     if (st.model.status === 'pending') return step('模型师', `${story?.scene ? '走第 ' + story.scene + ' 场' : '走'}（${storyRelM}）：**只建或改这一场碰到的**字段、创建、方法、不变量、领域服务、error，后面的场才用到的一律不建；方法、创建、领域服务操作照 agents/model/modeler.md「方法怎么写」写七段（作用、入参、做法每步改哪几栏、规则、错误、事件、返回）；**前面的场建过的只改非改不可的**，顺手改措辞会让那一块白白重浮，交回时报「本想顺手改、忍住了」的几处。每步填 walk（调哪个方法、改了什么）；建立、搜索这类不是聚合行为，walk 标 leftTo: 应用。本场落不了的语句用 slice background add 登记，别整份改写切片文件。不建 event、命令、查询、端口（第一百五十六批）`, `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, '行为从走查里长出来，过程中精进聚合（第九十七批）')
       if (ssM.state === 'no-walk') return step('模型师', `走查还有 ${ssM.count} 步没填 walk：动了哪个聚合、变了什么；不是聚合行为的标 leftTo: 应用`, storyRelM, '每一步都要走到')
       if (!st.model.proofreadAt) return step('文职', `总校一趟：走查场景与这一轮新建、改动的模型元素给人读的文字，只改字不改意；改完跑 validate --重新定基 接回裁决，再标记`, `node tools/slice.js proofread ${rel(root)} ${slice.id}`, '文职一趟，排在校验角色填判断之前（第八十九批）')
@@ -521,6 +532,7 @@ function computeNext(slice) {
     const mnOpen = fs.existsSync(mnP) ? Object.entries(readJson(mnP)).flatMap(([f, ns]) => ns.filter((n) => !n.handled).map((n) => ({ f, ...n }))) : []
     if (mnOpen.length) return step('路由', `读人对模型的 ${mnOpen.length} 条意见（reports/_model-notes.json）：逐条回应；要改的派模型师，改完把 handled 置真`, null, '人在模型图上留了意见，先回应再推进')
     if (st.model.status === 'pending') { const g = businessGate(); if (g) return g }
+    if (st.model.status === 'pending') { const g = demoGate(); if (g) return g }
     if (st.model.status === 'pending') return step('模型师', story ? (story.basedOn ? `只建这一版新增那段所需的最少模型（上一版 ${story.basedOn} 的模型已在）；给每一步填 walk——老步骤也要重走，保证老路没被新东西弄断；做过的选择列进 choices。人还没走故事，他走时质疑或裁定不同再回流；交稿前按 agents/common/wording.md 自检措辞` : '按故事建走通它所需的最少模型；写完给每一步填 walk，把做过的选择列进 choices（每条带 current 与 recommended）。人还没走故事，他走时质疑或裁定不同再回流；交稿前按 agents/common/wording.md 自检措辞') : '在范围内建模 / 改模', `node tools/slice.js advance ${rel(root)} ${slice.id} model in-progress`, story ? '模型建在人走故事之前，人一坐看全（第八十九批）' : '范围已定，模型阶段尚未开始')
     if (ss?.state === 'no-walk') return step('模型师', `走故事：给 ${ss.count} 步填 walk（命令 / 事件 / 查询、动了哪个聚合、变了什么；走不通的填 gap），把做过的选择列进 choices（每条带 current 与 recommended）`, storyRel, '模型建好后先在故事上走一遍')
     // 文职只跑一趟：人审之前，是最后一个动文字的人；校完把裁决按对照接回，再 slice proofread 记一笔
@@ -808,12 +820,14 @@ if (cmd === 'pending') {
 
 if (cmd === 'advance') {
   const [, , id, stage, status, ...rest] = args
-  if (!id || !['business', 'model', 'code', 'validate'].includes(stage) || !['pending', 'in-progress', 'done'].includes(status)) {
-    die('用法：slice advance <项目目录> <切片id> <business|model|code|validate> <pending|in-progress|done> [说明]')
+  if (!id || !['business', 'demo', 'model', 'code', 'validate'].includes(stage) || !['pending', 'in-progress', 'done'].includes(status)) {
+    die('用法：slice advance <项目目录> <切片id> <business|demo|model|code|validate> <pending|in-progress|done> [说明]')
   }
   const slice = loadSlice(id)
   // 旧记录（第一百七十八批之前建的）没有 business 这一关：第一次推它时补上这一栏，别在 undefined 上写 status 崩掉
   if (!slice.stages[stage] && stage === 'business') slice.stages.business = { status: 'pending', confirmedAt: null, note: null }
+  // 演示这一关（第一百九十四批）也是后加的：老记录上第一次推它时补上这一栏
+  if (!slice.stages[stage] && stage === 'demo') slice.stages.demo = { status: 'pending', confirmedAt: null, note: null }
   const s = slice.stages[stage]
   const from = s.status
   s.status = status
@@ -828,6 +842,7 @@ if (cmd === 'advance') {
     }
     s.confirmedAt = status === 'done' ? today : null
   }
+  if (stage === 'demo') { s.confirmedAt = status === 'done' ? today : null; if (rest.length) s.note = rest.join(' ') }
   if (stage === 'model') s.confirmedAt = status === 'done' ? today : null
   // 模型阶段开工时记下基线提交：model-delta 拿它算「这一段改了什么」，人只确认增量
   if (stage === 'model' && status === 'in-progress' && !s.baseline) { const g = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }); s.baseline = g.status === 0 ? g.stdout.trim() : null }

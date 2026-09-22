@@ -119,7 +119,11 @@ node $DEV_TEAM/tools/slice.js pending <项目目录> <切片id>
 
 ```
 node $DEV_TEAM/tools/check-schema.js <项目目录>
-node $DEV_TEAM/tools/validate.js <项目目录> --slice <切片id>
+node $DEV_TEAM/tools/validate.js <项目目录> --slice <切片id> --只看
 ```
 
+校验一律带 `--只看`——不带的那一次由开发指挥跑，角色跑了会把报告里人已裁的东西冲掉。
+
 词汇表必须通过；本段故事里每个编号都必须存在于 `business/`。点亮时产出里列本段新点亮的编号、各自归的模块与标签。
+
+**落地层的语句只说自己模块的事**：一条归 Expenses 的语句里，Funding 只许被指着、被划给、被收下它给的东西，不许被描述它怎么行为（[common/wording.md「只说自己的事」](../common/wording.md)）。要说别的模块怎么做，那是另一条语句、归另一个模块。

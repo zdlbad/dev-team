@@ -436,6 +436,16 @@ if (cmd === 'dispatch') {
       `  业务定了：node tools/slice.js advance <项目> ${s.slice ?? '<切片>'} business done\n` +
       `  确实挡不住这一趟：末尾加 --带着问题派 "<为什么这几条不影响它>"，理由会记进日志。`)
   }
+  // 演示原型这道门（第一百九十四批）：有走查步骤的段落与模块切片上，模型师要等他按过「演示的逻辑对了」
+  if (who === '模型师' && s.slice && 硬派 < 0) {
+    const d = require('./lib/project').demoState(root, s.slice)
+    if (d.applies && !d.done) {
+      die(`⛔ ${s.slice} 的演示这一道门还没过${d.hasPages ? `：页面在 ${d.dir}/，等他在「切片」页按「演示的逻辑对了」` : `：原型还没出静态演示到 ${d.dir}/`}，先不派模型师。\n` +
+        `  业务定了先把操作摆出来给他按，逻辑定了模型再开工（第一百九十四批）。\n` +
+        `  他按了：node tools/slice.js advance <项目> ${s.slice} demo done\n` +
+        `  确实挡不住这一趟：末尾加 --带着问题派 "<为什么>"，理由会记进日志。`)
+    }
+  }
   const now = new Date().toISOString()
   const 硬派理由 = 硬派 >= 0 ? (args[硬派 + 1] ?? '') : null
   if (硬派 >= 0 && !硬派理由) die('--带着问题派 后面要写一句为什么这几条不影响这一趟')

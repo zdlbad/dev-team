@@ -186,8 +186,12 @@ function stepHtml(s, key, notes, pos = '') {
 function demoPage(root, which = null) {
   const dir = path.join(root, '导读')
   const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /^演示.*\.md$/.test(f)).sort() : []
+  // 静态演示（第一百九十四批）：原型照走查出的一叠页面，demo/<切片>/index.html，开新窗口按着走
+  const sdir = path.join(root, 'demo')
+  const statics = fs.existsSync(sdir) ? fs.readdirSync(sdir).filter((d) => fs.existsSync(path.join(sdir, d, 'index.html'))).sort() : []
+  const staticBar = statics.length ? `<div class="files">静态演示（一步一屏，按着走）：${statics.map((d) => `<a href="/demo-static/${encodeURIComponent(d)}/index.html" target="_blank">${esc(d)}</a>　`).join('')}</div>` : ''
   if (!files.length) {
-    return CSS + `<div class="demo"><h1>演示</h1><div class="empty">还没有演示文档。讲解写到 <code>导读/演示-&lt;题&gt;.md</code>：一个 <code>## 场景</code> 一条时间轴，每步一行「第 n 步 · 日期 · 谁 · 做了什么 → 账上发生了什么 · 依据编号」，这一页就把它摆成可切换的视图。</div></div>`
+    return CSS + `<div class="demo">${staticBar}<h1>演示</h1><div class="empty">还没有演示文档。讲解写到 <code>导读/演示-&lt;题&gt;.md</code>：一个 <code>## 场景</code> 一条时间轴，每步一行「第 n 步 · 日期 · 谁 · 做了什么 → 账上发生了什么 · 依据编号」，这一页就把它摆成可切换的视图。</div></div>`
   }
   const file = which && files.includes(which) ? which : files[0]
   const doc = parseDemo(fs.readFileSync(path.join(dir, file), 'utf8'))
@@ -206,7 +210,7 @@ function demoPage(root, which = null) {
     return `<section class="sc${i === first ? ' on' : ''}" data-sc="${i}"><h2>${inline(s.title)}</h2>${blocks}</section>`
   }).join('')
   const preface = doc.preface.length ? `<div class="pre">${doc.preface.map(inline).join('<br>')}</div>` : ''
-  return CSS + `<div class="demo">${picker}<h1>${inline(doc.title || file.replace(/\.md$/, ''))}</h1>${preface}<div class="bar">${doc.groups.length > 1 ? `<div class="mods">${mods}</div>` : ''}${tabs}</div>${body}</div>
+  return CSS + `<div class="demo">${staticBar}${picker}<h1>${inline(doc.title || file.replace(/\.md$/, ''))}</h1>${preface}<div class="bar">${doc.groups.length > 1 ? `<div class="mods">${mods}</div>` : ''}${tabs}</div>${body}</div>
 <script>
 (function(){
   var groups=${JSON.stringify(doc.groups.map((g) => g.scenarios))}

@@ -101,6 +101,9 @@ function gateOf(s) {
       return { kind: 'business-ok', ask: `故事 ${steps.length} 步都点亮了。范围内的语句立好了、要你裁的都裁完了，就按这个——按了模型师才开工。`, button: '这一段的业务定了', why: '故事点亮完了，等你说业务这一关定了' }
     }
   }
+  // 演示原型这道门（第一百九十四批）：静态页出来了、他还没按——按了模型师才开工。状态一处算（demoState）
+  { const d = require('./lib/project').demoState(root, s.id, s)
+    if (d.applies && !d.done && d.hasPages) return { kind: 'demo-ok', ask: `静态演示出来了（${d.dir}，${d.steps} 步）。在「演示」页按着走一遍，操作与逻辑都对了就按这个——按了模型师才开工。`, button: '演示的逻辑对了', why: '静态演示出来了，等你说逻辑对了' } }
   if (s.kind === 'story' && s.stages?.model?.status === 'done' && !s.protoGo && s.stages?.code?.status === 'pending') {
     return { kind: 'proto-go', ask: '模型确认了。看过整个模型，这一段现在出原型？', button: '出原型', why: '模型确认了，等你说出不出原型' }
   }
@@ -760,6 +763,15 @@ const server = http.createServer((req, res) => {
   if (url === '/slices') return html(wrap(slicesPage()))
   if (url === '/journal') return html(wrap(journalPage(q.date)))
   // 「演示」（2026-09-21）：讲解写的演示文档（导读/演示-*.md）摆成可切换的竖向时间轴，给人现场演示用
+  // 静态演示（第一百九十四批）：demo/<切片>/… 原型出的一叠页面原样端出去，只许在 demo/ 底下取
+  if (url.startsWith('/demo-static/')) {
+    const relp = decodeURIComponent(url.slice('/demo-static/'.length))
+    const base = path.resolve(root, 'demo'), fp = path.resolve(base, relp)
+    if (!fp.startsWith(base + path.sep) || !fs.existsSync(fp) || fs.statSync(fp).isDirectory()) { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('没有这一页') }
+    const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' }
+    res.writeHead(200, { 'content-type': types[path.extname(fp).toLowerCase()] ?? 'application/octet-stream', 'cache-control': 'no-store' })
+    return res.end(fs.readFileSync(fp))
+  }
   if (url === '/demo') return html(wrap(require('./lib/demo').demoPage(root, q.file)))
   // 演示页卡片下留一句 / 删一句（2026-09-21）。文件名只认 导读/ 里现有的演示文档，键是「切换名|第 n 步」
   if ((url === '/demo/note' || url === '/demo/note/delete') && req.method === 'POST') {
@@ -806,12 +818,12 @@ const server = http.createServer((req, res) => {
   }
   // 「切片」页上的几道门（第九十七批）：模块切片「初稿定了」= slice advance model done；段落「出原型」= slice proto-go；
   // 段落「这一段的业务定了」= slice advance business done（第一百八十二批）。跟计划页一样直接跑命令行那一个
-  if ((url === '/slice/draft-ok' || url === '/slice/proto-go' || url === '/slice/whole-look' || url === '/slice/business-ok') && req.method === 'POST') {
+  if ((url === '/slice/draft-ok' || url === '/slice/proto-go' || url === '/slice/whole-look' || url === '/slice/business-ok' || url === '/slice/demo-ok') && req.method === 'POST') {
     const slice = q.slice
     if (!/^[sk]-[0-9]{3,}$/.test(slice ?? '')) { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('没指到哪一条切片') }
     // 业务这一关不给说明：advance 那头「有没答的问题就拒绝收口，除非末尾写理由」——理由是绕过用的，
     // 页面上这个按钮一给说明就等于替他绕过了自己的关卡。他要绕，得在命令行上把理由说出来。
-    const argv = url === '/slice/draft-ok' ? ['advance', root, slice, 'model', 'done', '初稿定了（项目所有者在切片页按的）'] : url === '/slice/whole-look' ? ['whole-look', root, slice, '项目所有者看过整张，在切片页按了「定稿」'] : url === '/slice/business-ok' ? ['advance', root, slice, 'business', 'done'] : ['proto-go', root, slice, '项目所有者在切片页按了「出原型」']
+    const argv = url === '/slice/draft-ok' ? ['advance', root, slice, 'model', 'done', '初稿定了（项目所有者在切片页按的）'] : url === '/slice/whole-look' ? ['whole-look', root, slice, '项目所有者看过整张，在切片页按了「定稿」'] : url === '/slice/business-ok' ? ['advance', root, slice, 'business', 'done'] : url === '/slice/demo-ok' ? ['advance', root, slice, 'demo', 'done', '项目所有者在切片页按了「演示的逻辑对了」'] : ['proto-go', root, slice, '项目所有者在切片页按了「出原型」']
     const r = spawnSync(process.execPath, [path.join(tools, 'slice.js'), ...argv], { encoding: 'utf8', cwd: root })
     const out = ((r.stdout ?? '') + (r.stderr ?? '')).trim()
     console.log(`页面上 slice ${argv[0]} ${slice} → ${r.status === 0 ? '成' : '拒'}：${out.split('\n')[0]}`)
