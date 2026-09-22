@@ -447,7 +447,7 @@ function computeNext(slice) {
   const demoGate = () => {
     const d = require('./lib/project').demoState(root, slice.id, slice)
     if (!d.applies || d.done) return null
-    if (!d.hasPages) return step('原型', `业务演示（第一百九十四批）：照走查的 ${d.steps} 步出一叠静态页到 ${d.dir}/index.html——按场分组、一步一屏，这一步谁在哪个页面按了什么、看到什么；按钮只跳下一屏，不接模型、不写领域代码。读故事步骤与它们点着的业务语句，不读模型。派工用 brief.js 原型 --活 业务演示`, `node tools/scene.js ${rel(root)} dispatch 原型 "出 ${slice.id} 的静态演示到 ${d.dir}/"`, '业务定了先把操作摆出来给他按，逻辑定了模型师才开工（第一百九十四批）')
+    if (!d.hasPages) return step('原型', `业务演示（第一百九十四批）：出一个能操作的静态页面原型到 ${d.dir}/index.html——产品的页面、按钮真能按、表单真能填、数真加减，状态只在浏览器里，没有后台、不接模型；侧栏是走查步骤当剧本（${d.steps} 步），场次是数据、先出一两场看样子。读故事步骤与它们点着的业务语句，不读模型。派工用 brief.js 原型 --活 业务演示`, `node tools/scene.js ${rel(root)} dispatch 原型 "出 ${slice.id} 的静态演示到 ${d.dir}/"`, '业务定了先把操作摆出来给他按，逻辑定了模型师才开工（第一百九十四批）')
     return step('人', `在工作台「演示」页打开 ${d.dir} 按着走一遍：操作对不对、逻辑对不对。都对了在「切片」页按「演示的逻辑对了」；不对的当场说，改故事或语句再出一版`, `node tools/slice.js advance ${rel(root)} ${slice.id} demo done`, '静态演示出来了，等他说逻辑对了模型师才开工（第一百九十四批）')
   }
   const validateCmd = (withCode) => `node tools/validate.js ${rel(root)}${withCode ? ` --code ${rel(codebase)}` : ''} --slice ${slice.id}`
