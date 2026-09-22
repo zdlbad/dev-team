@@ -447,8 +447,8 @@ function computeNext(slice) {
   const demoGate = () => {
     const d = require('./lib/project').demoState(root, slice.id, slice)
     if (!d.applies || d.done) return null
-    if (!d.hasPages) return step('原型', `业务演示（第一百九十四批）：出一个能操作的静态页面原型到 ${d.dir}/index.html——产品的页面、按钮真能按、表单真能填、数真加减，状态只在浏览器里，没有后台、不接模型；侧栏是走查步骤当剧本（${d.steps} 步），场次是数据、先出一两场看样子。读故事步骤与它们点着的业务语句，不读模型。派工用 brief.js 原型 --活 业务演示`, `node tools/scene.js ${rel(root)} dispatch 原型 "出 ${slice.id} 的静态演示到 ${d.dir}/"`, '业务定了先把操作摆出来给他按，逻辑定了模型师才开工（第一百九十四批）')
-    return step('人', `在工作台「演示」页打开 ${d.dir} 按着走一遍：操作对不对、逻辑对不对。都对了在「切片」页按「演示的逻辑对了」；不对的当场说，改故事或语句再出一版`, `node tools/slice.js advance ${rel(root)} ${slice.id} demo done`, '静态演示出来了，等他说逻辑对了模型师才开工（第一百九十四批）')
+    if (!d.hasPages) return step('预演', `把这一段做成能按的页面（${d.dir}/index.html）：真上传真表单真按钮，数照语句算对、算式连数写在页上，能换身份，走查的人物与数做成 fixtures；页面上每样东西标三色来源，绿的要写编号。走查 ${d.steps} 步。派工用 brief.js 预演`, `node tools/scene.js ${rel(root)} dispatch 预演 "把 ${slice.id} 做成能按的页面到 ${d.dir}/"`, '业务定了先让他在能按的东西上把操作逻辑认下来，认了模型师才开工（第一百九十四批）')
+    return step('人', `在工作台「演示」页打开 ${d.dir} 按一遍：操作对不对、数对不对、缺什么。都对了在「切片」页按「演示的逻辑对了」；不对的当场说，改语句或走查再演一版。**页面不是准绳**——你在上面认下来的东西要回流成语句才算数，按门之前先看预演交上来那两张单子（页面上编的、按不通的）清干净了没有`, `node tools/slice.js advance ${rel(root)} ${slice.id} demo done`, '页面出来了，等他按过、认了逻辑，模型师才开工（第一百九十四、一百九十七批）')
   }
   const validateCmd = (withCode) => `node tools/validate.js ${rel(root)}${withCode ? ` --code ${rel(codebase)}` : ''} --slice ${slice.id}`
   const step = (role, action, command, why) => ({ slice: slice.id, role, action, command: command ?? null, why })
