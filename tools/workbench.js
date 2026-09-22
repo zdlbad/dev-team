@@ -132,12 +132,7 @@ function todo() {
   const readSafe = (p) => { try { return JSON.parse(fs.readFileSync(path.join(root, p), 'utf8')) } catch { return null } }
   // 一份校验 / pre-pr 报告里还有几条等他：错误未清或判断没填完，都还没轮到他
   // 警告不挡、而且算他的（2026-09-16 k-001：只剩一条警告，校验角色判它站得住请他驳回，这里却因为「有警告」数成 0）
-  const waiting = (r) => {
-    if (!r) return 0
-    if ((r.errors ?? []).length) return 0
-    if ((r.judgments ?? []).some((x) => !x.verdict)) return 0
-    return require('./lib/project').humanTodo(r).length
-  }
+  const waiting = (r) => require('./lib/project').humanWaiting(r).length
   const sc = scene(), sid = currentSlice()
   const t = { scene: 0, ask: 0, story: 0, review: 0, codemodel: 0, prepr: 0, plan: 0, slices: 0 }
   const why = {}
