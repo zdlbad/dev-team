@@ -1013,10 +1013,21 @@ function scanStepRefsIn(story, file) {
   const bad = []
   const STEP = new RegExp('第\\s?\\d{1,3}(?:\\s?[、与和]\\s?\\d{1,3})*\\s?步', 'g')
   const NUM = new RegExp('\\d{1,3}', 'g')
+  // 这一条走查自己的编号，例如 slices/k-001.story.json → k-001
+  const mine = (String(file).match(/([a-z]-\d{3})\.story\.json$/) ?? [])[1] ?? null
+  // 指着**别条**走查的步号不算错：缺口里常写「k-002 走查第 22、94 步」，那几步在 k-002 上真有。
+  // 从前这里只认「第 N 步」、不看前面那句是谁，k-001 只有 88 步就把它报成「指着不存在的步」——
+  // 2026-09-22 两个角色各被这条误报耗过一趟，讲解逐字核出来才认定是误报。判的是紧挨着的那一小段里
+  // 有没有点着别条走查的编号（别条的编号一出现，这一处的步号就归它管，本条的步数管不着）。
+  const OTHER = /([a-z]-\d{3})[^。；]{0,8}$/
   const visit = (node, at) => {
     if (typeof node === 'string') {
-      for (const m of node.match(STEP) ?? []) {
-        for (const d of m.match(NUM) ?? []) if (+d > max) bad.push({ at, n: +d, text: m })
+      STEP.lastIndex = 0 // matchAll 会把上一次的 lastIndex 带过来，不归零后面的字串会漏判
+      for (const m of node.matchAll(STEP)) {
+        const before = node.slice(Math.max(0, m.index - 24), m.index)
+        const ref = (before.match(OTHER) ?? [])[1]
+        if (ref && ref !== mine) continue // 指着别条走查，本条的步数管不着
+        for (const d of m[0].match(NUM) ?? []) if (+d > max) bad.push({ at, n: +d, text: m[0] })
       }
       return
     }
