@@ -188,8 +188,10 @@ function demoPage(root, which = null) {
   const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /^演示.*\.md$/.test(f)).sort() : []
   // 静态演示（第一百九十四批）：原型照走查出的一叠页面，demo/<切片>/index.html，开新窗口按着走
   const sdir = path.join(root, 'demo')
+  // 第一百九十五批：一个 mock 产品整个项目共用（demo/index.html）；早先一叠一切片的 demo/<切片>/ 也列
+  const whole = fs.existsSync(path.join(sdir, 'index.html'))
   const statics = fs.existsSync(sdir) ? fs.readdirSync(sdir).filter((d) => fs.existsSync(path.join(sdir, d, 'index.html'))).sort() : []
-  const staticBar = statics.length ? `<div class="files">静态演示（能操作的页面原型，照走查按）：${statics.map((d) => `<a href="/demo-static/${encodeURIComponent(d)}/index.html" target="_blank">${esc(d)}</a>　`).join('')}</div>` : ''
+  const staticBar = whole || statics.length ? `<div class="files">mock 产品（最终前端的 HTML 版，像产品一样用）：${whole ? '<a href="/demo-static/index.html" target="_blank"><b>打开</b></a>　' : ''}${statics.map((d) => `<a href="/demo-static/${encodeURIComponent(d)}/index.html" target="_blank">${esc(d)}</a>　`).join('')}</div>` : ''
   if (!files.length) {
     return CSS + `<div class="demo">${staticBar}<h1>演示</h1><div class="empty">还没有演示文档。讲解写到 <code>导读/演示-&lt;题&gt;.md</code>：一个 <code>## 场景</code> 一条时间轴，每步一行「第 n 步 · 日期 · 谁 · 做了什么 → 账上发生了什么 · 依据编号」，这一页就把它摆成可切换的视图。</div></div>`
   }
