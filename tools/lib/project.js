@@ -209,13 +209,16 @@ function humanWaiting(r) {
   return humanTodo(r)
 }
 /**
- * 三色来源：核预演页面上每样东西的出处（第一百九十七批立、第一百九十八批加探路、第一百九十九批上锁）。
+ * 出处标记：核预演页面上每样东西的出处（第一百九十七批立、第一百九十八批加探路、第一百九十九批上锁）。
  * 一处算——demo-sources.js 打印它，slice advance demo done 拿它上锁（第一百九十一批的教训：
  * 同一件事两个算法，顶栏数 0、交接数 12，人被喊到一张空页面前）。
  *
- * 核四件：绿的编号在 business/ 里真有；蓝的批次在 raw/rulings.md 里真有；黄的写了 why；
- * 黄的落实了没有（settled：立成了哪条语句、记成了哪件候选、他哪一批裁了、还是明说不做）。
- * 核不了「这条语句到底说没说这件事」——那要人读；工具只保证没人拿不存在的编号充绿。
+ * 三种出处：语句（业务语句或原料说的）、裁（项目所有者裁过的）、编（页面上编的）。
+ * 从前叫绿、蓝、黄，第二百零七批改成直说它是什么——配色只取公司 logo 那三个色之后没有蓝可用了。
+ *
+ * 核四件：标语句的编号在 business/ 里真有；标裁的批次在 raw/rulings.md 里真有；标编的写了 why；
+ * 标编的落实了没有（settled：立成了哪条语句、记成了哪件候选、他哪一批裁了、还是明说不做）。
+ * 核不了「这条语句到底说没说这件事」——那要人读；工具只保证没人拿不存在的编号充语句。
  */
 function demoSources(root) {
   const pth = require('node:path'), fsx = require('node:fs')
@@ -235,35 +238,35 @@ function demoSources(root) {
   const rp = pth.join(root, 'raw', 'rulings.md')
   const rulings = fsx.existsSync(rp) ? fsx.readFileSync(rp, 'utf8') : ''
 
-  const 假绿 = [], 假蓝 = [], 没说清 = [], 色不对 = [], 没落实 = [], 没跟上 = []
-  // 第二百零一批：定下来之后页面要反映业务。黄的 settled 指着一条真有的语句或一批真有的裁定，
-  // 页面却还标着黄——那是落实了没改回来。指着候选或「不做」的不算，那两样本来就该继续黄着。
-  const 落实了该转色 = (s) => {
+  const 假语句 = [], 假裁 = [], 没说清 = [], 出处不对 = [], 没落实 = [], 没跟上 = []
+  // 第二百零一批：定下来之后页面要反映业务。标编的 settled 指着一条真有的语句或一批真有的裁定，
+  // 页面却还标着编——那是落实了没改回来。指着候选或「不做」的不算，那两样本来就该继续标编。
+  const 落实了该改出处 = (s) => {
     const ref = String(s?.ref ?? '').trim()
     if (!ref) return false
     if (String(s.as ?? '').includes('语句')) return ids.has(ref)
     if (String(s.as ?? '').includes('裁定')) return rulings.includes(ref)
     return false
   }
-  const 计 = { 绿: 0, 蓝: 0, 黄: 0 }
+  const 计 = { 语句: 0, 裁: 0, 编: 0 }
   for (const r of rows) {
-    const 色 = String(r.color ?? '').trim()
-    if (!['绿', '蓝', '黄'].includes(色)) { 色不对.push(r); continue }
-    计[色]++
-    if (色 === '绿') {
+    const 出处 = String(r.from ?? '').trim()
+    if (!['语句', '裁', '编'].includes(出处)) { 出处不对.push(r); continue }
+    计[出处]++
+    if (出处 === '语句') {
       const refs = String(r.ref ?? '').split(/[,，、\s]+/).filter(Boolean)
       const bad = refs.filter((x) => !ids.has(x))
-      if (!refs.length || bad.length) 假绿.push({ ...r, bad: refs.length ? bad : ['（没写编号）'] })
-    } else if (色 === '蓝') {
-      if (!r.ref || !rulings.includes(String(r.ref))) 假蓝.push(r)
+      if (!refs.length || bad.length) 假语句.push({ ...r, bad: refs.length ? bad : ['（没写编号）'] })
+    } else if (出处 === '裁') {
+      if (!r.ref || !rulings.includes(String(r.ref))) 假裁.push(r)
     } else {
       if (!String(r.why ?? '').trim()) 没说清.push(r)
       const s = r.settled
       if (!s || !String(s.as ?? '').trim() || !(String(s.ref ?? '').trim() || String(s.why ?? '').trim())) 没落实.push(r)
-      else if (落实了该转色(s)) 没跟上.push(r)
+      else if (落实了该改出处(s)) 没跟上.push(r)
     }
   }
-  return { has: true, rows, 计, 假绿, 假蓝, 没说清, 色不对, 没落实, 没跟上, 错: 假绿.length + 假蓝.length + 没说清.length + 色不对.length }
+  return { has: true, rows, 计, 假语句, 假裁, 没说清, 出处不对, 没落实, 没跟上, 错: 假语句.length + 假裁.length + 没说清.length + 出处不对.length }
 }
 /**
  * 演示原型这道门（第一百九十四批）：段落切片与模块切片的业务走查上，业务定了之后、模型师开工之前，

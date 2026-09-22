@@ -447,7 +447,7 @@ function computeNext(slice) {
   const demoGate = () => {
     const d = require('./lib/project').demoState(root, slice.id, slice)
     if (!d.applies || d.done) return null
-    if (!d.hasPages) return step('预演', `把这一段做成能按的页面（${d.dir}/index.html）：真上传真表单真按钮，数照语句算对、算式连数写在页上，能换身份，走查的人物与数做成 fixtures；页面上每样东西标三色来源，绿的要写编号。走查 ${d.steps} 步。派工用 brief.js 预演`, `node tools/scene.js ${rel(root)} dispatch 预演 "把 ${slice.id} 做成能按的页面到 ${d.dir}/"`, '业务定了先让他在能按的东西上把操作逻辑认下来，认了模型师才开工（第一百九十四批）')
+    if (!d.hasPages) return step('预演', `把这一段做成能按的页面（${d.dir}/index.html）：真上传真表单真按钮，数照语句算对、算式连数写在页上，能换身份，走查的人物与数做成 fixtures；页面上每样东西标出处，标语句的要写编号。走查 ${d.steps} 步。派工用 brief.js 预演`, `node tools/scene.js ${rel(root)} dispatch 预演 "把 ${slice.id} 做成能按的页面到 ${d.dir}/"`, '业务定了先让他在能按的东西上把操作逻辑认下来，认了模型师才开工（第一百九十四批）')
     return step('人', `在工作台「演示」页打开 ${d.dir} 按一遍：操作对不对、数对不对、缺什么。都对了在「切片」页按「演示的逻辑对了」；不对的当场说，改语句或走查再演一版。**页面不是准绳**——你在上面认下来的东西要回流成语句才算数，按门之前先看预演交上来那两张单子（页面上编的、按不通的）清干净了没有`, `node tools/slice.js advance ${rel(root)} ${slice.id} demo done`, '页面出来了，等他按过、认了逻辑，模型师才开工（第一百九十四、一百九十七批）')
   }
   const validateCmd = (withCode) => `node tools/validate.js ${rel(root)}${withCode ? ` --code ${rel(codebase)}` : ''} --slice ${slice.id}`
@@ -843,16 +843,16 @@ if (cmd === 'advance') {
     s.confirmedAt = status === 'done' ? today : null
   }
   if (stage === 'demo') {
-    // 上锁（第一百九十九批）：预演收集到的要回流成语句才算数——黄的没落实就不许收口。
+    // 上锁（第一百九十九批）：预演收集到的要回流成语句才算数——标编的没落实就不许收口。
     // 跟业务这一关一个路子：末尾写一句理由可以绕过，理由记进切片日志，事后看得见绕过得对不对。
     if (status === 'done' && !rest.length) {
       const r = require('./lib/project').demoSources(root)
       if (r.has && r.broken) die(`demo/sources.json 读不动：${r.broken}`)
-      if (r.has && r.错) die(`${id} 的三色来源有 ${r.错} 处站不住，预演这一道门收不了口：\n` +
-        [...r.假绿.map((x) => `  绿但查无此条　${x.where}　${x.what} → ${x.bad.join('、')}`),
-         ...r.假蓝.map((x) => `  蓝但找不到这一批　${x.where}　${x.what} → ${x.ref}`),
-         ...r.没说清.map((x) => `  黄但没说为什么　${x.where}　${x.what}`),
-         ...r.色不对.map((x) => `  色标得不对　${x.where}　${x.what} → ${x.color}`)].join('\n') +
+      if (r.has && r.错) die(`${id} 的出处标记有 ${r.错} 处站不住，预演这一道门收不了口：\n` +
+        [...r.假语句.map((x) => `  标语句但查无此条　${x.where}　${x.what} → ${x.bad.join('、')}`),
+         ...r.假裁.map((x) => `  标裁但找不到这一批　${x.where}　${x.what} → ${x.ref}`),
+         ...r.没说清.map((x) => `  标编但没说为什么　${x.where}　${x.what}`),
+         ...r.出处不对.map((x) => `  出处标得不对　${x.where}　${x.what} → ${x.from}`)].join('\n') +
         `\n  跑 node tools/demo-sources.js ${rel(root)} --清单 看全份，派预演改。`)
       if (r.has && r.没落实.length) die(`${id} 上还有 ${r.没落实.length} 件「页面上编的」没落实，预演这一道门收不了口：\n` +
         r.没落实.map((x) => `  ${x.where}　${x.what}\n      ${x.why ?? '（没说为什么）'}`).join('\n') +
@@ -864,8 +864,8 @@ if (cmd === 'advance') {
         `    明说不做　　{"as":"不做","why":"……"}\n` +
         `  确实挡不住这一趟：末尾写一句理由（会记进切片日志）。`)
       if (r.has && r.没跟上.length) die(`${id} 上有 ${r.没跟上.length} 件已经落实、页面却没跟上，预演这一道门收不了口：\n` +
-        r.没跟上.map((x) => `  ${x.where}　${x.what}\n      已落实成 ${x.settled.as} ${x.settled.ref}，页面上还标着黄`).join('\n') +
-        `\n\n业务定下来之后，页面要反映业务（第二百零一批）——落实成语句的标那条语句转绿，他裁的标批次转蓝。\n` +
+        r.没跟上.map((x) => `  ${x.where}　${x.what}\n      已落实成 ${x.settled.as} ${x.settled.ref}，页面上还标着编`).join('\n') +
+        `\n\n业务定下来之后，页面要反映业务（第二百零一批）——落实成语句的改标语句、写上那条编号，他裁的改标裁、写上批次。\n` +
         `  派预演改一趟页面与 demo/sources.json；确实挡不住这一趟：末尾写一句理由。`)
     }
     s.confirmedAt = status === 'done' ? today : null
