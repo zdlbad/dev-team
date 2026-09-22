@@ -209,6 +209,53 @@ function humanWaiting(r) {
   return humanTodo(r)
 }
 /**
+ * 三色来源：核预演页面上每样东西的出处（第一百九十七批立、第一百九十八批加探路、第一百九十九批上锁）。
+ * 一处算——demo-sources.js 打印它，slice advance demo done 拿它上锁（第一百九十一批的教训：
+ * 同一件事两个算法，顶栏数 0、交接数 12，人被喊到一张空页面前）。
+ *
+ * 核四件：绿的编号在 business/ 里真有；蓝的批次在 raw/rulings.md 里真有；黄的写了 why；
+ * 黄的落实了没有（settled：立成了哪条语句、记成了哪件候选、他哪一批裁了、还是明说不做）。
+ * 核不了「这条语句到底说没说这件事」——那要人读；工具只保证没人拿不存在的编号充绿。
+ */
+function demoSources(root) {
+  const pth = require('node:path'), fsx = require('node:fs')
+  const p = pth.join(root, 'demo', 'sources.json')
+  if (!fsx.existsSync(p)) return { has: false }
+  let rows
+  try { rows = JSON.parse(fsx.readFileSync(p, 'utf8')) } catch (e) { return { has: true, broken: e.message } }
+  if (!Array.isArray(rows)) rows = rows.items ?? []
+
+  const ids = new Set()
+  const walkMd = (d) => { for (const f of fsx.existsSync(d) ? fsx.readdirSync(d, { withFileTypes: true }) : []) {
+    const fp = pth.join(d, f.name)
+    if (f.isDirectory()) walkMd(fp)
+    else if (f.name.endsWith('.md')) for (const m of fsx.readFileSync(fp, 'utf8').matchAll(/^\s*-\s*\[([A-Z]-\d{3})\]/gm)) ids.add(m[1])
+  } }
+  walkMd(pth.join(root, 'business'))
+  const rp = pth.join(root, 'raw', 'rulings.md')
+  const rulings = fsx.existsSync(rp) ? fsx.readFileSync(rp, 'utf8') : ''
+
+  const 假绿 = [], 假蓝 = [], 没说清 = [], 色不对 = [], 没落实 = []
+  const 计 = { 绿: 0, 蓝: 0, 黄: 0 }
+  for (const r of rows) {
+    const 色 = String(r.color ?? '').trim()
+    if (!['绿', '蓝', '黄'].includes(色)) { 色不对.push(r); continue }
+    计[色]++
+    if (色 === '绿') {
+      const refs = String(r.ref ?? '').split(/[,，、\s]+/).filter(Boolean)
+      const bad = refs.filter((x) => !ids.has(x))
+      if (!refs.length || bad.length) 假绿.push({ ...r, bad: refs.length ? bad : ['（没写编号）'] })
+    } else if (色 === '蓝') {
+      if (!r.ref || !rulings.includes(String(r.ref))) 假蓝.push(r)
+    } else {
+      if (!String(r.why ?? '').trim()) 没说清.push(r)
+      const s = r.settled
+      if (!s || !String(s.as ?? '').trim() || !(String(s.ref ?? '').trim() || String(s.why ?? '').trim())) 没落实.push(r)
+    }
+  }
+  return { has: true, rows, 计, 假绿, 假蓝, 没说清, 色不对, 没落实, 错: 假绿.length + 假蓝.length + 没说清.length + 色不对.length }
+}
+/**
  * 演示原型这道门（第一百九十四批）：段落切片与模块切片的业务走查上，业务定了之后、模型师开工之前，
  * 原型照故事步骤出一叠静态页到 demo/<切片>/（一步一屏，不接模型），他按着走一遍、在「切片」页按「演示的逻辑对了」。
  * 这里只算状态，slice next / scene dispatch / 工作台的门都调它——一件事一处算（第一百九十一批的教训）。
@@ -296,4 +343,4 @@ function openQuestions(root, sliceId, scene = null) {
  * 交代「账已开、服务已做」这类背景，没有要人勾的。k-002 第 1～3 步就是，人点开才发现没东西可勾。
  */
 function isIntroStep(s) { return !(s.traces ?? []).length && (!s.walk || s.walk.kind === 'none') && !s.quiz }
-module.exports = { isIntroStep, storiesOfSlice, currentStory, businessBlockers, openQuestions, humanTodo, humanWaiting, demoState, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }
+module.exports = { isIntroStep, storiesOfSlice, currentStory, businessBlockers, openQuestions, humanTodo, humanWaiting, demoState, demoSources, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }
