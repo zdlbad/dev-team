@@ -842,7 +842,31 @@ if (cmd === 'advance') {
     }
     s.confirmedAt = status === 'done' ? today : null
   }
-  if (stage === 'demo') { s.confirmedAt = status === 'done' ? today : null; if (rest.length) s.note = rest.join(' ') }
+  if (stage === 'demo') {
+    // 上锁（第一百九十九批）：预演收集到的要回流成语句才算数——黄的没落实就不许收口。
+    // 跟业务这一关一个路子：末尾写一句理由可以绕过，理由记进切片日志，事后看得见绕过得对不对。
+    if (status === 'done' && !rest.length) {
+      const r = require('./lib/project').demoSources(root)
+      if (r.has && r.broken) die(`demo/sources.json 读不动：${r.broken}`)
+      if (r.has && r.错) die(`${id} 的三色来源有 ${r.错} 处站不住，预演这一道门收不了口：\n` +
+        [...r.假绿.map((x) => `  绿但查无此条　${x.where}　${x.what} → ${x.bad.join('、')}`),
+         ...r.假蓝.map((x) => `  蓝但找不到这一批　${x.where}　${x.what} → ${x.ref}`),
+         ...r.没说清.map((x) => `  黄但没说为什么　${x.where}　${x.what}`),
+         ...r.色不对.map((x) => `  色标得不对　${x.where}　${x.what} → ${x.color}`)].join('\n') +
+        `\n  跑 node tools/demo-sources.js ${rel(root)} --清单 看全份，派预演改。`)
+      if (r.has && r.没落实.length) die(`${id} 上还有 ${r.没落实.length} 件「页面上编的」没落实，预演这一道门收不了口：\n` +
+        r.没落实.map((x) => `  ${x.where}　${x.what}\n      ${x.why ?? '（没说为什么）'}`).join('\n') +
+        `\n\n页面不是准绳（第一百九十七批）——你在它上面认下来的东西，要回流成语句才算数。\n` +
+        `  每一件在 demo/sources.json 里补一栏 settled：\n` +
+        `    立成了语句　{"as":"语句","ref":"R-260"}\n` +
+        `    记成了候选　{"as":"候选","ref":"#44"}\n` +
+        `    他当场裁了　{"as":"裁定","ref":"第二百批"}\n` +
+        `    明说不做　　{"as":"不做","why":"……"}\n` +
+        `  确实挡不住这一趟：末尾写一句理由（会记进切片日志）。`)
+    }
+    s.confirmedAt = status === 'done' ? today : null
+    if (rest.length) s.note = rest.join(' ')
+  }
   if (stage === 'model') s.confirmedAt = status === 'done' ? today : null
   // 模型阶段开工时记下基线提交：model-delta 拿它算「这一段改了什么」，人只确认增量
   if (stage === 'model' && status === 'in-progress' && !s.baseline) { const g = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }); s.baseline = g.status === 0 ? g.stdout.trim() : null }
