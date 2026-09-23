@@ -2,7 +2,9 @@
 /**
  * 可视化：把模型渲染成一个自包含的 HTML 页面（给人看，不写任何状态）。
  *
- * 页面有三个视图：
+ * 页面有四个视图：
+ *   模块图 —— 一个模块一个框（职责写在框里），箭头是 modules.json 的 relations：谁把什么事实给谁；按 groups 分列。
+ *             没写 relations 时从模块端口推导。还没有聚合时它是缺省视图。
  *   关系图 —— 节点是聚合根 / 实体 / 值对象 / 事件 / 领域服务 / 用例 / 端口 / 错误，边是调用、发出、触发、成员、引用、协调、抛出；
  *             按模块分区、按种类分列，力导向微调；可拖拽、缩放；点节点看详情；图例可开关。
  *   卡片   —— 每个模型文件一张卡片，全部内容。
@@ -285,6 +287,66 @@ const cardSections = modules.map((m) => {
     <h3>用例</h3><div class="grid">${ucs.join('') || '<span class="muted">（无）</span>'}</div>
     ${ports.length ? `<h3>端口</h3><div class="grid small-grid">${ports.join('')}</div>` : ''}</section>`
 })
+// ---------- 模块图 ----------
+const cnName = (name) => (glossary.terms.find((t) => t.name === name)?.aliases ?? []).find((a) => /[\u4e00-\u9fff]/.test(a)) ?? ''
+const declared = model.modules?.data.relations
+const relations = declared ?? els.filter((e) => e.kind === 'port' && e.data.kind === 'module' && e.data.target !== e.module)
+  .map((p) => ({ from: p.data.target, to: p.module, what: (p.data.operations ?? []).map((op) => op.note || op.name).join('；') }))
+const moduleMap = (() => {
+  if (!modules.length) return '<p class="muted">还没有模块。</p>'
+  const names = new Set(modules.map((m) => m.name))
+  const cols = (model.modules?.data.groups ?? []).map((g) => ({ name: g.name, note: g.note, mods: g.modules.filter((n) => names.has(n)) }))
+  const placed = new Set(cols.flatMap((c) => c.mods))
+  const rest = modules.map((m) => m.name).filter((n) => !placed.has(n))
+  if (rest.length) cols.push({ name: cols.length ? '其它' : '', mods: rest })
+  const BW = 250, GAP_X = 170, GAP_Y = 26, TOP = cols.some((c) => c.name) ? 40 : 10, PERLINE = 17
+  // 折行时标点不落到行首：碰上标点就挂在上一行末尾
+  const wrap = (t) => { const out = []; let line = ''; for (const ch of [...t]) { if (!line && out.length && /[，。、；：）」』！？,.;:)]/.test(ch)) { out[out.length - 1] += ch; continue } line += ch; if ([...line].length >= PERLINE) { out.push(line); line = '' } } if (line) out.push(line); return out }
+  const box = new Map()
+  let H = 0
+  cols.forEach((c, ci) => {
+    let y = TOP
+    for (const n of c.mods) {
+      const m = modules.find((x) => x.name === n)
+      const lines = wrap(m.responsibility)
+      const h = 46 + lines.length * 18 + 10
+      box.set(n, { x: 20 + ci * (BW + GAP_X), y, w: BW, h, lines, col: ci })
+      y += h + GAP_Y
+    }
+    H = Math.max(H, y)
+  })
+  const W = 40 + cols.length * BW + (cols.length - 1) * GAP_X + 110 // 右边留给同一列里往回弯的箭头
+  const svgParts = []
+  cols.forEach((c, ci) => { if (c.name) svgParts.push(`<text class="mm-group" x="${20 + ci * (BW + GAP_X) + BW / 2}" y="22" text-anchor="middle">${esc(c.name)}</text>`) })
+  relations.forEach((r, i) => {
+    const a = box.get(r.from), b = box.get(r.to)
+    if (!a || !b) return
+    let d, lx, ly
+    if (a.col === b.col) {
+      const x = a.x + a.w, y1 = a.y + a.h / 2, y2 = b.y + b.h / 2, bend = 60 + Math.abs(y2 - y1) / 6
+      d = `M${x},${y1} C${x + bend},${y1} ${x + bend},${y2} ${x + 6},${y2}`; lx = x + bend - 10; ly = (y1 + y2) / 2
+    } else {
+      const right = b.col > a.col
+      const x1 = right ? a.x + a.w : a.x, x2 = right ? b.x - 6 : b.x + b.w + 6
+      const y1 = a.y + a.h / 2, y2 = b.y + b.h / 2, mx = (x1 + x2) / 2
+      d = `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`; lx = mx; ly = (y1 + y2) / 2
+    }
+    svgParts.push(`<g class="mm-edge" data-from="${esc(r.from)}" data-to="${esc(r.to)}"><path d="${d}" marker-end="url(#mm-arrow)"/><text x="${lx}" y="${ly - 4}" text-anchor="middle">${esc(r.what)}</text></g>`)
+  })
+  for (const [n, b] of box) {
+    const cn = cnName(n)
+    svgParts.push(`<g class="mm-box" data-mod="${esc(n)}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="8"/><text class="mm-name" x="${b.x + 12}" y="${b.y + 22}">${esc(cn || n)}</text>${cn ? `<text class="mm-en" x="${b.x + b.w - 12}" y="${b.y + 22}" text-anchor="end">${esc(n)}</text>` : ''}${b.lines.map((l, i) => `<text class="mm-resp" x="${b.x + 12}" y="${b.y + 46 + i * 18}">${esc(l)}</text>`).join('')}</g>`)
+  }
+  const cardOfModule = (m) => {
+    const out = relations.filter((r) => r.from === m.name), inn = relations.filter((r) => r.to === m.name)
+    const cn = cnName(m.name)
+    return `<div class="card" id="model/modules.json#${esc(m.name)}"><div class="title"><b>${esc(cn || m.name)}</b> <span class="muted">${cn ? esc(m.name) : ''}</span></div><p class="resp">${esc(m.responsibility)}</p>${out.length ? `<div class="sec">给出：${out.map((r) => `→ ${esc(cnName(r.to) || r.to)}：${esc(r.what)}`).join('<br>')}</div>` : ''}${inn.length ? `<div class="sec">拿到：${inn.map((r) => `← ${esc(cnName(r.from) || r.from)}：${esc(r.what)}`).join('<br>')}</div>` : ''}</div>`
+  }
+  return `<p class="muted">${modules.length} 个模块、${relations.length} 条关系${declared ? '' : '（从端口推导）'}。鼠标放在一个模块上，只亮它的关系；每个模块的意见写在下面它那张卡上。</p>
+<div class="mm-wrap"><svg class="mm" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><defs><marker id="mm-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker></defs>${svgParts.join('')}</svg></div>
+<div class="grid">${modules.map(cardOfModule).join('')}</div>`
+})()
+
 const traced = (id) => els.filter((e) => JSON.stringify(e.data).includes(`"${id}"`)).map((e) => `<a href="#${esc(e.file)}" class="jump">${esc(e.data.name)}</a>`)
 const coverage = business.map((s) => `<tr><td><code>${esc(s.id)}</code></td><td>${esc(labelOf(s) ? `(${labelOf(s)}) ` : '')}${esc(s.text)}</td><td>${traced(s.id).join('，') || '<span class="bad-text">无落点</span>'}</td></tr>`)
 const extraFiles = [...decodedFiles].filter((f) => !model.byFile.has('model/' + f))
@@ -301,6 +363,10 @@ header{background:#111827;color:#fff;padding:12px 24px;display:flex;align-items:
 nav{padding:6px 24px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2;display:flex;gap:4px;flex-wrap:wrap;align-items:center}
 nav button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;font:inherit}nav button.on{background:#111827;color:#fff;border-color:#111827}
 nav .sp{flex:1}nav label{font-size:12.5px;color:#374151;margin-left:8px;white-space:nowrap}
+.mm-wrap{overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:14px}.mm-group{font-size:14px;font-weight:600;fill:#374151}
+.mm-box rect{fill:#f8fafc;stroke:#334155;stroke-width:1.5}.mm-box .mm-name{font-size:15px;font-weight:600}.mm-box .mm-en{font-size:11px;fill:#6b7280}.mm-box .mm-resp{font-size:13px;fill:#374151}.mm-box{cursor:default}
+.mm-edge path{fill:none;stroke:#94a3b8;stroke-width:1.5}.mm-edge text{font-size:12px;fill:#334155;paint-order:stroke;stroke:#fff;stroke-width:4px;display:none}
+.mm.hl .mm-edge{opacity:.12}.mm.hl .mm-edge.on{opacity:1}.mm.hl .mm-edge.on path{stroke:#1d4ed8;stroke-width:2}.mm.hl .mm-edge.on text{display:block}.mm.hl .mm-box{opacity:.35}.mm.hl .mm-box.on{opacity:1}
 main{padding:12px 24px;max-width:1600px}.view{display:none}.view.on{display:block}
 section{margin-bottom:28px}h2{margin:18px 0 4px;font-size:17px}h3{margin:18px 0 8px;font-size:15px;color:#374151}.resp{margin:0 0 8px;color:#374151}
 .agg{border:1px solid var(--line);border-radius:8px;background:#fafafa;padding:8px 12px;margin:10px 0}.agg summary{cursor:pointer}
@@ -338,14 +404,28 @@ ul.inv{list-style:none;margin:0;padding:0}ul.inv li{padding:7px 0;border-top:1px
 .edge{fill:none;stroke-width:1.5}.edge.dim{opacity:.06}.edge-label{font-size:10px;fill:#374151;pointer-events:none;paint-order:stroke;stroke:#fff;stroke-width:3px}
 </style></head><body>
 <header><h1>模型 · ${esc(projectName)}</h1><div class="muted">${modules.length} 个模块 · ${els.length} 个模型文件 · 业务语句 ${business.length} 条 · 词汇 ${glossary.terms.length} 个${otherDir ? ` · ${baselineDir ? "与上一版比对（本段增量）：" : "与解码模型比对："}${findings.length ? `<b style="color:#fca5a5">${findings.length} 处差异</b>` : '<b style="color:#86efac">一致</b>'}` : ''}</div></header>
-<nav><button data-v="graph" class="on">关系图</button><button data-v="cards">卡片</button><button data-v="cov">业务覆盖</button>${otherDir ? '<button data-v="diff">差异</button>' : ''}<span class="sp"></span><button id="lay-toggle" title="按聚合分块：一个聚合一块，根在上、成员在下；分层：按命令→服务→聚合→成员→端口分列">布局：按聚合分块</button><label id="nav-hint">拖拽节点移动 · 滚轮缩放 · 拖空白平移 · 点节点看详情 · 双击空白重排</label></nav>
+<nav><button data-v="modules"${els.length ? '' : ' class="on"'}>模块图</button><button data-v="graph"${els.length ? ' class="on"' : ''}>关系图</button><button data-v="cards">卡片</button><button data-v="cov">业务覆盖</button>${otherDir ? '<button data-v="diff">差异</button>' : ''}<span class="sp"></span><button id="lay-toggle" title="按聚合分块：一个聚合一块，根在上、成员在下；分层：按命令→服务→聚合→成员→端口分列">布局：按聚合分块</button><label id="nav-hint">拖拽节点移动 · 滚轮缩放 · 拖空白平移 · 点节点看详情 · 双击空白重排</label></nav>
 <main>
-<section id="view-graph" class="view on"><div id="graph-wrap"><div class="legend" id="legend"></div><div id="graph-area"><div id="focus-bar" style="display:none">只显示所选节点及其邻居 <button id="focus-clear">显示全部</button></div><svg id="graph"></svg><div id="panel"><button class="close" id="panel-close">关闭</button><div id="panel-body"></div></div></div></div></section>
+<section id="view-modules" class="view${els.length ? '' : ' on'}">${moduleMap}</section>
+<section id="view-graph" class="view${els.length ? ' on' : ''}"><div id="graph-wrap"><div class="legend" id="legend"></div><div id="graph-area"><div id="focus-bar" style="display:none">只显示所选节点及其邻居 <button id="focus-clear">显示全部</button></div><svg id="graph"></svg><div id="panel"><button class="close" id="panel-close">关闭</button><div id="panel-body"></div></div></div></div></section>
 <section id="view-cards" class="view">${otherDir ? `<p class="muted">${baselineDir ? "左边绿条 = 与上一版一致（本段没动）；红条 = 本段新增或改动，卡片底部列出「现在 ｜ 上一版」。" : "左边绿条 = 与代码一致；红条 = 有差异，卡片底部列出「模型 ｜ 代码」。"}</p>` : ''}${cardSections.join('')}</section>
 <section id="view-cov" class="view"><h2>业务覆盖</h2><table class="cov"><tr><th>编号</th><th>业务语句</th><th>落点</th></tr>${coverage.join('')}</table></section>
 ${diffSection}
 </main>
 <script>
+{
+  const mm = document.querySelector('svg.mm')
+  if (mm) {
+    mm.addEventListener('mouseover', (ev) => {
+      const b = ev.target.closest('.mm-box'); if (!b) return
+      const m = b.dataset.mod
+      mm.classList.add('hl')
+      mm.querySelectorAll('.mm-edge').forEach((e) => e.classList.toggle('on', e.dataset.from === m || e.dataset.to === m))
+      mm.querySelectorAll('.mm-box').forEach((x) => x.classList.toggle('on', x.dataset.mod === m || [...mm.querySelectorAll('.mm-edge.on')].some((e) => e.dataset.from === x.dataset.mod || e.dataset.to === x.dataset.mod)))
+    })
+    mm.addEventListener('mouseleave', () => mm.classList.remove('hl'))
+  }
+}
 const G = ${JSON.stringify(graph)}
 const NODE_STYLE = {
   'aggregate-root': { fill:'#dbeafe', stroke:'#1d4ed8', label:'聚合根', shape:'rect', w:130, h:40 },
@@ -659,10 +739,11 @@ function buildLegend() {
   document.getElementById('lbl-toggle').addEventListener('change', ev => { showLabels = ev.target.checked; position() })
 }
 // ---- 视图切换 ----
-document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => {
-  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b))
+for (const id of ['nav-hint', 'lay-toggle']) if (!document.getElementById('view-graph').classList.contains('on')) document.getElementById(id).style.visibility = 'hidden'
+document.querySelectorAll('nav button[data-v]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('nav button[data-v]').forEach(x => x.classList.toggle('on', x === b))
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + b.dataset.v))
-  document.getElementById('nav-hint').style.visibility = b.dataset.v === 'graph' ? '' : 'hidden'
+  for (const id of ['nav-hint', 'lay-toggle']) document.getElementById(id).style.visibility = b.dataset.v === 'graph' ? '' : 'hidden'
   if (b.dataset.v === 'graph') relayout()
 }))
 document.querySelectorAll('a.jump, #view-cards a').forEach(a => a.addEventListener('click', ev => {

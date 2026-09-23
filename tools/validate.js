@@ -125,6 +125,8 @@ const inScope = (id) => !scopeIds || scopeIds.has(id)
 // 带 --slice 时，切片 scope 之外还没建的聚合、成员、引用与范围外模块的空追溯不算错，记进 report.deferred 给人看个数。
 const scopeAggs = null
 const scopeMods = sliceRec?.modules?.length ? new Set(sliceRec.modules) : null
+// 场景切片在人按过页面、业务分析立语句（slice lit）之前没有编号可挂：空追溯记「待挂」，不算错
+const awaitingStatements = sliceRec?.kind === 'scene' && !sliceRec.traces?.length
 const qualify = (name, mod) => (name.includes('.') ? name : `${mod}.${name}`)
 const defer = (kind, target, text, report = r1) => { (report.deferred ??= []).push({ kind, target, text }) }
 // 方向 ②：解码比对里落在切片范围外的文件（别的模块、本段没建的聚合）不算错，记 deferred——和方向 ① 的粗版处理同一口径
@@ -314,6 +316,7 @@ for (const u of usages) {
 }
 // 追溯反向：每个元素 traces 非空且存在
 function checkTraces(target, traces, level = 'error') {
+  if ((!traces || !traces.length) && awaitingStatements) return defer('traces.empty', target, '场景还没按过、语句未立，追溯待挂')
   if (!traces || !traces.length) return add(r1, level, 'traces.empty', target, 'traces 为空')
   for (const t of traces) if (!byId.has(t)) add(r1, 'error', 'traces.unknown', target, `追溯编号不存在：${t}`)
 }
@@ -524,6 +527,8 @@ for (const m of model.modules?.data.modules ?? []) {
   if (model.moduleFiles.some((mf) => mf.module === m.name)) continue
   // 该模块承接的语句全在切片范围之外 → 本轮本就不建它，不报错
   if (scopeIds && !(m.traces ?? []).some((t) => scopeIds.has(t))) continue
+  // 切片列了它碰到的模块：没列的这一段本来不建
+  if (scopeMods && !scopeMods.has(m.name)) { defer('modules.list', model.modules.file, `模块 ${m.name} 本段外未建`); continue }
   add(r1, 'error', 'modules.list', model.modules.file, `模块 ${m.name} 没有 model/${m.name}/module.json`)
 }
 for (const el of els) if (el.data.module && el.data.module !== el.module) add(r1, 'error', 'module.field', el.file, `module 字段 ${el.data.module} 与所在目录 ${el.module} 不一致`)
