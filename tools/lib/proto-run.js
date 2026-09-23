@@ -31,5 +31,5 @@ Module._resolveFilename = function (request, parent, ...rest) {
 }
 
 const entry = path.join(buildDir, entryRel)
-if (!fs.existsSync(entry)) { console.error(`原型入口不存在：${entry}（原型角色应写 src/proto/main.ts）`); process.exit(3) }
+if (!fs.existsSync(entry)) { console.error(`原型入口不存在：${entry}（编码起草稿原型时要写 src/proto/main.ts）`); process.exit(3) }
 require(entry)

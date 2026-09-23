@@ -3,21 +3,82 @@
   "module": "Ordering",
   "actor": "Customer",
   "input": [
-    { "name": "orderId", "type": "string" },
-    { "name": "productId", "type": "string" },
-    { "name": "quantity", "type": "number" },
-    { "name": "unitPriceAmount", "type": "number" },
-    { "name": "currency", "type": "string" }
+    {
+      "name": "orderId",
+      "type": "string"
+    },
+    {
+      "name": "productId",
+      "type": "string"
+    },
+    {
+      "name": "quantity",
+      "type": "number"
+    },
+    {
+      "name": "unitPriceAmount",
+      "type": "number"
+    },
+    {
+      "name": "currency",
+      "type": "string"
+    }
   ],
-  "writes": ["Order"],
+  "writes": [
+    "Order"
+  ],
   "steps": [
-    { "text": "读取订单", "call": { "kind": "repository", "target": "OrderRepository", "method": "findById" }, "output": "order" },
-    { "text": "构造单价", "call": { "kind": "factory", "target": "Money", "method": "CREATE" }, "output": "unitPrice" },
-    { "text": "添加订单行", "call": { "kind": "behavior", "target": "Order", "method": "addLine" } },
-    { "text": "保存订单", "call": { "kind": "repository", "target": "OrderRepository", "method": "save" } }
+    {
+      "text": "读取订单",
+      "call": {
+        "kind": "repository",
+        "target": "OrderRepository",
+        "method": "findById"
+      },
+      "output": "order"
+    },
+    {
+      "text": "构造单价",
+      "call": {
+        "kind": "factory",
+        "target": "Money",
+        "method": "CREATE"
+      },
+      "output": "unitPrice",
+      "throws": [
+        "InvalidMoney"
+      ]
+    },
+    {
+      "text": "添加订单行",
+      "call": {
+        "kind": "behavior",
+        "target": "Order",
+        "method": "addLine"
+      },
+      "throws": [
+        "OrderFailed",
+        "InvalidOrderLine"
+      ]
+    },
+    {
+      "text": "保存订单",
+      "call": {
+        "kind": "repository",
+        "target": "OrderRepository",
+        "method": "save"
+      }
+    }
   ],
   "raises": [],
-  "throws": ["OrderFailed", "InvalidOrderLine", "InvalidMoney"],
-  "traces": ["G-001", "U-003"],
+  "throws": [
+    "OrderFailed",
+    "InvalidOrderLine",
+    "InvalidMoney"
+  ],
+  "traces": [
+    "G-001",
+    "U-003"
+  ],
   "questions": []
 }

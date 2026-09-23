@@ -18,13 +18,13 @@
       "$ref": "urn:dev-team:common#/$defs/modelName"
     },
     "condition": {
-      "description": "这个错误表示什么：一句话说它指的是哪种不成立。不写在哪个方法、什么时候抛——那写在抛它的方法的规则里（第一百六十四批）",
+      "description": "这个错误表示什么：一句话说它指的是哪种不成立。不写在哪个方法、什么时候抛——那写在抛它的方法的规则里",
       "type": "string",
       "minLength": 1
     },
     "traces": {
       "$ref": "urn:dev-team:common#/$defs/traces",
-      "description": "留空：错误不挂业务语句，语句落在抛它的方法的规则上（第一百六十四批）"
+      "description": "留空：错误不挂业务语句，语句落在抛它的方法的规则上"
     },
     "decisions": {
       "$ref": "urn:dev-team:common#/$defs/decisions"

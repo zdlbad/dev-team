@@ -2,15 +2,55 @@
   "name": "RenameCustomer",
   "module": "Customers",
   "actor": "Customer",
-  "input": [{ "name": "customerId", "type": "string" }, { "name": "name", "type": "string" }],
-  "writes": ["Customer"],
+  "input": [
+    {
+      "name": "customerId",
+      "type": "string"
+    },
+    {
+      "name": "name",
+      "type": "string"
+    }
+  ],
+  "writes": [
+    "Customer"
+  ],
   "steps": [
-    { "text": "读取客户", "call": { "kind": "repository", "target": "CustomerRepository", "method": "findById" }, "output": "customer" },
-    { "text": "改名", "call": { "kind": "behavior", "target": "Customer", "method": "rename" } },
-    { "text": "保存客户", "call": { "kind": "repository", "target": "CustomerRepository", "method": "save" } }
+    {
+      "text": "读取客户",
+      "call": {
+        "kind": "repository",
+        "target": "CustomerRepository",
+        "method": "findById"
+      },
+      "output": "customer"
+    },
+    {
+      "text": "改名",
+      "call": {
+        "kind": "behavior",
+        "target": "Customer",
+        "method": "rename"
+      },
+      "throws": [
+        "InvalidCustomerName"
+      ]
+    },
+    {
+      "text": "保存客户",
+      "call": {
+        "kind": "repository",
+        "target": "CustomerRepository",
+        "method": "save"
+      }
+    }
   ],
   "raises": [],
-  "throws": ["InvalidCustomerName"],
-  "traces": ["G-010"],
+  "throws": [
+    "InvalidCustomerName"
+  ],
+  "traces": [
+    "G-010"
+  ],
   "questions": []
 }

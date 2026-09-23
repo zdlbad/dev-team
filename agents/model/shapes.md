@@ -1,6 +1,6 @@
 # 模型：目录、命名与文件形状
 
-*模型师、接口、解读、模型校验读它。思想在 [seed/principles.md](../../seed/principles.md)；项目目录与写入权在 [common/project-layout.md](../common/project-layout.md)；代码那边的目录、命名、编解码对应在 [code/coding-standard.md](../code/coding-standard.md)。*
+*模型师、审查读它。思想在 [seed/principles.md](../../seed/principles.md)；项目目录与写入权在 [common/project-layout.md](../common/project-layout.md)；代码那边的目录、命名、编解码对应在 [code/coding-standard.md](../code/coding-standard.md)。*
 
 本文四节：模型目录、模型名与类名、文件形状、由形状推论出的规则。
 
@@ -31,7 +31,7 @@ model/
 - 事件只在**发出它的聚合**里声明一次；事件处理的 `trigger` 引用事件名。
 - 模型文字一事一处（见 [common/wording.md](../common/wording.md)）：同一件事只在它归属的元素上写全，别处至多指一句「住在 X 上」。
 - 不变量是聚合**随时能拿自己的状态核对**的一句话（五项参与者信息齐全、出生日期不晚于今天）；核对不了的（别人的流程、事情的先后）不是不变量，是叙述或别处的规则。
-- **要看别的实例或别的模块才能判的规则，不是聚合的不变量，归领域服务**（第八十五批）。「标识唯一」「同一位老人只有一笔持续服务拨款」「出处那份文档得是她名下真有的」都是全部档案、全部拨款这个集合上的约束，一份档案自己核对不了；从库里读回来走 FROM_PERSISTENCE 也不经过创建方法，说明它本来就不是对象自己的状态。形状：处理器先查仓储、问端口，把查到的已有档案、已有拨款、端口答复当参数递给**纯函数式领域服务**（第 12 条不变），服务比对后抛错或调聚合的 CREATE；聚合的创建方法只查自己这一份填得对不对。把「已有档案」塞给 CREATE 让静态方法比对是名不副实：聚合只能信处理器给的参数全不全，而处理器又不该做业务判断。唯一性的真保证在仓储存的那一刻（数据库唯一约束，外壳阶段加），领域服务里的比对是给人一句像样的错误，挡不住两个人同一秒各建一份。
+- **要看别的实例或别的模块才能判的规则，不是聚合的不变量，归领域服务**。「标识唯一」「同一位老人只有一笔持续服务拨款」「出处那份文档得是她名下真有的」都是全部档案、全部拨款这个集合上的约束，一份档案自己核对不了；从库里读回来走 FROM_PERSISTENCE 也不经过创建方法，说明它本来就不是对象自己的状态。形状：处理器先查仓储、问端口，把查到的已有档案、已有拨款、端口答复当参数递给**纯函数式领域服务**（第 12 条不变），服务比对后抛错或调聚合的 CREATE；聚合的创建方法只查自己这一份填得对不对。把「已有档案」塞给 CREATE 让静态方法比对是名不副实：聚合只能信处理器给的参数全不全，而处理器又不该做业务判断。唯一性的真保证在仓储存的那一刻（数据库唯一约束，外壳阶段加），领域服务里的比对是给人一句像样的错误，挡不住两个人同一秒各建一份。
 - 给人看的页面上不变量叫「规则」。规则句、字段说明、错误说明怎么写（骨架、只说规则、边界说明放 `aggregateNarrative` 或字段 `note`）见 [common/wording.md](../common/wording.md)「规则句怎么写」。
 - `ports/` 只放对外依赖；进入方向不设端口，命令与查询本身就是模块入口。
 - 描述我方系统之外的业务流程的事实（「老人选定提供方后，提供方在政府门户上收到她的转介」）落在端口的操作上，不落聚合：聚合无从核对别人的流程，写成不变量只是给编号凑落点。端口标的是边界，本轮适配器是人照抄也照建。
@@ -62,7 +62,6 @@ model/
 - **问题**：`questions: [{ question, answer: "", applied: false }]`，每个文件一个数组。
 - **无确认状态字段**：一个切片的模型改动由人整体确认，确认记在切片记录里，改动本身由 git 记录。
 - **无可视化状态**：模型文件永远不含注解、布局等可视化状态；它们放在项目的 `.viewer/` 旁路目录，按模型文件路径索引。
-- **裁决**：`decisions: [{ target, check, verdict: "accepted" | "dismissed", note, at, on? }]`，每个模型文件一个数组；记录人对校验项的裁决（驳回的警告、接受的多聚合写入、边界信号的裁定、判断通过且人已同意）。`on` 是裁决时对象文字的短哈希：校验器读它，文字未变的项不再提出；文字变了裁决即过期，项目重新浮出并标注上次的裁决。业务语句类判断（目标是 G / R 编号）写进它落点的每一个模型文件。
 - 所有 `name` 都是模型名（无种类后缀）。`?` 表示可选字段。
 
 ### glossary.json
@@ -106,7 +105,7 @@ model/
   "aggregateInvariants": [ { "text": "跨成员始终成立的条件", "traces": [] } ],
   "fields": [ { "name": "status", "type": "OrderStatus", "nullable?": false, "note?": "" } ],
   "invariants": [ { "text": "根对象自身始终成立的条件", "traces": [], "throws?": ["InvalidOrder"] } ],   // throws = 创建时违反该不变量抛出的错误
-  "create?": { /* 创建：与行为同一套七段，见下（第一百五十八批） */ },
+  "create?": { /* 创建：与行为同一套七段，见下 */ },
   "behaviors": [ /* 见下 */ ],
   "traces": [], "questions": [] }
 
@@ -119,14 +118,13 @@ model/
   "fields": [], "invariants": [], "behaviors": [], "traces": [] }
 ```
 
-**行为**（三者共用；第一百五十六批起像用自然语言写一个方法，道理在 `seed/slices.md`「方法怎么写」）：
+**行为**（三者共用）：
 
 ```jsonc
 { "name": "confirm",
   "purpose?": { "text": "作用：调用它做了什么、改了什么", "traces": [] },
   "input": [ { "name": "at", "type": "date", "note?": "这个参数是什么" } ], "output?": "…",
   "steps?": [ { "text": "做法的一步", "changes": ["status", "confirmedAt"], "throws?": [], "traces?": [] } ],
-  "simple?": false,   // 第一百五十九批起不标：每个方法他都审
   "rules": [ "规则：这个方法自己检查什么、怎么算，不成立抛什么" ],
   "raises": [ "OrderConfirmed", { "event": "OrderRejected", "when": "…" } ],
   "throws": [ "OrderFailed" ],
@@ -135,7 +133,7 @@ model/
 
 `invariants` 是对象状态**始终成立**的条件；`rules` 是某个行为**做决定时**依据的逻辑。**不写进方法的**：调用方负责的前提、方法不做的事、设计思路（放聚合或字段的 `note`）、字段为什么存在（放那个字段的 `note`）。
 
-**创建**（`create`，第一百五十八批）：`{ "purpose", "input?", "steps", "rules", "raises?", "throws", "traces" }`，与行为同一套。一件东西怎么被建出来写在这里；时时都要成立的约束留在 `invariants`。老模型没有 `create`、只有不变量的照样认。
+**创建**（`create`）：`{ "purpose", "input?", "steps", "rules", "raises?", "throws", "traces" }`，与行为同一套。一件东西怎么被建出来写在这里；时时都要成立的约束留在 `invariants`。老模型没有 `create`、只有不变量的照样认。
 
 **方法的入参是纯数据**。聚合里的实体只由聚合自己建，不外露：Invoice 的创建收每一行的数据（行号、金额、税额……），在里面一行一行建出 InvoiceLine，不收建好的 `InvoiceLine[]`。值对象也收它的数据、在里面建；要是调用方手上已经有一个值对象、直接递了进来，方法先复制一份再用，不和外面共用同一个。入参类型起一个数据的名字（`InvoiceLineData[]`），这一样有哪几栏写在入参的 `note` 里；不写实体名。领域服务的操作收整个聚合根不算在内——那是它要协调的对象。
 
@@ -153,7 +151,7 @@ model/
 { "name": "OrderFailed", "aggregate": "Order", "condition": "这张订单的内容不成立：缺了该有的一项，或者某一项填得不对", "traces": [] }
 ```
 
-错误的 `condition` 一句话说它表示什么，不写在哪里、什么时候抛，`traces` 留空——抛它的方法的规则里已经写了查什么、不成立抛它，语句挂在那条规则上（第一百六十四批）。
+错误的 `condition` 一句话说它表示什么，不写在哪里、什么时候抛，`traces` 留空——抛它的方法的规则里已经写了查什么、不成立抛它，语句挂在那条规则上。
 
 不记发布方。谁发谁记（行为、创建 `create`、领域服务操作的 `raises` / `throws`）；校验反向核对每个事件、每个错误至少有一个发布方。
 
@@ -242,18 +240,17 @@ model/
 ### slices/&lt;id&gt;.json
 
 ```jsonc
-{ "id": "s-001", "title": "…", "kind": "initial",          // initial | increment
-  "codebase": "../order-service",
-  "scope": { "modules": ["Ordering"], "aggregates": ["Order"], "useCases": ["CreateOrder", "GetOrder"] },
-  "traces": ["G-001", "G-002", "R-001"],
-  "stages": {
-    "model":    { "status": "pending", "confirmedAt": null },      // pending | in-progress | done
-    "code":     { "status": "pending", "at": null },
-    "validate": { "status": "pending", "decodedVersion": null, "reportAt": null } },
-  "log": [ { "ts": "2026-09-05", "stage": "slice", "text": "范围定稿" } ] }
+{ "id": "s-001", "kind": "scene", "title": "老人交凭据、案例经理录花费",
+  "scene": "黄太太把一张 $120 的清洁发票传上来；李明照着录一笔花费",
+  "modules": ["Expenses"],
+  "traces": ["G-001", "R-001"],                       // 这一段立了、挂上了哪几条语句
+  "stages": {                                          // 每关 { status: pending | in-progress | done, at?, note? }
+    "scene": { "status": "done" }, "model": { "status": "done" },
+    "draft": { "status": "done" }, "walk": { "status": "pending" } },
+  "log": [ { "at": "2026-09-24", "text": "开场景" } ] }
 ```
 
-日志只追加，不改写。
+正式化切片 `f-xxx`：`kind: "formalize"`，`covers` 列这一批装哪几个场景，三关 `code`、`check`、`accept`。日志只追加，不改写。
 
 ---
 

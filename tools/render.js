@@ -76,7 +76,7 @@ function diffBlock(file) {
 }
 const cardCls = (file) => (findingsOf(file).length ? 'card bad' : otherDir ? 'card ok' : 'card')
 /**
- * 一个方法的七段（第一百五十六批）：作用、入参、做法（每一步改哪几栏）、规则、错误、事件、返回。
+ * 一个方法的七段：作用、入参、做法（每一步改哪几栏）、规则、错误、事件、返回。
  * 项目所有者读 Invoice.attachSupportingDocument：「模型方法这里说的没有条理」——五条规则用分号连成一串。
  * 老写法（没有作用与做法）至少把规则一条一行摆开。
  */
@@ -99,7 +99,7 @@ function domainCard(el) {
   const behaviors = d.behaviors?.length
     ? `<div class="sec"><div class="sec-title">行为</div><ul class="meths">${d.behaviors.map((b) => methodBlock(b, `<code>${esc(b.name)}(${params(b.input)})${b.output ? ` → ${esc(b.output)}` : ''}</code> ${chips(b.traces)}`)).join('')}</ul></div>`
     : ''
-  // 创建（第一百五十八批）：怎么被建出来，与行为同一套七段
+  // 创建：怎么被建出来，与行为同一套七段
   const create = d.create ? `<div class="sec"><div class="sec-title">创建</div><ul class="meths">${methodBlock(d.create, `<code>create(${params(d.create.input ?? [])})</code> ${chips(d.create.traces ?? [])}`)}</ul></div>` : ''
   return `<div class="${cardCls(el.file)}" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], d.name, d.traces)}
   ${d.aggregateNarrative ? `<p class="narr">${esc(d.aggregateNarrative)}</p>` : ''}
@@ -398,8 +398,7 @@ function visibleEdge(e) {
 }
 
 // ---- 按聚合分块（缺省）：一个聚合一块——根在上、成员在下排成网格；块在模块里一行行铺开 ----
-// 由来：2026-09-17 项目所有者「模型图的 UI 改进一下，这样子我比较难去看」——分层布局把二十几个值对象摞成一长条，
-// 名字截在框外、横向一大片空白，看不出谁属于哪个聚合。分层那一版留着，右上角可以切回去。
+// 按聚合分组摆：分层布局会把二十几个值对象摞成一长条、看不出谁属于哪个聚合。分层那一版留着，右上角可以切回去。
 let LAYOUT = 'agg'
 function layoutAgg() {
   W = svg.clientWidth || 1400; H = svg.clientHeight || 800

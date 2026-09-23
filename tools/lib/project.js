@@ -108,7 +108,7 @@ function loadGlossary(root) {
 }
 function loadSlices(root) {
   return walk(path.join(root, 'slices'))
-    .filter((p) => p.endsWith('.json') && !p.endsWith('.story.json') && !path.basename(p).startsWith('_')) // *.story.json 是故事、_candidates.json 是候选清单，都不是切片记录
+    .filter((p) => p.endsWith('.json') && !path.basename(p).startsWith('_')) // 下划线开头的不是切片记录
     .map((p) => ({ file: path.relative(root, p).replaceAll('\\', '/'), data: readJson(p) }))
 }
 function loadProject(root) {
@@ -149,7 +149,7 @@ function applyWordMap(text, pairs, keys) {
 }
 
 /**
- * 模块名 ↔ 代码文件夹名（agents/common/project-layout.md「名字的两套写法」，第七十二批）：模块名是 PascalCase（Participants、ServiceAgreements），
+ * 模块名 ↔ 代码文件夹名（agents/common/project-layout.md「名字的两套写法」）：模块名是 PascalCase（Participants、ServiceAgreements），
  * 代码库里的文件夹全小写、多词连字符（participants、service-agreements）；模型目录 model/<Module>/ 仍用模块名。
  * 模块名只允许「每个词首字母大写、其余小写」这样才能来回换算；HCPBilling 这种全大写缩写会换不回来，规范里不许。
  */
@@ -181,169 +181,7 @@ function modelKeyOf(codeRel, moduleNames) {
 }
 
 /**
- * 一份校验报告里等人审的条目（第一百五十六批）。
- * 方向 ①：判断只有「推上来的」等人——校验判不通过的，与重要度高、校验自己没把握的（escalated）；
- * 其余由工具与校验角色负责，人不用逐条点（k-002 一次 67 条，他说看不过来）。
- * 另加需人确认、警告，以及按模型看的块里新的与重浮的（第一百五十九批起简单方法也不跳过）。
- * 方向 ② 与 pre-pr 照旧：校验角色答过的判断都等人。
- */
-function humanTodo(r) {
-  if (!r) return []
-  const dir1 = String(r.direction) === '1' && !r.mode
-  const judgments = (r.judgments ?? []).filter((j) => j.verdict && (!dir1 || j.verdict === 'fail' || j.escalated || j.human))
-  // 第一百五十九批：简单方法不再跳过，每一块他都审
-  const blocks = dir1 ? (r.blocks ?? []).filter((b) => b.state !== 'same') : []
-  return [...judgments, ...(r.confirms ?? []), ...(r.warnings ?? []), ...blocks].filter((x) => !x.human?.verdict)
-}
-/**
- * 真轮到人的那几件。humanTodo 只管「有哪几件」，这一层管「这会儿是不是他」：
- * 报告里还有错误、或者校验角色还没把判断填完，那都是角色的活，一件也不算他的。
- * 由来：2026-09-22 这个口径从前只写在 workbench 的 todo() 里，scene 交接自己另算一套——
- * 顶栏按口径数出 0、交接却印「12 件等他按」。开发指挥信了交接那句，把项目所有者喊去审模型页，
- * 他点开看见「没有等你的事」。一件事一处算，顶栏与交接都调这一个。
- */
-function humanWaiting(r) {
-  if (!r) return []
-  if ((r.errors ?? []).length) return []
-  if ((r.judgments ?? []).some((x) => !x.verdict)) return []
-  return humanTodo(r)
-}
-/**
- * 出处标记：核预演页面上每样东西的出处（第一百九十七批立、第一百九十八批加探路、第一百九十九批上锁）。
- * 一处算——demo-sources.js 打印它，slice advance demo done 拿它上锁（第一百九十一批的教训：
- * 同一件事两个算法，顶栏数 0、交接数 12，人被喊到一张空页面前）。
- *
- * 三种出处：语句（业务语句或原料说的）、裁（项目所有者裁过的）、编（页面上编的）。
- * 从前叫绿、蓝、黄，第二百零七批改成直说它是什么——配色只取公司 logo 那三个色之后没有蓝可用了。
- *
- * 核四件：标语句的编号在 business/ 里真有；标裁的批次在 raw/rulings.md 里真有；标编的写了 why；
- * 标编的落实了没有（settled：立成了哪条语句、记成了哪件候选、他哪一批裁了、还是明说不做）。
- * 核不了「这条语句到底说没说这件事」——那要人读；工具只保证没人拿不存在的编号充语句。
- */
-function demoSources(root) {
-  const pth = require('node:path'), fsx = require('node:fs')
-  const p = pth.join(root, 'demo', 'sources.json')
-  if (!fsx.existsSync(p)) return { has: false }
-  let rows
-  try { rows = JSON.parse(fsx.readFileSync(p, 'utf8')) } catch (e) { return { has: true, broken: e.message } }
-  if (!Array.isArray(rows)) rows = rows.items ?? []
-
-  const ids = new Set()
-  const walkMd = (d) => { for (const f of fsx.existsSync(d) ? fsx.readdirSync(d, { withFileTypes: true }) : []) {
-    const fp = pth.join(d, f.name)
-    if (f.isDirectory()) walkMd(fp)
-    else if (f.name.endsWith('.md')) for (const m of fsx.readFileSync(fp, 'utf8').matchAll(/^\s*-\s*\[([A-Z]-\d{3})\]/gm)) ids.add(m[1])
-  } }
-  walkMd(pth.join(root, 'business'))
-  const rp = pth.join(root, 'raw', 'rulings.md')
-  const rulings = fsx.existsSync(rp) ? fsx.readFileSync(rp, 'utf8') : ''
-
-  const 假语句 = [], 假裁 = [], 没说清 = [], 出处不对 = [], 没落实 = [], 没跟上 = []
-  // 第二百零一批：定下来之后页面要反映业务。标编的 settled 指着一条真有的语句或一批真有的裁定，
-  // 页面却还标着编——那是落实了没改回来。指着候选或「不做」的不算，那两样本来就该继续标编。
-  const 落实了该改出处 = (s) => {
-    const ref = String(s?.ref ?? '').trim()
-    if (!ref) return false
-    if (String(s.as ?? '').includes('语句')) return ids.has(ref)
-    if (String(s.as ?? '').includes('裁定')) return rulings.includes(ref)
-    return false
-  }
-  const 计 = { 语句: 0, 裁: 0, 编: 0 }
-  for (const r of rows) {
-    const 出处 = String(r.from ?? '').trim()
-    if (!['语句', '裁', '编'].includes(出处)) { 出处不对.push(r); continue }
-    计[出处]++
-    if (出处 === '语句') {
-      const refs = String(r.ref ?? '').split(/[,，、\s]+/).filter(Boolean)
-      const bad = refs.filter((x) => !ids.has(x))
-      if (!refs.length || bad.length) 假语句.push({ ...r, bad: refs.length ? bad : ['（没写编号）'] })
-    } else if (出处 === '裁') {
-      if (!r.ref || !rulings.includes(String(r.ref))) 假裁.push(r)
-    } else {
-      if (!String(r.why ?? '').trim()) 没说清.push(r)
-      const s = r.settled
-      if (!s || !String(s.as ?? '').trim() || !(String(s.ref ?? '').trim() || String(s.why ?? '').trim())) 没落实.push(r)
-      else if (落实了该改出处(s)) 没跟上.push(r)
-    }
-  }
-  return { has: true, rows, 计, 假语句, 假裁, 没说清, 出处不对, 没落实, 没跟上, 错: 假语句.length + 假裁.length + 没说清.length + 出处不对.length }
-}
-/**
- * 演示原型这道门（第一百九十四批）：段落切片与模块切片的业务走查上，业务定了之后、模型师开工之前，
- * 原型照故事步骤出一叠静态页到 demo/<切片>/（一步一屏，不接模型），他按着走一遍、在「切片」页按「演示的逻辑对了」。
- * 这里只算状态，slice next / scene dispatch / 工作台的门都调它——一件事一处算（第一百九十一批的教训）。
- * applies：这条切片要不要这道门（有故事步骤的段落与模块切片才要；修改、改说法、实现切片不要）。
- */
-function demoState(root, sliceId, slice = null) {
-  const pth = require('node:path'), fsx = require('node:fs')
-  let s = slice
-  if (!s) { try { s = readJson(pth.join(root, 'slices', sliceId + '.json')) } catch { s = null } }
-  if (!s || !['story', 'module'].includes(s.kind)) return { applies: false }
-  const steps = currentStory(root, sliceId)?.story?.steps ?? []
-  if (!steps.length) return { applies: false }
-  // 第一百九十五批：一个 mock 产品整个项目共用（demo/index.html），按模块长；早先一叠一切片的 demo/<切片>/ 也认
-  const whole = fsx.existsSync(pth.join(root, 'demo', 'index.html'))
-  const own = fsx.existsSync(pth.join(root, 'demo', sliceId, 'index.html'))
-  return { applies: true, done: (s.stages?.demo?.status ?? 'pending') === 'done', hasPages: whole || own, dir: whole ? 'demo' : 'demo/' + sliceId, steps: steps.length }
-}
-/**
- * 一个切片名下的走查（第一百五十批）：一整条 slices/<id>.story.json，或者一场一条 slices/<id>.w<场次>.story.json。
- * 返回 [{ id, file, scene, sealed, story }]，按场次排；读不动的跳过。
- */
-function storiesOfSlice(root, id) {
-  const dir = require('node:path').join(root, 'slices')
-  const fsx = require('node:fs')
-  if (!id || !fsx.existsSync(dir)) return []
-  const esc = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const re = new RegExp('^(' + esc + '(?:\\.w(\\d+))?)\\.story\\.json$')
-  return fsx.readdirSync(dir).map((f) => ({ f, m: f.match(re) })).filter((x) => x.m)
-    .sort((a, b) => (+a.m[2] || 0) - (+b.m[2] || 0))
-    .map((x) => { try { const story = JSON.parse(fsx.readFileSync(require('node:path').join(dir, x.f), 'utf8')); return { id: x.m[1], file: require('node:path').join(dir, x.f), scene: x.m[2] ? +x.m[2] : null, sealed: story.sealed ?? null, story } } catch { return null } })
-    .filter(Boolean)
-}
-/** 眼下该摆的那一份走查：一整条的就是它；一场一条的取还没锁死的最前一场，都锁死了取最后一场。没有就 null */
-function currentStory(root, id) {
-  const all = storiesOfSlice(root, id)
-  if (!all.length) return null
-  const whole = all.find((s) => s.scene === null)
-  if (whole) return whole
-  return all.find((s) => !s.sealed) ?? all[all.length - 1]
-}
-/**
- * 这条切片眼下业务这一关上还摆着的那几件。业务定了模型才开工（第一百七十八批），所以这几件既是
- * slice pending 的上半截，也是工作台顶栏要算进「N 件等你」的那一截——只在命令行看得见的关卡对他
- * 等于不存在（一条老规矩）。两边读同一个函数，免得页面说没事、命令行说卡着四件。
- * 返回 [{ kind, id, text, blocking }]，kind 是「等人答」「没裁的卡」「走查缺口」「候选修改」，按这个顺序排。
- * **挡路的只有等人答与没裁的卡**。走查缺口 blocking 为 false：它是下一版故事的候选，不是这一关的活
- * （story.js 的走查页与 guide.md 都这么说——第一轮只走主线，守卫、异常、怪事记进 gaps 标轮次，留给
- * 重走那一趟）；第一百七十八批把它算成挡路的，于是 k-001 三条人早已改成「（已答）…」的缺口永远挂在
- * 单子上（项目所有者 2026-09-21 裁：缺口不挡业务）。候选修改也 false：第一百八十四批起候选只装
- * 「等着某个还没建的模块」的事，那个模块没建之前谁也清不掉它，算成挡路等于这一关永远收不了口。
- * `scene` 可以把已经读好的看板递进来，免得每次轮询再读一遍 _scene.json。
- */
-function businessBlockers(root, sliceId, scene = null) {
-  const fsx = require('node:fs'), px = require('node:path')
-  if (!sliceId) return []
-  const one = (p) => { try { return JSON.parse(fsx.readFileSync(px.join(root, p), 'utf8')) } catch { return null } }
-  // 卡与缺口两种写法都要认：缺口按 schema/story.schema.json 就是一句话（字符串），卡是对象。
-  // 从前这里一律当对象取 text/why，缺口就落到 JSON.stringify 上，印出来带着引号和转义（k-001 三条都这样）。
-  const cut = (x) => (typeof x === 'string' ? x : x?.question ?? x?.text ?? x?.why ?? JSON.stringify(x)).replace(/\s+/g, ' ').slice(0, 100)
-  const out = []
-  for (const q of openQuestions(root, sliceId, scene)) out.push({ kind: '等人答', id: q.id, text: cut(q.question), blocking: true })
-  const story = currentStory(root, sliceId)?.story
-  for (const c of story?.choices ?? []) {
-    if (!c.ruling) out.push({ kind: '没裁的卡', id: c.id ?? null, text: cut(c), blocking: true })
-  }
-  for (const g of story?.gaps ?? []) out.push({ kind: '走查缺口', id: null, text: cut(g), blocking: false })
-  for (const x of one('slices/_candidates.json')?.items ?? []) {
-    if ((x.status ?? 'open') === 'open' && (x.touches ?? []).includes(sliceId)) out.push({ kind: '候选修改', id: `#${x.n}`, text: (x.waitFor ? `等 ${x.waitFor}　` : '') + cut(x.text), blocking: false })
-  }
-  return out
-}
-/**
- * 看板上这条切片还没答的问题（第一百七十八批：业务这一关收口、模型这一关开工、scene dispatch 的门都看它）。
- * 从前 slice.js 里写了两份、这里又一份，三份各自过滤——看板记答复的方式一变，三处就会数出三个数。只留这一份。
- * `scene` 递进来就不再读文件。
+ * 看板上这条切片还没答的问题。模型师开工与派工都看它；`scene` 递进来就不再读文件。
  */
 function openQuestions(root, sliceId, scene = null) {
   const fsx = require('node:fs'), px = require('node:path')
@@ -351,9 +189,4 @@ function openQuestions(root, sliceId, scene = null) {
   if (!sc) { try { sc = JSON.parse(fsx.readFileSync(px.join(root, 'reports', '_scene.json'), 'utf8')) } catch { return [] } }
   return (sc.questions ?? []).filter((q) => q.slice === sliceId && !q.answeredAt)
 }
-/**
- * 走查里的铺垫步（候选 #11）：没挂编号、模型这一侧也没有动作（walk.kind 为 none 或没写），也不出题——
- * 交代「账已开、服务已做」这类背景，没有要人勾的。k-002 第 1～3 步就是，人点开才发现没东西可勾。
- */
-function isIntroStep(s) { return !(s.traces ?? []).length && (!s.walk || s.walk.kind === 'none') && !s.quiz }
-module.exports = { isIntroStep, storiesOfSlice, currentStory, businessBlockers, openQuestions, humanTodo, humanWaiting, demoState, demoSources, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }
+module.exports = { openQuestions, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }

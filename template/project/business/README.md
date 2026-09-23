@@ -1,6 +1,6 @@
 # 业务描述
 
-`raw/` 是暗的，业务沿故事线的段落逐段点亮（dev-team `seed/layers.md`）。
+`raw/` 是原料；业务按场景里问到的逐条立成语句，分层与种类见 dev-team 的 `agents/business/layers.md`。
 
 - `00-overview.md`：粗读的产物，这门生意、钱的路径、模块候选；给人读，不进解析
 - `<Module>/abstraction.md`：第一层，手册层面的抽象业务（换一家公司照样成立）

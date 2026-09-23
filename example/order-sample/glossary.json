@@ -1,11 +1,19 @@
 {
   "terms": [
-    { "name": "Order", "definition": "客户提交的一次购买请求", "aliases": ["订单"] },
-    { "name": "OrderLine", "definition": "订单中的一行：某商品的数量与单价", "aliases": ["订单行"] },
-    { "name": "Money", "definition": "带币种的金额", "aliases": ["金额"] },
-    { "name": "Customer", "definition": "下单的人或组织", "aliases": ["客户"] },
-    { "name": "Promotion", "definition": "在特定条件下降低订单价格的规则", "aliases": ["促销"] },
-    { "name": "Supplier", "definition": "为订单备货的一方", "aliases": ["供应商"] },
-    { "name": "PaymentGateway", "definition": "代收款的外部系统", "aliases": ["支付网关"] }
+    {"name": "Order", "definition": "客户提交的一次购买请求", "aliases": ["订单"]},
+    {"name": "OrderLine", "definition": "订单中的一行：某商品的数量与单价", "aliases": ["订单行"]},
+    {"name": "Money", "definition": "带币种的金额", "aliases": ["金额"]},
+    {"name": "Customer", "definition": "下单的人或组织", "aliases": ["客户"]},
+    {"name": "Promotion", "definition": "在特定条件下降低订单价格的规则", "aliases": ["促销"]},
+    {"name": "Supplier", "definition": "为订单备货的一方", "aliases": ["供应商"]},
+    {"name": "PaymentGateway", "definition": "代收款的外部系统", "aliases": ["支付网关"]},
+    {"name": "OrderConfirmed", "definition": "订单确认了：客户的订单从此不能再增删订单行", "aliases": ["订单已确认"]},
+    {"name": "OrderRejected", "definition": "订单被拒了：备不了货或付不了款，这张订单不再往下走", "aliases": ["订单被拒"]},
+    {"name": "OrderFailed", "definition": "这张订单在它现在的状态下做不了这件事，比如已经确认了还要加行", "aliases": ["订单操作不成立"]},
+    {"name": "InvalidOrderLine", "definition": "这一行订单不成立：没有商品，或数量、单价不是正数", "aliases": ["订单行不成立"]},
+    {"name": "InvalidMoney", "definition": "这个金额不成立：不是一个数，或没有币种", "aliases": ["金额不成立"]},
+    {"name": "CurrencyMismatch", "definition": "两个金额的币种不一样，不能相加或比较", "aliases": ["币种不一致"]},
+    {"name": "InvalidCustomerName", "definition": "客户的名字不成立：空着，或只有空格", "aliases": ["客户名不成立"]},
+    {"name": "InvalidPromotion", "definition": "这条促销不成立：门槛或折扣不是正数", "aliases": ["促销不成立"]}
   ]
 }

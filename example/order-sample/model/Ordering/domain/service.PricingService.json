@@ -1,22 +1,64 @@
 {
   "name": "Pricing",
   "module": "Ordering",
-  "coordinates": ["Order", "Promotion"],
+  "coordinates": [
+    "Order",
+    "Promotion"
+  ],
   "operations": [
     {
       "name": "evaluate",
-      "input": [{ "name": "order", "type": "Order" }, { "name": "promotion", "type": "Promotion" }],
+      "input": [
+        {
+          "name": "order",
+          "type": "Order"
+        },
+        {
+          "name": "promotion",
+          "type": "Promotion"
+        }
+      ],
       "output": "PricingDecision",
-      "reads": ["Order", "Promotion"],
+      "reads": [
+        "Order",
+        "Promotion"
+      ],
       "writes": [],
       "steps": [
-        { "text": "计算订单原价", "call": { "kind": "behavior", "target": "Order", "method": "total" }, "output": "total" },
-        { "text": "判断促销是否适用", "call": { "kind": "behavior", "target": "Promotion", "method": "appliesTo" }, "output": "applies" }
+        {
+          "text": "计算订单原价",
+          "call": {
+            "kind": "behavior",
+            "target": "Order",
+            "method": "total"
+          },
+          "output": "total",
+          "throws": [
+            "CurrencyMismatch",
+            "InvalidMoney"
+          ]
+        },
+        {
+          "text": "判断促销是否适用",
+          "call": {
+            "kind": "behavior",
+            "target": "Promotion",
+            "method": "appliesTo"
+          },
+          "output": "applies"
+        }
       ],
-      "rules": ["促销适用时按促销的折扣比例定价，否则按原价"],
+      "rules": [
+        "促销适用时按促销的折扣比例定价，否则按原价"
+      ],
       "raises": [],
-      "throws": ["CurrencyMismatch", "InvalidMoney"],
-      "traces": ["R-005"]
+      "throws": [
+        "CurrencyMismatch",
+        "InvalidMoney"
+      ],
+      "traces": [
+        "R-005"
+      ]
     }
   ],
   "questions": []

@@ -76,7 +76,7 @@ function moduleNameOfFolder(folder, modDir) {
 for (const folder of fs.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== 'shared' && e.name !== 'proto').map((e) => e.name)) {
   const modDir = path.join(srcDir, folder)
   const modName = moduleNameOfFolder(folder, modDir)
-  if (folder !== folder.toLowerCase()) issue(modDir, `模块文件夹应全小写、多词连字符（第七十二批）：${folder} → ${folder.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`)
+  if (folder !== folder.toLowerCase()) issue(modDir, `模块文件夹应全小写、多词连字符：${folder} → ${folder.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`)
   modules.set(modName, { name: modName, dir: modDir, aggregates: new Map() })
   for (const file of walk(modDir)) {
     const relPath = path.relative(modDir, file).replaceAll('\\', '/')
@@ -603,7 +603,7 @@ function stepsOf(body, currentModule, ctx) {
           if (kind) {
             call = { kind, target, method: r.method }
             // 记下被调节点：处理器算完 raises / throws 闭包后，把被调工厂 / 行为会抛的错挂回这一步（agents/model/shapes.md「步骤语法」的步骤级 throws；2026-09-13 之前从不产出，方向 ② 永远差一条）
-            if (kind === 'factory' || kind === 'behavior' || kind === 'service') call._callee = nodeId(e, r.method) // service：交给领域服务那一步，服务操作会抛的错也挂回这一步（第八十五批之后才有领域服务）
+            if (kind === 'factory' || kind === 'behavior' || kind === 'service') call._callee = nodeId(e, r.method) // service：交给领域服务那一步，服务操作会抛的错也挂回这一步
             ctx.onCall?.(e, r, kind)
             if (output && ['behavior', 'factory', 'service'].includes(kind)) domainOutputs.add(output)
           }
@@ -804,7 +804,7 @@ for (const mod of modules.values()) {
         const reads = []
         const writes = []
         // 参数中的聚合根：直接是聚合根，或聚合根的数组（existing: Participant[]、ReadonlyArray<FundingAllocation>——
-        // 处理器查出来的一批已有档案 / 已有拨款递进来比对，第八十五批领域服务的形状），数组就看里面那个元素
+        // 处理器查出来的一批已有档案 / 已有拨款递进来比对，领域服务的形状），数组就看里面那个元素
         for (const p of m.parameters) {
           let t = checker.getNonNullableType(checker.getTypeAtLocation(p))
           const elem = checker.getIndexTypeOfType(t, ts.IndexKind.Number)
