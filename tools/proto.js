@@ -98,12 +98,28 @@ async function check() {
 }
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png' }
-async function serve() {
+// 代码里最新的改动时间：每批答案回来编码都会改代码，打开页面时比一比，改过就重编、重起宿主
+function newestSrc(dir = path.join(codebase, 'src')) {
+  let t = 0
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name)
+    if (e.isDirectory()) { if (p !== webDir) t = Math.max(t, newestSrc(p)) } else if (e.name.endsWith('.ts')) t = Math.max(t, fs.statSync(p).mtimeMs)
+  }
+  return t
+}
+let h = { ok: false, log: '' }, builtAt = 0
+async function refresh() {
+  builtAt = Date.now()
   const b = build()
   if (!b.ok) console.error('编译失败，页面会说明：\n' + b.output)
-  const h = b.ok ? await startHost() : { ok: false, log: b.output }
-  http.createServer((req, res) => {
+  h = b.ok ? await startHost() : { ok: false, log: b.output }
+}
+async function serve() {
+  await refresh()
+  http.createServer(async (req, res) => {
     const url = decodeURIComponent((req.url ?? '/').split('?')[0])
+    // 打开页面时：代码比上次编译新，或宿主已经没了，就重来一次（页面上的数据会清空，跟「从头按」一样）
+    if (url === '/' && (newestSrc() > builtAt || !child)) await refresh()
     if (url.startsWith('/api/')) {
       const up = http.request({ host: '127.0.0.1', port: protoPort, method: req.method, path: url.slice(4), headers: req.headers }, (ur) => { res.writeHead(ur.statusCode ?? 200, ur.headers); ur.pipe(res) })
       up.on('error', (e) => { res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' }); res.end('宿主连不上：' + e.message) })

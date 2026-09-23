@@ -77,10 +77,12 @@ model/
 ```jsonc
 { "system": "…",
   "modules": [ { "name": "Ordering", "responsibility": "一句话", "traces": [] } ],
+  "relations": [ { "from": "Customers", "to": "Ordering", "what": "谁在下单" } ],
+  "groups": [ { "name": "卖东西那一侧", "modules": ["Ordering"] } ],
   "questions": [] }
 ```
 
-模块关系不写，由 ports 与事件推导。
+`relations` 写谁把什么事实给谁，模型图的「模块图」照它画；不写时从模块端口推导。划模块时还没有端口，所以要写。`groups` 可选，模块图按它分列。
 
 ### model/&lt;module&gt;/module.json
 
