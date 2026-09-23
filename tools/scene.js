@@ -10,7 +10,7 @@
  *                                （角色名也可以改用 --who 写在后面；写在前面与 dispatch、back 一致）
  *   node tools/scene.js <项目> ask "<问题>" --who <角色> --doing "<在做什么>" --context "<上下文>"
  *                                --options "甲：…|乙：…" --lean "<你偏向哪个>" --confidence 高|中|低
- *                                                 角色遇到要人裁的事，当场发问然后停下交回开发指挥（第七十三批）
+ *                                                 角色遇到要人裁的事，当场发问然后停下交回开发指挥
  *   node tools/scene.js <项目> mode [逐个|问卷]      问答模式：人在电脑前就逐个问、当场答（缺省）；人去跑长任务就攒成问卷，
  *                                                 角色照自己偏向的先做下去，人回来一次性答，跟偏向不一样的再返工
  *   node tools/scene.js <项目> questions [--all] [--问卷]   列出等人回答的问题；--问卷 排成一份编号问卷，人可以一口气答完
@@ -30,7 +30,7 @@
  * 每次写都记下机器名；换了机器还没 git pull 就动手，看板和 slice next 都会提醒。
  *
  * 状态存 reports/_scene.json（随 git 走——reports/ 里的 json 都进 git，md 与 html 是重算出来的才忽略；开发指挥的写入目标之一，见 agents/common/project-layout.md 的写入权表）。
- * 角色名用 agents/README.md 的叫法：人、开发指挥、业务分析、讲解、文职、模型师、原型、接口、编码、模型校验、pre-pr 审查、解读。
+ * 角色名用 agents/README.md 的叫法：人、开发指挥、业务分析、模型师、编码、审查、文职、分身。
  */
 const fs = require('fs')
 const path = require('path')
@@ -39,10 +39,11 @@ const os = require('os')
 const ME = os.hostname()
 const mel = require('./lib/time') // 打印给人看的钟点用墨尔本；写进文件的仍是 UTC 的 ISO 串
 
-const ROLES = ['人', '开发指挥', '业务分析', '讲解', '预演', '文职', '模型师', '原型', '接口', '编码', '模型校验', 'pre-pr 审查', '解读', '分身']
-const PHASES = ['业务', '模型', '编码', '校验']
+const ROLES = ['人', '开发指挥', '业务分析', '模型师', '编码', '审查', '文职', '分身']
+const PHASES = ['场景', '模型', '草稿原型', '一起按', '正式化']
 /** 问答模式：逐个＝人在电脑前，角色问完就停下等答；问卷＝人不在，角色照偏向先做，问题攒起来一次性答 */
 const ASK_MODES = ['逐个', '问卷']
+const STAGE_NAMES = { scene: '场景', model: '模型', draft: '草稿原型', walk: '一起按', code: '正式代码', check: '校验与审查', accept: '验收' }
 const die = (m) => {
   console.error(m)
   process.exit(1)
@@ -114,27 +115,19 @@ function slices() {
   if (!fs.existsSync(dir)) return []
   return fs
     .readdirSync(dir)
-    .filter((f) => f.endsWith('.json') && !f.endsWith('.story.json') && !f.startsWith('_'))
+    .filter((f) => /^[sf]-\d+\.json$/.test(f))
     .map((f) => {
       const d = readJson(path.join(dir, f), null)
       if (!d) return null
-      const st = require('./lib/project').currentStory(root, f.replace(/\.json$/, ''))?.story ?? null
-      const steps = st?.steps ?? []
-      const lit = new Set()
-      for (const x of steps) for (const t of x.traces ?? []) lit.add(t)
+      const order = d.kind === 'formalize' ? ['code', 'check', 'accept'] : ['scene', 'model', 'draft', 'walk']
       return {
         id: d.id,
         title: d.title,
         kind: d.kind,
-        intent: d.intent ?? '',
-        line: d.businessStory ?? '',
-        modules: d.scope?.modules ?? [],
-        traces: lit.size || (d.traces ?? []).length,
-        stages: d.stages ?? {},
-        steps: steps.length,
-        // 待点亮 = 讲解写了 needs、业务分析还没回填 traces
-        dark: steps.filter((s) => (s.needs ?? []).length && !(s.traces ?? []).length).length,
-        approved: st?.approved ?? null,
+        scene: d.scene ?? (d.covers ? '正式化：' + d.covers.join('、') : ''),
+        modules: d.modules ?? [],
+        traces: (d.traces ?? []).length,
+        stages: order.map((k) => [STAGE_NAMES[k], d.stages?.[k]?.status ?? 'pending']),
       }
     })
     .filter(Boolean)
@@ -149,8 +142,9 @@ if (cmd === 'set') {
   const step = opt('--step', s.step)
   const phase = opt('--phase', s.phase)
   const note = opt('--note', null)
-  if (who && !ROLES.includes(who)) die(`--who 要用 agents/README.md 的角色名：${ROLES.join('、')}`)
-  if (phase && !PHASES.includes(phase)) die(`--phase 只有：${PHASES.join('、')}`)
+  // 只核这一次明写的：看板上接过来的旧值可能是撤掉的角色名、阶段名，不该因此写不进去
+  if (args.includes('--who') && !ROLES.includes(who)) die(`--who 要用 agents/README.md 的角色名：${ROLES.join('、')}`)
+  if (args.includes('--phase') && !PHASES.includes(phase)) die(`--phase 只有：${PHASES.join('、')}`)
   if (!step) die('--step 是必填的：这一步在做什么，一句人话')
   const now = new Date().toISOString()
   const changed = step !== s.step || who !== s.who || slice !== s.slice
@@ -230,7 +224,7 @@ if (cmd === 'mode') {
 }
 
 // ---------- ask：角色当场发问 ----------
-// 第七十三批（2026-09-13 项目所有者）：要人裁的事别攒到交稿一次性列出来，遇到就问，五件事说全：
+// 要人裁的事别攒到交稿一次性列出来，遇到就问，五件事说全：
 // 在做什么、上下文是怎样、遇到了什么问题、两到四个答案、你偏向哪个、信心高低。
 // 问完角色就停下交回开发指挥；开发指挥立刻转给人，人答了再把角色接着往下跑（上下文还在）。
 const CONFIDENCE = ['高', '中', '低']
@@ -353,27 +347,15 @@ if (cmd === 'answer') {
 }
 
 // ---------- handoff：收工交接 ----------
-/** 这条切片上还没答的问题（第一百七十八批） */
+/** 这条切片上还没答的问题 */
 function openQuestionsOf(sc, sliceId) {
   return (sc.questions ?? []).filter((q) => q.slice === sliceId && !q.answeredAt)
 }
-/** 机器上看得见的「等他」：校验与审查报告里还等他按的那些（审模型页、审代码页） */
-function humanTodoCount() {
-  let n = 0
-  for (const fn of ['validate-1.json', 'validate-2.json', 'pre-pr-proto.json', 'pre-pr-shell.json']) {
-    try {
-      const r = JSON.parse(fs.readFileSync(path.join(root, 'reports', fn), 'utf8'))
-      n += require('./lib/project').humanWaiting(r).length
-    } catch {}
-  }
-  return n
-}
-
-/** 这条切片业务这一关的状态；读不到切片记录就当 done，不拦 */
-function businessStatusOf(sliceId) {
+/** 这条切片的场景定下没有；读不到切片记录就当定了，不拦 */
+function sceneStatusOf(sliceId) {
   try {
     const j = JSON.parse(fs.readFileSync(path.join(root, 'slices', sliceId + '.json'), 'utf8'))
-    return j.stages?.business?.status ?? 'done'
+    return j.kind === 'scene' ? j.stages?.scene?.status ?? 'pending' : 'done'
   } catch { return 'done' }
 }
 
@@ -382,22 +364,17 @@ if (cmd === 'handoff') {
   if (!text) die('用法：scene handoff <项目> "<一段话：停在哪、等谁、有什么坑>"')
   const s = readScene()
   // 要人裁的事写成散文，机器一件也看不见：slice next 看不见、工作台看不见、下一段接手的人当它是背景。
-  // 2026-09-20 真出过——三个问题只写在交接第 3 条「三个问题等他定」，第二天接手就照着往下派，
-  // 立完语句、判完三条，他的答复一到全部重来（第一百七十八批）。
   if (!args.includes('--散文也行')) {
     const 像在说等人 = /等他|等你|等人|要他定|请他|待他|等项目所有者|等裁/.test(text)
     const open = openQuestionsOf(s, s.slice)
-    // 拦的是「说有人在等，可机器上一件都看不见」。看板上的问题算、审模型页与审代码页上
-    // 等他按的那些也算——那些他打开工作台就看得见，不会像散文那样被下一段接手的人当背景。
-    const todo = humanTodoCount()
-    if (像在说等人 && !open.length && !todo) {
+    // 拦的是「说有人在等，可机器上一件都看不见」
+    if (像在说等人 && !open.length) {
       die(`交接里写着「等他定」这类话，可看板上这条切片（${s.slice ?? '—'}）一件没答的问题都没有。\n` +
         `先把它们挂上去，交接才写得出谁在等什么：\n` +
         `  node tools/scene.js ${args[0]} ask "<问题>" --who 开发指挥 --doing "<在做什么>" --context "<上下文>" --options "甲：…|乙：…" --lean "<偏向>" --confidence 中\n` +
         `写成散文的等于不存在——第二天接手的人会照着往下派。真要这么写：末尾加 --散文也行。`)
     }
     if (open.length) console.log(`  交接里这条切片有 ${open.length} 件等他答：${open.map((q) => q.id).join('、')}（看板上有，接手的人看得见）`)
-    if (todo) console.log(`  报告里还有 ${todo} 件等他按（审模型页 / 审代码页上看得见）`)
   }
   const now = new Date().toISOString()
   writeScene({
@@ -421,33 +398,17 @@ if (cmd === 'dispatch') {
   if (!who || !ROLES.includes(who)) die(`用法：scene dispatch <项目> <角色> "<派了什么活>"；角色名：${ROLES.join('、')}`)
   if (!text) die('要写派了什么活，一句')
   const s = readScene()
-  // 上游有待定，下游不开工（第一百七十八批）。业务这一关没定就别派模型及其下游；
-  // 业务侧那几个角色照派——把问题问清楚、把语句立好本来就是他们的活。
-  // 分身只读、不写任何工件，业务定没定都拦不着它（第一百八十批）
-  // 预演有两个时机（第一百九十八批）：**探路**在业务之前——一句话的想法就能起页面，用来把业务问出来，
-  // 所以它跟业务侧那几个一样，业务没定也派得出去；**验证**那一趟本来就在业务 done 之后，这道门拦不着它。
-  // 真正拦人的是它自己那道门：预演没按过，模型师开不了工（slice.js 的 demoGate、本文件下面那一段）。
-  const 业务侧 = ['业务分析', '讲解', '文职', '分身', '预演']
-  const bs = s.slice ? businessStatusOf(s.slice) : 'done'
+  // 场景没定、或还有问题没答，就不派模型师、编码、审查：照着没定的东西做，多半要重来
+  const 不拦 = ['业务分析', '文职', '分身', '人', '开发指挥']
+  const ss = s.slice ? sceneStatusOf(s.slice) : 'done'
   const open = openQuestionsOf(s, s.slice)
   const 硬派 = args.indexOf('--带着问题派')
-  if (!业务侧.includes(who) && (bs !== 'done' || open.length) && 硬派 < 0) {
-    die(`⛔ ${s.slice ?? '当前切片'} 的业务这一关是「${bs}」${open.length ? `，还有 ${open.length} 件等他答` : ''}，先不派${who}。\n` +
+  if (!不拦.includes(who) && (ss !== 'done' || open.length) && 硬派 < 0) {
+    die(`⛔ ${s.slice ?? '当前切片'} ${ss !== 'done' ? '的场景还没定下' : ''}${open.length ? `还有 ${open.length} 件等他答` : ''}，先不派${who}。\n` +
       open.map((q) => `   ${q.id}　${q.question}`).join('\n') + (open.length ? '\n' : '') +
-      `调用顺序是业务 → 模型：上游没定，下游做出来的多半要重来（2026-09-20 就重来过一趟）。\n` +
-      `  人答了：node tools/scene.js ${args[0]} answer <问题号> "<他怎么答的>"\n` +
-      `  业务定了：node tools/slice.js advance <项目> ${s.slice ?? '<切片>'} business done\n` +
+      `  他答了：node tools/scene.js ${args[0]} answer <问题号> "<他怎么答的>"\n` +
+      `  场景定了：node tools/slice.js advance <项目> ${s.slice ?? '<切片>'} scene done\n` +
       `  确实挡不住这一趟：末尾加 --带着问题派 "<为什么这几条不影响它>"，理由会记进日志。`)
-  }
-  // 演示原型这道门（第一百九十四批）：有走查步骤的段落与模块切片上，模型师要等他按过「演示的逻辑对了」
-  if (who === '模型师' && s.slice && 硬派 < 0) {
-    const d = require('./lib/project').demoState(root, s.slice)
-    if (d.applies && !d.done) {
-      die(`⛔ ${s.slice} 的演示这一道门还没过${d.hasPages ? `：页面在 ${d.dir}/，等他在「切片」页按「演示的逻辑对了」` : `：原型还没出静态演示到 ${d.dir}/`}，先不派模型师。\n` +
-        `  业务定了先把操作摆出来给他按，逻辑定了模型再开工（第一百九十四批）。\n` +
-        `  他按了：node tools/slice.js advance <项目> ${s.slice} demo done\n` +
-        `  确实挡不住这一趟：末尾加 --带着问题派 "<为什么>"，理由会记进日志。`)
-    }
   }
   const now = new Date().toISOString()
   const 硬派理由 = 硬派 >= 0 ? (args[硬派 + 1] ?? '') : null
@@ -470,22 +431,20 @@ if (cmd === 'dispatch') {
     : `  细步：node tools/scene.js ${args[0]} progress ${who} "<一句：做了什么，具体到名字、从什么到什么>"
   交回：node tools/scene.js ${args[0]} back ${who} "<交回摘要，一句>"　　二十行以内`
   console.log(`
-  ——————— 提示骨架，改完直接用（第一百七十六、一百七十八、一百八十一批）———————
+  ——————— 提示骨架，改完直接用 ———————
   先跑：${briefTip}
   然后：
 
   你是 dev-team 的「${who}」。你的规矩在 <上面那个路径>，先用 Read 整份读一遍（一次读完，别分段）。${是分身 ? '\n  （只读、不写、不派人、不跑 git；交回二十行以内，只给结论与佐证的位置。）' : ''}
 
   项目目录：<绝对路径>        dev-team 目录：<绝对路径>（下称 $DEV_TEAM）
-  切片：${s.slice ?? '<id>'}（标题；scope；traces）
+  切片：${s.slice ?? '<id>'}（标题；场景；挂着的语句）
   任务：${text}
 
   ★ 你已经知道、别让它去查的：<现成的格式、一条样例、文件在哪一行、裁定原文、上一趟的结论、数字>
-    ——这一栏只装**事实**：它自己核得了的那些。这一栏空着就别发。2026-09-20 一句「照词汇表里现有
-    错误的写法定」让角色花了 12 轮考古，贴一条现成词条只要 300 个 token。
+    ——这一栏只装**事实**：它自己核得了的那些。这一栏空着就别发。
     ⛔ 这一栏里不许出现**判断**：语句该怎么写、判哪一层哪个种类、选项有哪几个、你偏向哪个——那些它
-    只能信，不能核。要它自己看、自己判的那些别贴，那种轮数省不得（第一百八十一批；三次越界有两次
-    就发生在这张骨架上）。
+    只能信，不能核。要它自己看、自己判的那些别贴。
 
 ${记法}
   ————————————————————————————————————————`)
@@ -503,7 +462,7 @@ if (cmd === 'back') {
   // 这一趟从哪次派工算起：同一角色最近一次 dispatch，且它后面还没有 back
   let start = null, already = null
   for (let i = all.length - 1; i >= 0; i--) { const e = all[i]; if (e.who !== who) continue; if (e.kind === 'back') { already = e; break } if (e.kind === 'dispatch') { start = e; break } }
-  // 角色自己交回过、开发指挥又补记一次：从前会在日志里多出一条没有派工可配的假记录（第一百七十二批）
+  // 角色自己交回过、开发指挥又补记一次：从前会在日志里多出一条没有派工可配的假记录
   if (!start && already) {
     console.log(`这一趟 ${who} 已经交回过了（${already.ts.slice(11, 16)}「${String(already.text).slice(0, 30)}」），不再记一条。`)
     console.log('要补充的话，写进交接或裁定；真要再记一条，先 scene dispatch 起一趟新的。')
@@ -512,7 +471,7 @@ if (cmd === 'back') {
   const num = (k) => (opt(k) != null && /^[0-9]+$/.test(opt(k)) ? Number(opt(k)) : null)
   const elapsedMs = start ? new Date(now).getTime() - new Date(start.ts).getTime() : null
   const steps = start ? all.filter((e) => e.kind === 'progress' && e.who === who && e.ts > start.ts).length : null
-  // 交回多长（第一百八十二批）：规矩是二十行以内，从前只靠开发指挥在派工提示里写一句，没人量。
+  // 交回多长：规矩是二十行以内，从前只靠开发指挥在派工提示里写一句，没人量。
   // 摘要本身有几行就数几行；角色交回的正文只有开发指挥看得见，它用 --交回行数 报上来。
   const 行数 = num('--交回行数') ?? String(text).split('\n').length
   journal({ ts: now, kind: 'back', who, slice: s.slice, phase: s.phase, text, outcome: opt('--outcome', '交回'), tokens: num('--tokens'), tools: num('--tools'), ms: num('--ms'), elapsedMs, steps, 交回行数: 行数, dispatchedAt: start?.ts ?? null })
@@ -587,10 +546,9 @@ function textView() {
   }
   if (s.handoff) { L.push(`交接（${s.handoff.machine}，${ago(s.handoff.at)}前）　${s.handoff.text}`); L.push('') }
   if (cur) {
-    if (cur.line) L.push(`故事线　${cur.line}`)
-    L.push(`段落　　${cur.title}（${cur.id}）`)
-    if (cur.intent) L.push(`意图　　${cur.intent}`)
-    L.push(`范围　　${cur.modules.join('、') || '（未定）'}　·　故事 ${cur.steps} 步${cur.dark ? `，其中 ${cur.dark} 步待点亮` : ''}　·　编号 ${cur.traces} 条`)
+    L.push(`切片　　${cur.title}（${cur.id}）`)
+    if (cur.scene) L.push(`场景　　${cur.scene}`)
+    L.push(`范围　　${cur.modules.join('、') || '（未定）'}　·　语句 ${cur.traces} 条　·　${cur.stages.map(([n, st]) => n + ' ' + st).join(' · ')}`)
   }
   L.push(`阶段　　${s.phase ?? '—'}`)
   L.push(`这一步　${s.step ?? '—'}`)
@@ -681,7 +639,7 @@ function hm(iso){var d=new Date(iso),p=function(n){return String(n).padStart(2,'
 function mdhm(iso){var d=new Date(iso),p=function(n){return String(n).padStart(2,'0')};return p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())}
 function ago(iso){if(!iso)return '';const m=Math.floor((Date.now()-new Date(iso).getTime())/60000);if(m<1)return '刚刚';if(m<60)return m+' 分钟';const h=Math.floor(m/60);return h<24?h+' 小时':Math.floor(h/24)+' 天'}
 function esc(x){return String(x==null?'':x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-const PHASES=['业务','模型','编码','校验']
+const PHASES=['场景','模型','草稿原型','一起按','正式化']
 function stageTag(s){if(s==='done')return '<span class="tag done">完</span>';if(s==='in-progress')return '<span class="tag now">在做</span>';return '<span class="tag">待</span>'}
 function render(d){
   const s=d.scene,cur=d.slices.find(x=>x.id===s.slice)
@@ -701,31 +659,19 @@ function render(d){
     h+='<div class="meta" style="margin-top:8px"><div class="k">偏向</div><div>'+esc(q.lean)+' <span class="dim">· 信心'+esc(q.confidence)+'</span>'
       +(q.wentAhead?' <span class="dim">· 你不在，已经照这个先做下去了，你选别的就要返工</span>':'')+'</div></div>'
     // 现场页只把问题亮出来；两种模式都给出「等你答」那一页的路——逐个模式下开发指挥会在对话里端给你，
-    // 但你想点着答也随时点得到（第一百七十五批）
+    // 但你想点着答也随时点得到
     h+='<div class="how">'+(mode==='问卷'
       ? '现在是问卷模式：这些攒着等你，<a href="/questions" target="_top" style="color:var(--ok)">去「等你答」那一页</a>一口气答完。'
       : '现在是逐个模式：开发指挥会在 Claude Code 的对话里把这个问题端给你；想点着答就<a href="/questions" target="_top" style="color:var(--ok)">去「等你答」那一页</a>。')+'</div>'
     h+='</div>'
   }
 
-  // 业务这一关卡在几件上：这条切片不把它们清空，模型师就不该开工（第一百七十八批）。
-  // 从前只有命令行的 slice pending 看得见——只能在命令行跑的关卡，对他等于不存在。
-  const bk=(d.blockers||[]).filter(b=>b.blocking)
-  if(bk.length){
-    const kinds=['等人答','没裁的卡','候选修改'].map(k=>[k,bk.filter(b=>b.kind===k).length]).filter(x=>x[1])
-    h+='<div class="warn" style="margin-bottom:14px"><b>'+esc(s.slice||'这条切片')+' 的业务这一关卡在 '+bk.length+' 件上</b>　<span class="dim">'
-      +kinds.map(x=>x[1]+' 件'+x[0]).join('、')+'　·　清空了模型才开工</span>'
-      +'<div class="prog" style="margin-top:8px">'+bk.map(b=>'<div><span class="r">'+esc(b.kind)+'</span><span>'+(b.id?'<b>'+esc(b.id)+'</b>　':'')+esc(b.text)+'</span></div>').join('')+'</div></div>'
-  }
-
   if(s.handoff)h+='<div class="card"><div class="row"><div class="k">交接</div><div class="v"><div class="hand">'+esc(s.handoff.text)+'</div><span class="dim">'+esc(s.handoff.machine||'')+' · '+ago(s.handoff.at)+'前'+(s.handoff.slice?' · '+esc(s.handoff.slice):'')+'</span></div></div></div>'
   h+='<div class="card">'
   if(cur){
-    if(cur.line)h+='<div class="row"><div class="k">故事线</div><div class="v">'+esc(cur.line)+'</div></div>'
-    h+='<div class="row"><div class="k">段落</div><div class="v big">'+esc(cur.title)+' <span class="dim" style="font-size:14px;font-weight:400">'+esc(cur.id)+'</span></div></div>'
-    if(cur.intent)h+='<div class="row"><div class="k">意图</div><div class="v">'+esc(cur.intent)+'</div></div>'
-    h+='<div class="row"><div class="k">范围</div><div class="v">'+(cur.modules.length?esc(cur.modules.join('、')):'<span class="dim">未定</span>')
-      +' <span class="dim">· 故事 '+cur.steps+' 步'+(cur.dark?'，其中 <b style="color:var(--warn)">'+cur.dark+' 步待点亮</b>':'')+' · 编号 '+cur.traces+' 条</span></div></div>'
+    h+='<div class="row"><div class="k">切片</div><div class="v big">'+esc(cur.title)+' <span class="dim" style="font-size:14px;font-weight:400">'+esc(cur.id)+'</span></div></div>'
+    if(cur.scene)h+='<div class="row"><div class="k">场景</div><div class="v">'+esc(cur.scene)+'</div></div>'
+    h+='<div class="row"><div class="k">范围</div><div class="v">'+(cur.modules.length?esc(cur.modules.join('、')):'<span class="dim">未定</span>')+' <span class="dim">· 语句 '+cur.traces+' 条</span></div></div>'
   }else{h+='<div class="empty">还没有指到哪一段（<code>scene set --slice …</code>）</div>'}
   h+='</div>'
 
@@ -739,13 +685,10 @@ function render(d){
   if(pg.length)h+='<div class="row"><div class="k">细步</div><div class="v"><div class="prog">'+pg.map(function(e){return '<div><span class="t">'+esc(hm(e.ts))+'</span><span class="r">'+esc(e.who||'—')+'</span><span>'+esc(e.text)+'</span></div>'}).join('')+'</div></div></div>'
   h+='</div>'
 
-  const line=cur&&cur.line?d.slices.filter(x=>x.line===cur.line):d.slices
-  h+='<div class="card"><table><tr><th>段落</th><th>范围</th><th>故事</th><th>业务</th><th>模型</th><th>编码</th><th>校验</th></tr>'
-  h+=line.map(x=>'<tr'+(x.id===s.slice?' class="cur"':'')+'><td><b>'+esc(x.title)+'</b><div class="dim">'+esc(x.id)+(x.intent?' · '+esc(x.intent):'')+'</div></td>'
+  h+='<div class="card"><table><tr><th>切片</th><th>范围</th><th>走到哪</th></tr>'
+  h+=d.slices.map(x=>'<tr'+(x.id===s.slice?' class="cur"':'')+'><td><b>'+esc(x.title)+'</b><div class="dim">'+esc(x.id)+(x.scene?' · '+esc(x.scene):'')+'</div></td>'
     +'<td class="dim">'+esc(x.modules.join('、'))+'</td>'
-    +'<td>'+(x.steps?(x.approved?'<span class="tag done">一致</span>':(x.dark?'<span class="tag">'+x.dark+' 步待点亮</span>':'<span class="tag now">'+x.steps+' 步</span>')):'<span class="tag">待写</span>')+'</td>'
-    +'<td>'+(x.stages.business?stageTag(x.stages.business.status):'<span class="dim">—</span>')+'</td>'
-    +'<td>'+stageTag(x.stages.model&&x.stages.model.status)+'</td><td>'+stageTag(x.stages.code&&x.stages.code.status)+'</td><td>'+stageTag(x.stages.validate&&x.stages.validate.status)+'</td></tr>').join('')
+    +'<td>'+x.stages.map(function(p){return '<span class="dim">'+esc(p[0])+'</span> '+stageTag(p[1])}).join(' ')+'</td></tr>').join('')
   h+='</table></div>'
 
   const tl=(s.timeline||[]).slice().reverse().slice(0,14)
@@ -935,10 +878,7 @@ function listen(port, tries = 12) {
     if (req.url.startsWith('/data')) {
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
       const sc = readScene()
-      // 业务这一关上还摆着的那几件，跟 slice pending、工作台顶栏读同一个函数（第一百八十二批）。
-      // 这一关收口了就不摆——剩下的那些是别处的活，挂在它名下这个数就说假话了
-      const blockers = sc.slice && businessStatusOf(sc.slice) !== 'done' ? require('./lib/project').businessBlockers(root, sc.slice, sc) : []
-      return res.end(JSON.stringify({ scene: sc, slices: slices(), machine: ME, warning: machineWarning(sc), blockers }))
+      return res.end(JSON.stringify({ scene: sc, slices: slices(), machine: ME, warning: machineWarning(sc) }))
     }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
     res.end(PAGE)

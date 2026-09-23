@@ -1,233 +1,103 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:dev-team:slice",
-  "title": "slices/<id>.json — 切片记录",
+  "title": "slices/<id>.json — 切片记录：场景（s-xxx）或正式化（f-xxx）",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "id",
-    "title",
     "kind",
-    "codebase",
-    "scope",
-    "traces",
+    "title",
     "stages",
     "log"
   ],
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^[skm]-[0-9]{3,}$",
-      "description": "s-xxx：段落 / 实现 / 改说法切片；k-xxx：模块切片（第九十七批）；m-xxx：修改切片（第八十六批）"
+      "pattern": "^[sf]-[0-9]{3,}$",
+      "description": "s-xxx 场景；f-xxx 正式化"
+    },
+    "kind": {
+      "enum": [
+        "scene",
+        "formalize"
+      ]
     },
     "title": {
       "type": "string",
       "minLength": 1
     },
-    "pass": {
-      "enum": [
-        "骨架",
-        "行为"
+    "scene": {
+      "type": [
+        "string",
+        "null"
       ],
-      "description": "模块切片走到哪一步（第九十七批，seed/slices.md「模型怎么建」）：骨架＝骨架初稿，一次起草这个模块全部主要聚合、实体、值对象的字段与类型，不带守卫、不建 error 与 event，允许不准，项目所有者看模型图定；行为＝业务走查，讲解出场景、模型师拿初稿走、给聚合补方法、不变量、领域服务、error，过程中改精聚合。只有模块切片有这个字段"
+      "description": "场景本身：谁、按什么、然后发生什么，三四句"
     },
-    "protoGo": {
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "traces": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "这一段立了、挂上了哪几条业务语句"
+    },
+    "covers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^s-[0-9]{3,}$"
+      },
+      "description": "正式化这一批装哪几个场景"
+    },
+    "batch": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "at"
-      ],
       "properties": {
         "at": {
           "type": "string"
         },
         "note": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lit": {
+          "type": "boolean"
         }
       },
-      "description": "出原型这道门（第九十七批）：段落切片的模型确认之后，项目所有者看过整个模型、说了「出原型」，slice proto-go 记在这里；没有它 plan build 不算计划"
-    },
-    "kind": {
-      "enum": [
-        "initial",
-        "increment",
-        "story",
-        "module",
-        "implementation",
-        "refactor",
-        "change"
-      ],
-      "description": "module：模块切片（编号 k-xxx，第九十七批）——一个模块的模型：骨架初稿（一次起草全部主要聚合、实体、值对象，允许不准）→ 业务走查长出聚合行为；只有业务与模型，不写代码，代码由段落切片在应用层带出来；initial / increment：老式按主题的切片；story：建模切片（一条故事，到模型确认为止，不编码）；implementation：实现切片（若干条已确认的故事的模型 → 代码）；refactor：只改说法或结构、一个字的业务行为都不变（改名、挪位置）。refactor 没有业务意图，所以不走故事、不走裁定卡、也不算编码计划——它的门禁是「测试照旧全绿 + 把改名套在改前的解码结果上与改后逐字节一致」（tools/rename-check.js），不是跟模型 0 差异。见 seed/slices.md「开发范围怎么切」；change：修改切片（编号 m-xxx）——已走通的段落上，原型、审阅或裁定点出的一件事要改（业务行为或模型结构，不是改说法）；先记候选、当前段落收口后再开，一个只改一件事，周期见 seed/slices.md「修改切片」"
-    },
-    "codebase": {
-      "type": "string",
-      "minLength": 1,
-      "description": "代码库路径，相对于项目目录"
-    },
-    "scope": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "modules",
-        "aggregates",
-        "useCases"
-      ],
-      "properties": {
-        "modules": {
-          "type": "array",
-          "items": {
-            "$ref": "urn:dev-team:common#/$defs/modelName"
-          },
-          "uniqueItems": true
-        },
-        "aggregates": {
-          "type": "array",
-          "items": {
-            "$ref": "urn:dev-team:common#/$defs/qualifiedName"
-          },
-          "uniqueItems": true
-        },
-        "useCases": {
-          "type": "array",
-          "items": {
-            "$ref": "urn:dev-team:common#/$defs/qualifiedName"
-          },
-          "uniqueItems": true
-        }
-      }
-    },
-    "traces": {
-      "$ref": "urn:dev-team:common#/$defs/traces"
+      "description": "一次按下来攒成的一批答案；lit 为真＝已经立成语句"
     },
     "stages": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "business",
-        "model",
-        "code",
-        "validate"
-      ],
       "properties": {
-        "demo": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "status",
-            "confirmedAt"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/$defs/status"
-            },
-            "confirmedAt": {
-              "$ref": "#/$defs/dateOrNull"
-            },
-            "note": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "description": "演示这一道门（第一百九十四批）：业务定了之后、模型师开工之前，原型出最终前端的 HTML 版（一个 mock 产品，整个项目共用）到 demo/，人在工作台「演示」页按着走一遍、在「切片」页按「演示的逻辑对了」。只有带故事步骤的段落切片与模块切片要它；没有这一栏当 pending。"
-        },
-        "business": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "status",
-            "confirmedAt"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/$defs/status"
-            },
-            "confirmedAt": {
-              "$ref": "#/$defs/dateOrNull"
-            },
-            "note": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "这一关收口时开发指挥写的一句：范围内的语句是哪几条、有没有绕过没答的问题、绕过的理由"
-            }
-          },
-          "description": "业务这一关：这条切片范围内的业务语句都立好／改好了，且看板上这条切片没有等人答的问题。模型这一关要它 done 才开工——调用顺序是业务 → 模型，上游有待定的事项，模型师不开工（第一百七十八批）。模块切片由 slice lit 登记编号时置 done；段落切片由人在工作台「切片」页按「这一段的业务定了」（故事点亮完那道门就出现）；修改切片要开发指挥按 slice advance <id> business done"
+        "scene": {
+          "$ref": "#/$defs/stage"
         },
         "model": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "status",
-            "confirmedAt"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/$defs/status"
-            },
-            "confirmedAt": {
-              "$ref": "#/$defs/dateOrNull"
-            },
-            "baseline": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "模型阶段开工（in-progress）时的 git 提交；model-delta 以它为基线算这一段的增量"
-            },
-            "litAt": {
-              "type": "string",
-              "description": "模块切片（第九十七批）：业务分析模块点亮完、开发指挥 slice lit 登记编号的日期；有它模型师才起草骨架初稿"
-            },
-            "proofreadAt": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "文职总校完的日期（slice proofread）；段落切片里文职只跑这一趟，排在校验角色填判断之前（第八十九批）"
-            }
-          }
+          "$ref": "#/$defs/stage"
+        },
+        "draft": {
+          "$ref": "#/$defs/stage"
+        },
+        "walk": {
+          "$ref": "#/$defs/stage"
         },
         "code": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "status",
-            "at"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/$defs/status"
-            },
-            "at": {
-              "$ref": "#/$defs/dateOrNull"
-            }
-          }
+          "$ref": "#/$defs/stage"
         },
-        "validate": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "status",
-            "decodedVersion",
-            "reportAt"
-          ],
-          "properties": {
-            "status": {
-              "$ref": "#/$defs/status"
-            },
-            "decodedVersion": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "reportAt": {
-              "$ref": "#/$defs/dateOrNull"
-            }
-          }
+        "check": {
+          "$ref": "#/$defs/stage"
+        },
+        "accept": {
+          "$ref": "#/$defs/stage"
         }
       }
     },
@@ -237,136 +107,64 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "ts",
-          "stage",
+          "at",
           "text"
         ],
         "properties": {
-          "ts": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"
-          },
-          "stage": {
-            "enum": [
-              "slice",
-              "business",
-              "model",
-              "plan",
-              "contracts",
-              "code",
-              "validate",
-              "pre-pr"
-            ],
-            "description": "plan：编码计划；contracts：接口契约；pre-pr：代码审查"
+          "at": {
+            "type": "string"
           },
           "text": {
-            "type": "string",
-            "minLength": 1
+            "type": "string"
           }
         }
       }
     },
-    "stories": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "pattern": "^s-[0-9]{3,}$"
-      },
-      "uniqueItems": true,
-      "description": "实现切片：它实现哪几条故事（建模切片）的模型"
-    },
-    "archived": {
-      "type": "object",
-      "description": "这条切片按裁定归档、不再推进：它仍是记录（战略设计、当时的裁定），但不该再出现在「下一步该谁上场」里",
-      "properties": {
-        "ts": {
-          "type": "string"
-        },
-        "reason": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "ts",
-        "reason"
-      ],
-      "additionalProperties": false
-    },
-    "intent": {
-      "type": "string",
-      "minLength": 1,
-      "description": "这一段的**单一业务意图**，一句话。写不出一句话，就是不止一个意图——那要再切。见 seed/slices.md「开发范围怎么切」"
-    },
-    "businessStory": {
-      "type": "string",
-      "minLength": 1,
-      "description": "它是哪条**业务故事**（完整故事链）里的一个段落。故事链允许多意图混合，段落不允许。衔接只写一句上下文，不在本段展开"
-    },
     "backgroundTraces": {
       "type": "array",
-      "description": "本段只作背景的业务语句：故事里讲到它，但它的落点要等后面的段落（那时有对应的动作）。校验器不因它没有落点报错，报告里单列，免得忘。",
+      "description": "本段用得到、却落不到本段模型里的语句：只作背景，校验单列",
       "items": {
         "type": "object",
-        "additionalProperties": false,
         "required": [
           "id",
           "why"
         ],
         "properties": {
           "id": {
-            "type": "string",
-            "description": "业务语句编号"
+            "type": "string"
           },
           "why": {
-            "type": "string",
-            "description": "为什么本段落不了：缺哪个动作、等哪一段"
+            "type": "string"
           }
         }
       }
-    },
-    "origin": {
-      "type": "string",
-      "minLength": 1,
-      "description": "修改切片：这件事是谁在哪儿点出来的（试原型页 / 审阅页 / 裁定第几批）"
-    },
-    "touches": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "pattern": "^[skm]-[0-9]{3,}$"
-      },
-      "uniqueItems": true,
-      "description": "这条修改切片动到哪几条切片：段落 s-xxx（收口前人要在原型上重走）或模块切片 k-xxx（模型要重审）。第一百七十四批起也认 k-xxx：k-002 走查点出的洞，改的可能是 k-001 建的那一片模型"
-    },
-    "candidate": {
-      "type": "integer",
-      "minimum": 1,
-      "description": "修改切片：从 slices/_candidates.json 的第几号候选开出来的"
-    },
-    "blockBaseline": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{8}$"
-      },
-      "description": "修改切片开工那一刻，模块里每块方法的指纹（validate --记基线 记下来）。审模型页照它认哪几块是这条切片动的：指纹跟基线一样就是没动过，不摆给人看。没有这一栏就整个模块都摆出来——m-004 上 67 块只动了 9 块（第一百七十五批）"
     }
   },
   "$defs": {
-    "status": {
-      "enum": [
-        "pending",
-        "in-progress",
-        "done"
-      ]
-    },
-    "dateOrNull": {
-      "type": [
-        "string",
-        "null"
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
       ],
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "in-progress",
+            "done"
+          ]
+        },
+        "at": {
+          "type": "string"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     }
   }
 }

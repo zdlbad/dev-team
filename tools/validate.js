@@ -1,11 +1,8 @@
 #!/usr/bin/env node
 /**
- * 校验器。依据 agents/model/validation.md。
+ * 校验器：机械检查业务对模型（方向 ①）、代码对模型（方向 ②）；判断项留给审查角色填。
  *
  * 用法：node tools/validate.js <项目目录> [--code <代码库目录>] [--slice <切片id>]
- *       node tools/validate.js <项目目录> --slice <m-xxx> --记基线
- *           修改切片开工前记一道方法块基线：把这一刻模块里每块方法的指纹存进切片记录。
- *           之后审模型页只摆指纹跟基线对不上的那几块——这条切片动过的——不再把整个模块摊给他看。
  *   方向 ①（模型 ↔ 业务描述）总是执行；带 --code 时执行方向 ②（解码代码并与模型比对）。
  * 输出：reports/validate-1.json/.md、reports/validate-2.json/.md（每方向只留最新一份）。
  * 退出码：0 干净；1 不干净；2 用法或前置错误。
@@ -23,26 +20,8 @@ const codeIdx = args.indexOf('--code')
 const codebase = codeIdx >= 0 ? path.resolve(args[codeIdx + 1]) : null
 const sliceIdx = args.indexOf('--slice')
 const sliceId = sliceIdx >= 0 ? args[sliceIdx + 1] : null
-// 纯改名之后重新定基：给它一份「新说法 → 旧说法」的对照（JSON 文件），它反着换回去，
-// 换出来的文字与当初人裁的那一段一字不差，才把指纹重算；证不出来的一律留着过期、由人重裁。
-const rebaseIdx = args.indexOf('--重新定基')
-const rebaseFile = rebaseIdx >= 0 ? args[rebaseIdx + 1] : null
-const whyIdx = args.indexOf('--说明')
-const rebaseWhy = whyIdx >= 0 ? args[whyIdx + 1] : null
-// 正常跑那一趟也能带这份对照：上一份报告里已经填好的判断，文字只因改名而变的照样接过来
-const renameIdx = args.indexOf('--改名')
-const renameFile = renameIdx >= 0 ? args[renameIdx + 1] : (rebaseFile ?? null)
-/** 把新说法反着换回旧说法；没给对照就原样返回 */
-const unrename = (() => {
-  if (!renameFile) return null
-  let pairs
-  try { pairs = JSON.parse(fs.readFileSync(path.resolve(renameFile), 'utf8')) } catch { return null }
-  const keys = Object.keys(pairs).sort((a, b) => b.length - a.length) // 长的先换，免得「录入花费」被「录入」先切开
-  return (t) => applyWordMap(t, pairs, keys)
-})()
 if (!root || !fs.existsSync(path.join(root, 'model'))) {
   console.error('用法：node tools/validate.js <项目目录> [--code <代码库目录>] [--slice <切片id>]')
-  console.error('　　　　重新定基：node tools/validate.js <项目目录> --重新定基 <rename-map.json> --说明 "第几批只改了名字、换的是哪几个说法"')
   process.exit(2)
 }
 const devTeam = path.resolve(__dirname, '..')
@@ -115,85 +94,26 @@ const GUIDES = {
 function makeReport(direction) {
   return { direction, project: root, slice: sliceId, at: new Date().toISOString(), decodedVersion: null, guides: GUIDES, errors: [], warnings: [], confirms: [], judgments: [], decided: [], blindSpots: [], conclusion: null }
 }
-const decisions = [] // 全部模型文件的 decisions[]
-const decFile = new Map() // 每一条裁决出自哪个文件（重新定基时要写回去）
-const staleSeen = [] // 这一趟遇到的过期裁决：{ dec, text }
-const readOnly = args.includes('--只看') // 第一百七十批：只报错误与警告，不重写报告
-const decStats = { 问过: 0, 压根没人裁过: 0, 指纹对上: 0, 挪位对上: 0, 没带指纹就认了: 0, 过期: 0 }
-/** 裁决对象的指纹：文字变了裁决即过期 */
-/** 按模型看：人点「写得对」记进 decisions[] 时用的检查项名 */
-const BLOCK_CHECK = '方法写得对不对'
+const readOnly = args.includes('--只看') // 角色跑校验只看自己改出没改出毛病，不重写报告
 function fingerprint(text) {
   return require('node:crypto').createHash('sha1').update(String(text ?? '')).digest('hex').slice(0, 8)
 }
-function decidedFor(target, check, text, siblingFps) {
-  decStats.问过++
-  // 只认人裁的。角色自己记的理由留在文件里备查，但不能替人把这一条盖过去。
-  let mine = decisions.filter((d) => d.target === target && d.check === check && d.by !== 'role')
-  const fp = fingerprint(text)
-  // 同一个目标名下可能有好几条（一个聚合根的多条聚合级不变量 target 都一样）：
-  // 先认指纹对得上自己这段文字的那一条，认不到再退回没带指纹的那条。
-  const byFp = mine.find((x) => x.on === fp)
-  if (byFp) { decStats.指纹对上++; return byFp }
-  // 步骤类目标（…#steps.N）的裁决按下标挂着；中间插一步或重排，下标全体错位。
-  // 文字一个字没变的那一步，它的裁决在同一个处理器的别的下标上——按指纹认回来，不再问第二遍。
-  const m = /^(.*)#steps\.\d+$/.exec(target)
-  if (m) {
-    const moved = decisions.find((d) => d.check === check && d.by !== 'role' && d.on === fp && d.target !== target && d.target.startsWith(m[1] + '#steps.'))
-    if (moved) { decStats.挪位对上++; return { ...moved, target } }
-    // 挂在这个下标上、指纹却对得上别的一步现在的文字的，是别人的裁决——不拿来当这一步的「上次裁决」，那只会把人看糊涂
-    if (siblingFps) mine = mine.filter((d) => !d.on || !siblingFps.has(d.on))
-  }
-  if (!mine.length) { decStats.压根没人裁过++; return null }
-  // 老裁决没带指纹：认不出它是对着哪一版文字裁的，只能照认
-  const noFp = mine.find((x) => !x.on)
-  if (noFp) { decStats.没带指纹就认了++; return noFp }
-  // 有人裁过，但裁的是另一版文字——这是**过期**，不是「没人裁过」。
-  // 当成没人裁过会把人拍过的板悄悄丢掉：同一件事再问一遍，而没人知道它问过。
-  // 同一个目标名下裁过好几次的，拿最近那一次当作过期的那一条。
-  decStats.过期++
-  const latest = mine.slice().sort((a, b) => String(a.at ?? "").localeCompare(String(b.at ?? ""))).pop()
-  staleSeen.push({ dec: latest, text })
-  return { ...latest, stale: true }
-}
 function add(report, level, check, target, text, extra = {}) {
   const item = { check, target, text, on: fingerprint(text), ...extra }
-  const d = decidedFor(target, check, text)
-  if (d?.stale) item.staleDecision = { verdict: d.verdict, note: d.note, at: d.at }
-  // 覆盖类是「范围」问题，范围由人裁定，所以它的错误可被裁决抑制；
-  // 结构类错误（解析失败、追溯不存在、调用无法解析、比对差异等）不可抑制，必须修。
-  const dismissible = level !== 'error' || check.startsWith('coverage.')
-  if (d && !d.stale && dismissible) {
-    report.decided.push({ ...item, verdict: d.verdict, note: d.note, at: d.at })
-    return
-  }
   if (level === 'error') report.errors.push(item)
   else if (level === 'warning') report.warnings.push(item)
   else report.confirms.push(item)
 }
 function judge(report, check, target, sides, importance, related, extra = {}) {
-  const on = fingerprint(sides.model)
-  const d = decidedFor(target, check, sides.model, extra.siblings)
-  const item = { target, check, sides, verdict: null, importance, confidence: null, reason: '', on }
+  const item = { target, check, sides, verdict: null, importance, confidence: null, reason: '', on: fingerprint(sides.model) }
   if (related) item.related = related
-  if (extra.context) item.context = extra.context // 这一条在哪个命令的第几步：给人读的，不参与指纹与判断键
-  if (extra.ask) item.ask = extra.ask // 针对这一条的具体问题（给人读的；check 仍是类别，作指南与裁决的键）
-  if (d?.stale) item.staleDecision = extra.reordered
-    ? { at: d.at, reordered: true } // 这个处理器的步骤重排过：挂在这个下标上的旧裁决多半讲的是别的一步，旧说明不摆出来把人看糊涂
-    : { verdict: d.verdict, note: d.note, at: d.at }
-  if (d && !d.stale) {
-    report.decided.push({ check, target, text: sides.model, verdict: d.verdict, note: d.note, at: d.at })
-    return
-  }
+  if (extra.context) item.context = extra.context // 这一条在哪个命令的第几步：给人读的，不参与判断键
+  if (extra.ask) item.ask = extra.ask
   report.judgments.push(item)
 }
-
 // ---------- 加载 ----------
 const project = loadProject(root)
 const { business, glossary, model } = project
-for (const el of model.elements) for (const d of el.data?.decisions ?? []) { decisions.push(d); decFile.set(d, el.file) }
-for (const mf of model.moduleFiles) for (const d of mf.data.decisions ?? []) { decisions.push(d); decFile.set(d, mf.file) }
-for (const d of model.modules?.data.decisions ?? []) { decisions.push(d); decFile.set(d, model.modules.file) }
 
 const byId = new Map(business.map((s) => [s.id, s]))
 // 切片范围：切片记录里 traces 非空时，覆盖检查只针对范围内的业务语句。
@@ -201,10 +121,10 @@ const byId = new Map(business.map((s) => [s.id, s]))
 const sliceRec = sliceId ? (project.slices ?? []).map((s) => s.data).find((s) => s.id === sliceId) : null
 const scopeIds = sliceRec?.traces?.length ? new Set(sliceRec.traces) : null
 const inScope = (id) => !scopeIds || scopeIds.has(id)
-// 聚合粗版（module.json 的 aggregates / members / idRefs）是战略设计时人确认的路标，段落建到哪个聚合再细化哪个（seed/slices.md）。
+// 聚合粗版（module.json 的 aggregates / members / idRefs）是战略设计时人确认的路标，场景建到哪个聚合再细化哪个。
 // 带 --slice 时，切片 scope 之外还没建的聚合、成员、引用与范围外模块的空追溯不算错，记进 report.deferred 给人看个数。
-const scopeAggs = sliceRec?.scope?.aggregates?.length ? new Set(sliceRec.scope.aggregates) : null
-const scopeMods = sliceRec?.scope?.modules?.length ? new Set(sliceRec.scope.modules) : null
+const scopeAggs = null
+const scopeMods = sliceRec?.modules?.length ? new Set(sliceRec.modules) : null
 const qualify = (name, mod) => (name.includes('.') ? name : `${mod}.${name}`)
 const defer = (kind, target, text, report = r1) => { (report.deferred ??= []).push({ kind, target, text }) }
 // 方向 ②：解码比对里落在切片范围外的文件（别的模块、本段没建的聚合）不算错，记 deferred——和方向 ① 的粗版处理同一口径
@@ -279,21 +199,15 @@ for (const s of business) {
 }
 if (unlayered) add(r1, 'warning', 'label.unlayered', 'business/', `${unlayered} 条语句还没分层（老布局；按段落点亮时补标签、搬进 business/<Module>/abstraction.md 或 practice.md）`)
 
-// 模型分步建（第九十五、九十七批，seed/slices.md「模型怎么建」）：校验 ① 只查本步及之前该落的种类，还没到的种类不报错、单列「留给后面」。
-// 模块切片的骨架初稿只有字段，事实才有落点；业务走查加约束、公式、情形；段落切片（应用层，没有 pass）全查。
-const pass = sliceRec?.pass ?? '应用'
-// 第一百五十六批起骨架是薄的：只有聚合与一句说明、不写字段，这一步什么种类都还不落，全留给走查
-const PASS_KINDS = { 骨架: new Set(), 行为: new Set(['事实', '约束', '公式', '情形']), 应用: null }
-const NEXT_PASS = { 骨架: '业务走查', 行为: '应用层（段落切片）' }
-const passAllows = (kind) => !PASS_KINDS[pass] || !kind || PASS_KINDS[pass].has(kind)
-// 修改切片自己不建应用层（第一百八十四批：它只改已经建好的模块里的一件事），所以它点亮的能力
-// 跟模块切片走查遍一样，留给做应用层的那一段；已经建好的命令照样追溯得到，这里只管还没有的（第二百一十三批）
-const buildsAppLayer = pass === '应用' && sliceRec?.kind !== 'change'
+const pass = '应用'
+const NEXT_PASS = {}
+const passAllows = () => true
+const buildsAppLayer = true
 // 覆盖：能力 → 命令/查询（命令与查询是应用遍的东西）
 for (const g of goals) {
   const hit = [...commands, ...queries].some((e) => e.data.traces.includes(g.id))
   if (!hit) {
-    if (!buildsAppLayer) { defer('coverage.pass', g.id, `能力的落点是命令 / 查询，留给应用层的段落切片：${g.text}`); continue }
+    if (!buildsAppLayer) { defer('coverage.pass', g.id, `能力的落点是命令 / 查询，留给后面的场景：${g.text}`); continue }
     add(r1, 'error', 'coverage.goal', g.id, `能力没有任何命令或查询追溯：${g.text}`)
   }
 }
@@ -333,7 +247,7 @@ const pickText = (items, id, sep) => {
  */
 const tracedHere = (m, id) => (m.traces ?? []).includes(id) || (m.rules ?? []).some((r) => typeof r !== 'string' && (r.traces ?? []).includes(id))
   || (m.purpose?.traces ?? []).includes(id) || (m.steps ?? []).some((s) => (s.traces ?? []).includes(id))
-/** 第一百五十六批的写法：给校验看的原文带上作用与做法（每一步改哪几栏），它读得出方法到底做没做 */
+/** 给校验看的原文带上作用与做法（每一步改哪几栏），它读得出方法到底做没做 */
 const methodText = (m) => (m.purpose ? `作用：${m.purpose.text}　` : '')
   + ((m.steps ?? []).length && m.purpose ? `做法：${m.steps.map((s, i) => `${i + 1}. ${s.text}${(s.changes ?? []).length ? '（改 ' + s.changes.join('、') + '）' : ''}`).join(' ')}　` : '')
 
@@ -343,7 +257,7 @@ function ruleLandings(id) {
     const objLabel = { 'aggregate-root': '聚合根', entity: '实体', 'value-object': '值对象' }[el.kind]
     for (const inv of el.data.aggregateInvariants ?? []) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, label: `聚合 ${el.data.name} 的规则`, text: `聚合 ${el.data.name} 的规则：${inv.text}${carriesOf(inv, id)}` })
     for (const inv of el.data.invariants) if (inv.traces.includes(id)) out.push({ kind: 'invariant', el, label: `${el.data.name} 的规则`, text: `${objLabel} ${el.data.name} 的规则：${inv.text}${carriesOf(inv, id)}${throwsText(inv.throws ?? [])}` })
-    // 创建（第一百五十八批）：一件东西怎么被建出来，跟不变量一样是它自己守的规则
+    // 创建：一件东西怎么被建出来，跟不变量一样是它自己守的规则
     if (el.data.create && tracedHere(el.data.create, id)) out.push({ kind: 'create', el, label: `${el.data.name} 的创建`, text: `${objLabel} ${el.data.name} 的创建　${methodText(el.data.create)}${rulesText(el.data.create.rules, id)}${throwsText(el.data.create.throws ?? [])}` })
     for (const b of el.data.behaviors) if (tracedHere(b, id)) out.push({ kind: b.throws.length ? 'behavior-guard' : 'behavior', el, label: `${el.data.name}.${b.name}`, text: `${el.data.name}.${sig(b.name, b.input, b.output)}　${methodText(b)}${rulesText(b.rules, id)}${raisesText(b.raises)}${throwsText(b.throws)}` })
 
@@ -353,12 +267,12 @@ function ruleLandings(id) {
   for (const s of services) for (const op of s.data.operations) if (tracedHere(op, id)) out.push({ kind: 'service', el: s, label: `领域服务 ${s.data.name}.${op.name}`, text: `领域服务 ${s.data.name}.${sig(op.name, op.input, op.output)}　${methodText(op)}${rulesText(op.rules, id)}${throwsText(op.throws)}` })
   for (const h of handlers) if (h.data.traces.includes(id)) out.push({ kind: 'event-handler', el: h, label: `事件处理 ${h.data.name}`, text: `事件处理 ${h.data.name}（触发：${h.data.trigger}）：${h.data.steps.map((s) => s.text).join(' → ')}` })
   for (const e of errors) if (e.data.traces.includes(id)) out.push({ kind: 'error', el: e, label: `错误 ${e.data.name}`, text: `错误 ${e.data.name}：${e.data.condition ? pickText(e.data.condition, id, '；') : '（无条件说明）'}` })
-  // 端口也是落点：描述我方系统之外的业务流程（政府门户上收到转介）的事实落在边界上，不落聚合（agents/model/shapes.md；验收项目第六十八批）
+  // 端口也是落点：描述我方系统之外的业务流程（政府门户上收到转介）的事实落在边界上，不落聚合（agents/model/shapes.md；验收项目）
   for (const p of ports) if ((p.data.traces ?? []).includes(id)) out.push({ kind: 'port', el: p, label: `端口 ${p.data.name}`, text: `端口 ${p.data.name}（${p.data.kind === 'external-system' ? '外部系统' : '模块'} ${p.data.target}）：${(p.data.operations ?? []).map((op) => `${op.name}${op.note ? '——' + op.note : ''}`).join('；')}` })
   return out
 }
 // 种类 → 该落在哪种元素上（只是提醒，报警告）。消息里用文件里写的那个词（rawKind），旧标签的语句指纹才对得上以前的裁决：事实落字段或结构性的不变量；约束落不变量、守卫、错误；公式落计算；触发落事件处理
-// 第一百五十八批：跨实例、跨聚合才判得了的规则归领域服务（第八十五批），事实与约束落在那儿是对的，从前会被误报
+// 跨实例、跨聚合才判得了的规则归领域服务，事实与约束落在那儿是对的，从前会被误报
 const EXPECTED = { 事实: ['field', 'invariant', 'behavior', 'port', 'service'], 约束: ['invariant', 'behavior-guard', 'error', 'field', 'service'], 公式: ['behavior', 'behavior-guard', 'service', 'field'], 触发: ['event-handler', 'port'], 流程: ['behavior-guard', 'behavior', 'invariant', 'error', 'command', 'port', 'service'], 情形: ['behavior', 'behavior-guard', 'invariant', 'error', 'field', 'command'] }
 // 本段只作背景的语句：故事里讲到它，可本段没有能承载它的动作（次序、核对这类要等后面的段落）。
 // 切片里写明编号与理由，校验器就不因「没有落点」报错——但记进 deferred 单列出来，谁也别忘了它还欠着。
@@ -372,13 +286,13 @@ for (const r of rules) {
     continue
   }
   if (background.has(r.id)) add(r1, 'warning', 'coverage.background', r.id, `切片把它记成本段只作背景，模型里却给了落点：要么去掉切片里那一条，要么去掉落点`)
-  // 创建是一个方法、也是建时的规则（第一百五十八批），落点种类表里认不变量、行为、带守卫的行为的，都认创建
+  // 创建是一个方法、也是建时的规则，落点种类表里认不变量、行为、带守卫的行为的，都认创建
   const kindOk = (l, want) => want.includes(l.kind) || (l.kind === 'create' && want.some((k) => ['invariant', 'behavior', 'behavior-guard'].includes(k)))
   if (r.ruleKind && EXPECTED[r.ruleKind] && !landings.some((l) => kindOk(l, EXPECTED[r.ruleKind]))) {
     add(r1, 'warning', 'coverage.rule-kind', r.id, `规则种类「${r.rawKind ?? r.ruleKind}」的落点应为 ${EXPECTED[r.ruleKind].join(' / ')}，实际只有 ${[...new Set(landings.map((l) => l.kind))].join(' / ')}`)
   }
   // 一条业务语句一条判断：模型侧列出全部落点及其完整上下文
-  const importance = landings.some((l) => ['invariant', 'create', 'behavior-guard', 'behavior', 'service'].includes(l.kind)) ? 'high' : 'medium' // 错误不再挂语句（第一百六十四批）；领域服务的操作与行为一样是方法，有规则、抛错误，同样算高
+  const importance = landings.some((l) => ['invariant', 'create', 'behavior-guard', 'behavior', 'service'].includes(l.kind)) ? 'high' : 'medium' // 错误不再挂语句；领域服务的操作与行为一样是方法，有规则、抛错误，同样算高
   const where = [...new Set(landings.map((l) => l.label).filter(Boolean))]
   const ask = `${r.id}「${r.text}」——模型把它写在 ${where.join('、') || '这几处'}。这几处合起来是不是把这句话说全了？有没有多加限制、少了条件，或方向反了？`
   judge(r1, '模型规则是否与业务一致？', r.id, { business: `[${r.id}]${labelOf(r) ? ` (${labelOf(r)})` : ''} ${r.text}`, model: landings.map((l) => l.text).join('\n') }, importance, [...new Set(landings.map((l) => l.el.file))], { ask })
@@ -403,7 +317,7 @@ function checkTraces(target, traces, level = 'error') {
   if (!traces || !traces.length) return add(r1, level, 'traces.empty', target, 'traces 为空')
   for (const t of traces) if (!byId.has(t)) add(r1, 'error', 'traces.unknown', target, `追溯编号不存在：${t}`)
 }
-for (const el of [...domainObjects, ...events, ...ports, ...commands, ...queries, ...handlers]) checkTraces(el.file, el.data.traces) // 错误不挂语句（第一百六十四批），不查追溯
+for (const el of [...domainObjects, ...events, ...ports, ...commands, ...queries, ...handlers]) checkTraces(el.file, el.data.traces) // 错误不挂语句，不查追溯
 for (const el of domainObjects) for (const b of el.data.behaviors) checkTraces(`${el.file}#behaviors.${b.name}`, b.traces)
 for (const s of services) for (const op of s.data.operations) checkTraces(`${s.file}#operations.${op.name}`, op.traces)
 for (const m of model.modules?.data.modules ?? []) { if (scopeMods && !scopeMods.has(m.name) && !(m.traces ?? []).length) defer('traces.empty', `${model.modules.file}#${m.name}`, `模块 ${m.name} 本段外未建，追溯待填`); else checkTraces(`${model.modules.file}#${m.name}`, m.traces, 'warning') }
@@ -466,7 +380,7 @@ function checkUseCase(el, { allowMembers, queryOnly, hasWrites }) {
   const repoWrites = new Set()
   const cross = []
   const stepFps = new Set(steps.map((x) => fingerprint(x.text)))
-  const reordered = steps.some((x, i) => { const fp = fingerprint(x.text); return decisions.some((d) => d.by !== 'role' && d.on === fp && d.target.startsWith(el.file + '#steps.') && d.target !== `${el.file}#steps.${i}`) })
+  const reordered = false
   const HANDLER = { 'command-handler': '命令', 'query-handler': '查询', 'event-handler': '事件处理' }
   const stepContext = (i) => `${HANDLER[el.kind] ?? el.kind} ${el.data.name} · 第 ${i + 1} 步，共 ${steps.length} 步${i ? `（上一步：${steps[i - 1].text.slice(0, 40)}${steps[i - 1].text.length > 40 ? '…' : ''}）` : ''}`
   steps.forEach((s, i) => {
@@ -552,14 +466,14 @@ for (const el of domainObjects) for (const b of el.data.behaviors) {
   for (const r of b.raises) if (!find(['event'], typeof r === 'string' ? r : r.event, el.module)) add(r1, 'error', 'behavior.raises.unknown', `${el.file}#behaviors.${b.name}`, `事件不存在：${typeof r === 'string' ? r : r.event}`)
   for (const t of b.throws) if (!find(['error'], t, el.module)) add(r1, 'error', 'behavior.throws.unknown', `${el.file}#behaviors.${b.name}`, `错误不存在：${t}`)
 }
-// 方法收纯数据：聚合内的实体不外露，不当入参（第一百六十七批）
+// 方法收纯数据：聚合内的实体不外露，不当入参
 {
   const entityNames = new Set(entities.map((e) => e.data.name))
   for (const el of domainObjects) {
     const methods = [['create', el.data.create], ...(el.data.behaviors ?? []).map((b) => ['behaviors.' + b.name, b])]
     for (const [where, m] of methods) for (const p of m?.input ?? []) {
       const t = String(p.type ?? '').replace(/\[\]$/, '')
-      if (entityNames.has(t)) add(r1, 'warning', 'input.entity', `${el.file}#${where}`, `入参 ${p.name} 的类型是实体 ${t}：聚合里的实体只由聚合自己建、不外露，方法收这一样的数据、在里面建（第一百六十七批）`)
+      if (entityNames.has(t)) add(r1, 'warning', 'input.entity', `${el.file}#${where}`, `入参 ${p.name} 的类型是实体 ${t}：聚合里的实体只由聚合自己建、不外露，方法收这一样的数据、在里面建`)
     }
   }
 }
@@ -596,7 +510,7 @@ for (const mf of model.moduleFiles) {
     for (const m of members) if (!a.members.includes(m)) add(r1, 'error', 'module.members', `${mf.file}#${a.name}`, `members 缺少 ${m}`)
     for (const ref of a.idRefs) if (!find(['aggregate-root'], ref.to, mf.module)) {
       const refMod = qualify(ref.to, mf.module).split('.')[0]
-      // 按模块一次建一个（第九十七批）：这个模块引用别的模块的聚合，而那个模块的模型还没建，是必然的，不是错。
+      // 按模块一次建一个：这个模块引用别的模块的聚合，而那个模块的模型还没建，是必然的，不是错。
       // 只要它在 modules.json 里（战略设计划过），就单列出来记着；modules.json 里都没有才是真错。
       const known = (model.modules?.data.modules ?? []).some((m) => m.name === refMod)
       if (scopeAggs && !scopeAggs.has(qualify(ref.to, mf.module))) defer('module.idRefs', `${mf.file}#${a.name}`, `idRef 指向的粗版聚合 ${ref.to} 本段外未建`)
@@ -620,77 +534,6 @@ for (const el of [...entities, ...vos, ...events, ...errors, ...repos]) {
 // 不变量跨聚合（判断）
 for (const el of roots) for (const inv of el.data.aggregateInvariants ?? []) judge(r1, '这条不变量是否需要另一个聚合才能成立？', `${el.file}#aggregateInvariants`, { model: inv.text }, 'high')
 
-// 走查写着调用的方法，模型里得找得到（第一百五十八批）：空跑场景一没建 FinanceReview，走查第 20、21 步却写着调它，没有工具查
-function checkWalkNames() {
-  const has = (owner, method) => [...domainObjects].some((el) => el.data.name === owner && ((el.data.behaviors ?? []).some((b) => b.name === method) || (method === 'create' && el.data.create)))
-    || services.some((s) => s.data.name === owner && s.data.operations.some((o) => o.name === method))
-  const knownModule = (m) => (model.modules?.data.modules ?? []).some((x) => x.name === m)
-  for (const s of storiesOf(sliceId)) {
-    for (const step of s.story.steps ?? []) {
-      const w = step.walk
-      if (!w || w.kind !== 'command' || typeof w.name !== 'string') continue
-      for (const part of w.name.split('+').map((x) => x.trim())) {
-        const m = part.match(/^((?:[A-Z]\w*\.)+)([a-z]\w*)$/)
-        if (!m) continue // 「照一张发票一次录完（建立聚合，留给应用层）」这类说的是应用层，不查
-        const segs = m[1].slice(0, -1).split('.'), method = m[2]
-        const owner = segs[segs.length - 1]
-        if (has(owner, method)) continue
-        // 别的模块的方法：那个模块的模型还没建时不算错
-        if (segs.length > 1 && knownModule(segs[0]) && !model.moduleFiles.some((mf) => mf.module === segs[0])) continue
-        add(r1, 'warning', 'walk.name', `${s.file}#第 ${step.n} 步`, `走查写着调用 ${part}，模型里找不到这个方法：模型没建它，或者名字改了走查没跟上`)
-      }
-    }
-  }
-}
-checkWalkNames()
-/**
- * 按模型看的块（第一百五十六批）：一个聚合根 / 实体 / 值对象的「字段与创建」一块，一个行为一块，一个领域服务操作一块。
- * 人在审模型页上逐块点「写得对 / 要改」；写对的经 slice apply 记进那个文件的 decisions[]（check 是 BLOCK_CHECK，on 是这一块的指纹）。
- * 下一场再跑：指纹对得上的是「没变」（不用再看），裁过但指纹变了的是「重浮的」，没人裁过的是「新的」。
- */
-function buildBlocks() {
-  const out = []
-  // 修改切片记过基线的，先拿基线比：指纹跟开工那一刻一样，就是这条切片没动它，算 same 不摆给他。
-  // 人裁过的照旧按裁决算——他裁过的那一块，后来谁改了都要重浮。
-  const baseline = sliceRec?.kind === 'change' ? sliceRec.blockBaseline ?? null : null
-  const stateOf = (id, fp) => {
-    const ds = decisions.filter((d) => d.target === id && d.check === BLOCK_CHECK && d.by === 'human')
-    if (ds.length) return ds.some((d) => d.on === fp) ? 'same' : 'refloat'
-    if (baseline && baseline[id] === fp) return 'same'
-    return 'new'
-  }
-  const push = (el, key, kind, name, body, simple) => {
-    const id = `${el.file}#${key}`, fp = fingerprint(JSON.stringify(body))
-    // 第一百五十九批：「都不标，我都审」——简单方法这个标记不再往报告里带，块一律等他看
-    out.push({ id, file: el.file, kind, name, fp, state: stateOf(id, fp) })
-  }
-  for (const el of domainObjects) {
-    if (scopeMods && !scopeMods.has(el.module)) continue
-    const d = el.data
-    const body = { fields: d.fields ?? [], create: d.create ?? null, invariants: d.invariants ?? [], aggregateInvariants: d.aggregateInvariants ?? [] }
-    if (body.fields.length || body.create || body.invariants.length || body.aggregateInvariants.length) push(el, 'create', 'create', d.name, body)
-    for (const b of d.behaviors ?? []) push(el, 'behaviors.' + b.name, 'behavior', `${d.name}.${b.name}`, b, b.simple)
-  }
-  for (const s of services) {
-    if (scopeMods && !scopeMods.has(s.module)) continue
-    for (const op of s.data.operations) push(s, 'operations.' + op.name, 'operation', `${s.data.name}.${op.name}`, op, op.simple)
-  }
-  return out
-}
-r1.blocks = buildBlocks()
-if (args.includes('--记基线')) {
-  const stop = (m) => { console.error(m); process.exit(2) }
-  if (!sliceRec) stop('--记基线 要跟 --slice <切片id>')
-  if (sliceRec.kind !== 'change') stop(`${sliceRec.id} 不是修改切片：基线是给修改切片用的，模块切片本来就要整块整块地审`)
-  const had = Object.keys(sliceRec.blockBaseline ?? {}).length
-  if (had) stop(`${sliceRec.id} 已经记过基线了（${had} 块）。再记一次会把这条切片已经改出来的那几块也当成没动过，从此不再摆给他看。真要重记，先把切片记录里的 blockBaseline 删掉。`)
-  const p = path.join(root, 'slices', sliceRec.id + '.json')
-  const rec = JSON.parse(fs.readFileSync(p, 'utf8'))
-  rec.blockBaseline = Object.fromEntries(r1.blocks.map((b) => [b.id, b.fp]))
-  fs.writeFileSync(p, JSON.stringify(rec, null, 2) + '\n', 'utf8')
-  console.log(`${sliceRec.id}：记下 ${r1.blocks.length} 块方法的基线。往后审模型页只摆这条切片动过的那几块。`)
-  process.exit(0)
-}
 finish(r1, 'validate-1')
 
 // ========== 方向 ② ==========
@@ -725,7 +568,7 @@ if (codebase) {
         const m2 = f.path.match(/^\/aggregates\/([^/]+)$/)
         if ((m1 && f.kind === 'missing') || (m2 && f.kind === 'missing' && scopeAggs && !scopeAggs.has(`${mod}.${m2[1]}`))) { defer(`diff.${f.kind}`, target, '粗版，本段范围外未建', r2); continue }
       }
-      // 模型上的说明文字（note）是给人审模型看的，代码不照抄（第八十七批：注释讲行为与原因、不抄上下文）——模型有、代码没有不算差异；代码写了才比是不是一个意思
+      // 模型上的说明文字（note）是给人读模型用的，代码不照抄（注释讲行为与原因、不抄上下文）——模型有、代码没有不算差异；代码写了才比是不是一个意思
       if (f.kind === 'missing' && /\/note$/.test(f.path ?? '')) continue
       if (f.kind === 'changed' && TEXTUAL.test(f.path)) {
         judge(r2, '模型文字与代码注释是否同一个意思？', target, { model: f.model, code: f.code }, /aggregateNarrative|note|responsibility/.test(f.path) ? 'low' : /rules|condition/.test(f.path) ? 'high' : 'medium')
@@ -782,93 +625,25 @@ function carryOver(report, name) {
   if (!old) return 0
   const by = new Map((old.judgments ?? []).map((x) => [judgeKey(x), x]))
   let kept = 0
-  let renamedCarry = 0
   for (const j of report.judgments) {
-    // 文字一个字没变的照样认得出；只因改名而变的，把新文字反着换回旧说法，
-    // 换出来的与上一份一字不差才接过来——证不出来的不接，校验角色重判一遍
-    let o = by.get(judgeKey(j))
-    if (!o && unrename) {
-      o = by.get(judgeKey({ target: j.target, check: j.check, sides: { business: unrename(j.sides?.business), model: unrename(j.sides?.model), code: j.sides?.code === undefined ? undefined : unrename(j.sides.code) } }))
-      if (o) renamedCarry++
-    }
-    if (!o) continue
-    if (o.verdict) { j.verdict = o.verdict; j.confidence = o.confidence; j.reason = o.reason; kept++ }
-    if (o.human) j.human = o.human
+    const o = by.get(judgeKey(j))
+    if (o?.verdict) { j.verdict = o.verdict; j.confidence = o.confidence; j.reason = o.reason; kept++ }
   }
-  // 盲区是校验角色写的，不是机械算出来的——重跑不该把它冲回内置的那两条
   if ((old.blindSpots ?? []).length > (report.blindSpots ?? []).length) report.blindSpots = old.blindSpots
-  const oldConfirm = new Map((old.confirms ?? []).map((c) => [[c.check, c.target, c.text].join('\u0000'), c]))
-  for (const c of report.confirms) {
-    const o = oldConfirm.get([c.check, c.target, c.text].join('\u0000'))
-    if (o?.human) c.human = o.human
-  }
-  // 块上人点的「写得对 / 要改」：同一块、指纹没变才接；变了就是重浮，要再看一眼
-  const oldBlock = new Map((old.blocks ?? []).map((b) => [b.id + '\u0000' + b.fp, b]))
-  for (const b of report.blocks ?? []) {
-    const o = oldBlock.get(b.id + '\u0000' + b.fp)
-    if (o?.human) b.human = o.human
-  }
-  // 警告上人点的「驳回 / 要改」也要接：从前这里不接，人驳回了一条警告、重跑一次就没了
-  const oldWarn = new Map((old.warnings ?? []).map((w) => [[w.check, w.target, w.text].join('\u0000'), w]))
-  for (const w of report.warnings) {
-    const o = oldWarn.get([w.check, w.target, w.text].join('\u0000'))
-    if (o?.human) w.human = o.human
-  }
-  // 这一轮没有任何待判断与需确认——能判的都已经在 decisions[] 里了，等于上一轮就写回过
-  if (old.applied && !report.judgments.length && !report.confirms.length) report.applied = old.applied
-  if (renamedCarry) console.log(`[校验] 这 ${renamedCarry} 条判断的文字只因改名而变（反着换回去一字不差），上一份填好的结论照样接过来，不重判`)
   return kept
 }
-/** 上一份报告里人裁过、这一趟没接过来、decisions[] 里也没有的那几条 */
-function unsavedHuman(report, name) {
-  const old = previousReport(report, name)
-  if (!old) return []
-  // 按内容比：上一份报告在这里另读了一遍，对象不是 carryOver 接过去的那几个
-  const sig = (x) => [x.target, x.check, JSON.stringify(x.human)].join(' ')
-  // 块在新旧两份里要摆成同一个样子比（目标是块的 id、检查项是 BLOCK_CHECK）
-  const asItem = (b) => ({ ...b, target: b.id, check: BLOCK_CHECK })
-  const carried = new Set([...report.judgments, ...report.confirms, ...report.warnings, ...(report.blocks ?? []).map(asItem)].filter((x) => x.human).map(sig))
-  const saved = (o) => decisions.some((d) => d.by === 'human' && d.target === (o.id ?? o.target) && d.check === (o.id ? BLOCK_CHECK : o.check) && (!o.on || !d.on || d.on === o.on))
-  // 「要改」「不同意」写回时不进 decisions[]，是回流给角色的：apply 在人裁的那天或之后跑过，就算已经写回
-  const applied = (o) => old.applied?.at && String(old.applied.at).slice(0, 10) >= String(o.human?.at ?? '')
-  return [...(old.judgments ?? []), ...(old.confirms ?? []), ...(old.warnings ?? []), ...(old.blocks ?? []).map((b) => ({ ...b, target: b.id, check: BLOCK_CHECK }))]
-    .filter((o) => o.human?.verdict && !carried.has(sig(o)) && !saved(o) && !applied(o))
-}
 function finish(report, name) {
-  // 重新定基是一趟专门的活：只看哪些裁决过期了、能不能证明是纯改名，不碰报告
-  if (rebaseFile) return
   report.judgments.sort((a, b) => rank(b.importance) - rank(a.importance))
   const kept = carryOver(report, name)
-  // 候选 #8：人的裁决不可再生。上一份报告里人裁过的，这一趟要么原样接过来（文字没变），
-  // 要么已经 slice apply 写进了 decisions[]；两样都不是，重算就会把它无声冲掉——2026-09-16 就这么丢过 52 条。
-  const lost = unsavedHuman(report, name)
-  // --只看（第一百七十批）：角色跑校验只为看自己改出没改出毛病，不该被「人裁还没写回」挡住，也不该重写报告。
-  // 由来：2026-09-20 模型师那一趟 46 轮里有 11 轮花在绕开这道门（翻开关、把项目拷到别处跑）。写回仍旧只有开发指挥做。
   if (readOnly) {
-    const openConfirms0 = report.confirms.filter((c) => !c.human?.verdict).length
-    console.log(`[只看] 方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 需人确认 ${openConfirms0} · 待判断 ${report.judgments.length}（没有重写 reports/，判断的接续与人裁都不动）`)
+    console.log(`[只看] 方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 待判断 ${report.judgments.filter((j) => !j.verdict).length}`)
     for (const e of report.errors) console.log(`  错误 [${e.check}] ${e.target}：${e.text}`)
     for (const w of report.warnings) console.log(`  警告 [${w.check}] ${w.target}：${w.text}`)
     if (report.errors.length) process.exitCode = 1
     return
   }
-  if (lost.length && !args.includes('--丢弃人裁')) {
-    console.error(`[校验] 停下，没有重写报告：上一份报告里有 ${lost.length} 条人裁过、还没写回模型，这一趟文字变了接不过来，重算就会丢掉：`)
-    for (const x of lost) console.error(`  - [${x.check}] ${x.target}：人裁「${x.human.verdict}」${x.human.note ? '——' + x.human.note : ''}`)
-    console.error(`先把它们写回：node tools/slice.js apply <项目目录> reports/${name}.json${report.slice ? ' --slice ' + report.slice : ''}，再重跑校验。`)
-    console.error('确实不要了（例如人要求重裁），加 --丢弃人裁 再跑。')
-    process.exitCode = 1
-    return
-  }
-  // 升级规则（agents/model/validation.md）：重要度高、校验角色又没把握的，不论判的是 pass 还是 fail，
-  // 都要人亲自看过才算清——从前这条规矩只写在角色指令里，校验角色三趟都降了自信度、汇总却报「需人确认 0」
-  const escalated = report.judgments.filter((j) => j.verdict && j.importance === 'high' && j.confidence && j.confidence !== 'high')
-  for (const j of report.judgments) delete j.escalated
-  for (const j of escalated) j.escalated = true
-  report.judgments.sort((a, b) => rank(b.importance) - rank(a.importance) || (rank(a.confidence) || 9) - (rank(b.confidence) || 9))
-  // 已经裁决过的「需人确认」不再算作未清项——人已经拍过板了，报告不该因此永远不干净
-  const openConfirms = report.confirms.filter((c) => !c.human?.verdict).length + escalated.filter((j) => !j.human?.verdict).length
-  const open = report.errors.length + report.warnings.length + openConfirms
+  const failed = report.judgments.filter((j) => j.verdict === 'fail').length
+  const open = report.errors.length + report.judgments.filter((j) => !j.verdict).length + failed
   report.conclusion = open === 0 ? 'clean' : 'not-clean'
   const dir = path.join(root, 'reports')
   fs.mkdirSync(dir, { recursive: true })
@@ -877,8 +652,7 @@ function finish(report, name) {
   fs.writeFileSync(path.join(dir, `${name}.md`), renderMd(report))
   const j = report.judgments.length
   const blank = report.judgments.filter((x) => !x.verdict).length
-  const blocksOpen = (report.blocks ?? []).filter((b) => b.state !== 'same' && !b.human?.verdict)
-  console.log(`方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 需人确认 ${openConfirms}${escalated.some((x) => !x.human?.verdict) ? `（其中 ${escalated.filter((x) => !x.human?.verdict).length} 条是重要度高、校验没把握的判断：${escalated.filter((x) => !x.human?.verdict).map((x) => x.target).join('、')}）` : ''}${report.confirms.length + escalated.length - openConfirms ? `（人已裁 ${report.confirms.length + escalated.length - openConfirms} 条）` : ''} · 待判断 ${j}${kept ? `（沿用上一份已填的 ${kept} 条，还要填 ${blank} 条）` : ''}${blocksOpen.length ? ` · 方法待看 ${blocksOpen.length} 块（新 ${blocksOpen.filter((b) => b.state === 'new').length}、重浮 ${blocksOpen.filter((b) => b.state === 'refloat').length}）` : ''} · 已裁决 ${report.decided.length}${report.deferred?.length ? ` · 本段外未建 ${report.deferred.filter((d) => d.kind !== 'coverage.background' && d.kind !== 'coverage.pass').length} 项（粗版，--slice 不计）` : ''}${report.deferred?.some((d) => d.kind === 'coverage.background') ? ` · 只作背景 ${report.deferred.filter((d) => d.kind === 'coverage.background').length} 条` : ''}${report.deferred?.some((d) => d.kind === 'coverage.pass') ? ` · 留给后面的遍 ${report.deferred.filter((d) => d.kind === 'coverage.pass').length} 条` : ''} → ${report.conclusion === 'clean' ? '干净' : '不干净'}（${path.relative(process.cwd(), path.join(dir, name + '.md'))}）`)
+  console.log(`方向 ${report.direction}：错误 ${report.errors.length} · 警告 ${report.warnings.length} · 判断 ${j} 条（还没判 ${blank}，判不通过 ${failed}）${kept ? `，接过上一份 ${kept} 条` : ''} → ${report.conclusion === 'clean' ? '干净' : '没干净'}`)
   if (report.conclusion !== 'clean') process.exitCode = 1
 }
 function rank(x) {
@@ -910,156 +684,3 @@ function renderMd(r) {
   L.push('')
   return L.join('\n')
 }
-
-// ---------- 纯改名之后重新定基 ----------
-/**
- * 改名把裁决的指纹全打掉了，但裁的那件事一个字没变——这种不该让人重裁一遍。
- * 这里要工具自己证明「只改了名字」：拿一份「新说法 → 旧说法」的对照，把现在这段文字
- * 反着换回去，换出来的东西与当初人裁的那一段**一字不差**（指纹对得上），才算证明了。
- * 证不出来的一条都不动：那可能是真改了实质，必须留着过期、由人重裁。
- * 裁决的 verdict 与 note 一个字不改，只重算 on，并在 rebased[] 里记一笔是哪一批改的名。
- */
-const SEP = String.fromCharCode(0)
-function rebase() {
-  if (!rebaseWhy) { console.error("重新定基要用 --说明 写清楚是哪一批改的名、换的是哪几个说法"); process.exit(2) }
-  let pairs
-  try { pairs = JSON.parse(fs.readFileSync(path.resolve(rebaseFile), "utf8")) } catch (e) { console.error("读不了新旧对照：" + e.message); process.exit(2) }
-  const keys = Object.keys(pairs).sort((a, b) => b.length - a.length) // 长的先换，免得「录入花费」被「录入」先切开
-  const back = (t) => applyWordMap(t, pairs, keys)
-  const proved = new Map() // 文件 → [{ dec, to }]
-  const unproved = []
-  const seen = new Set()
-  for (const { dec, text } of staleSeen) {
-    const key = decFile.get(dec) + SEP + dec.target + SEP + dec.check + SEP + dec.on + SEP + fingerprint(text)
-    if (seen.has(key)) continue
-    seen.add(key)
-    const file = decFile.get(dec)
-    if (fingerprint(back(text)) === dec.on) {
-      if (!proved.has(file)) proved.set(file, [])
-      proved.get(file).push({ dec, to: fingerprint(text) })
-    } else unproved.push({ file, dec, to: fingerprint(text) })
-  }
-  let written = 0
-  for (const [file, list] of proved) {
-    const p = path.join(root, file)
-    const data = JSON.parse(fs.readFileSync(p, "utf8"))
-    for (const { dec, to } of list) {
-      const hit = (data.decisions ?? []).find((x) => x.target === dec.target && x.check === dec.check && x.on === dec.on && x.at === dec.at && x.note === dec.note)
-      if (!hit) { console.error(`  ! ${file} 里找不回这一条裁决（${dec.target}），跳过`); continue }
-      hit.rebased = [...(hit.rebased ?? []), { at: today, why: rebaseWhy, from: hit.on, to }]
-      hit.on = to
-      written++
-    }
-    fs.writeFileSync(p, JSON.stringify(data, null, 2) + String.fromCharCode(10))
-  }
-  console.log(`裁决对账：问过 ${decStats.问过} 处；压根没人裁过 ${decStats.压根没人裁过} 处；指纹对上 ${decStats.指纹对上} 处；裁决没带指纹、照旧认下 ${decStats.没带指纹就认了} 处；指纹对不上 ${decStats.过期} 处`)
-  console.log(`重新定基：这一趟遇到过期的裁决 ${seen.size} 条；证明得了只改名字的 ${written} 条已重算指纹（裁的内容一字未动），证不出来的 ${unproved.length} 条留着过期、要人重裁`)
-  for (const u of unproved) console.log(`  · 仍过期：${u.dec.target}（${u.dec.check}）—— ${u.file}`)
-  if (!unproved.length && written) console.log("  全部证明得了：这一趟确实只改了说法，没有一处实质变化")
-}
-if (rebaseFile) rebase()
-
-// ---------- 坏字 ----------
-const { brokenChars } = require('./lib/wording')
-/**
- * 每跑一趟校验顺带扫一遍坏字：一个中文字写坏了，它那几个字节各成一个替换字符，屏幕上是一串「�」。
- * 不进报告、不拦——这不是模型与语句对不上，是文字本身坏了，谁写坏的照上下文把原字补回来。
- * raw/ 不扫：原料是从 PDF 抽出来的，表格线与连字符本来就抽成坏字，那不是我们写的。
- * 由来：2026-09-17 走查 k-002 里修掉七个，2026-09-18 改名时又扫出六个（「欠乐□的」「护士助□」
- * 「HCP □用款」…）。两批都是人在页面上读出来的，那时工具一处都没查——走查正文不经过措辞检查。
- */
-function scanBrokenChars() {
-  // .history 是页面自动保存留下的旧版快照：旧版里的坏字在现行文件里早就补好了，再扫只会刷屏（第一百七十四批）
-  const skip = new Set(['node_modules', '.git', 'raw', 'archive', 'reports', '.history'])
-  const hits = []
-  const visit = (p) => {
-    const st = fs.statSync(p)
-    if (st.isDirectory()) {
-      if (skip.has(path.basename(p))) return
-      for (const n of fs.readdirSync(p)) visit(path.join(p, n))
-    } else if (/\.(json|md)$/.test(p)) {
-      for (const w of brokenChars(fs.readFileSync(p, 'utf8'))) hits.push(`${path.relative(root, p)}　${w}`)
-    }
-  }
-  visit(root)
-  if (hits.length) {
-    console.error(`坏字 ${hits.length} 处（不拦，写的人自己补回来）：`)
-    for (const h of hits) console.error('  · ' + h)
-  }
-}
-scanBrokenChars()
-
-// ---------- 走查里提到的步号 ----------
-/**
- * 走查正文、walk、缺口、裁定卡里常写「第 N 步」，可步号会变：删一步、插一步，后面全跟着挪。
- * 机器判不了「这一处指的内容对不对」，但判得了「这一步压根不存在」——越界的先报出来，人再去核内容。
- * 历史记录（story 的 log）跳过：那里的步号说的是当时，改了反而不实。
- * 由来：2026-09-18 第一百四十二批删掉第 74 步、后面 47 步顺延，开发指挥的补丁脚本只认「第 N 步」，
- * 漏了「第 A、B 步」这种顿号隔开的写法——漏网四处，其中一处指着已经不存在的第 121 步。
- */
-/** 这条切片名下的走查：一整条（<id>.story.json），或者一场一条（<id>.w<场次>.story.json，第一百五十批） */
-function storiesOf(id) {
-  const dir = path.join(root, 'slices')
-  if (!id || !fs.existsSync(dir)) return []
-  const re = new RegExp('^' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\.w(\\d+))?\\.story\\.json$')
-  return fs.readdirSync(dir).map((f) => ({ f, m: f.match(re) })).filter((x) => x.m)
-    .sort((a, b) => (+a.m[1] || 0) - (+b.m[1] || 0))
-    .map((x) => { try { return { file: 'slices/' + x.f, scene: x.m[1] ? +x.m[1] : null, story: JSON.parse(fs.readFileSync(path.join(dir, x.f), 'utf8')) } } catch { return null } })
-    .filter(Boolean)
-}
-function scanStepRefs() {
-  for (const s of storiesOf(sliceId)) scanStepRefsIn(s.story, s.file)
-}
-function scanStepRefsIn(story, file) {
-  const max = (story.steps ?? []).length
-  if (!max) return
-  const bad = []
-  const STEP = new RegExp('第\\s?\\d{1,3}(?:\\s?[、与和]\\s?\\d{1,3})*\\s?步', 'g')
-  const NUM = new RegExp('\\d{1,3}', 'g')
-  // 这一条走查自己的编号，例如 slices/k-001.story.json → k-001
-  const mine = (String(file).match(/([a-z]-\d{3})\.story\.json$/) ?? [])[1] ?? null
-  // 指着**别条**走查的步号不算错：缺口里常写「k-002 走查第 22、94 步」，那几步在 k-002 上真有。
-  // 从前这里只认「第 N 步」、不看前面那句是谁，k-001 只有 88 步就把它报成「指着不存在的步」——
-  // 2026-09-22 两个角色各被这条误报耗过一趟，讲解逐字核出来才认定是误报。判的是紧挨着的那一小段里
-  // 有没有点着别条走查的编号（别条的编号一出现，这一处的步号就归它管，本条的步数管不着）。
-  const OTHER = /([a-z]-\d{3})[^。；]{0,8}$/
-  const visit = (node, at) => {
-    if (typeof node === 'string') {
-      STEP.lastIndex = 0 // matchAll 会把上一次的 lastIndex 带过来，不归零后面的字串会漏判
-      for (const m of node.matchAll(STEP)) {
-        const before = node.slice(Math.max(0, m.index - 24), m.index)
-        const ref = (before.match(OTHER) ?? [])[1]
-        if (ref && ref !== mine) continue // 指着别条走查，本条的步数管不着
-        for (const d of m[0].match(NUM) ?? []) if (+d > max) bad.push({ at, n: +d, text: m[0] })
-      }
-      return
-    }
-    if (Array.isArray(node)) return node.forEach((v, i) => visit(v, at + '[' + i + ']'))
-    if (node && typeof node === 'object') {
-      for (const [k, v] of Object.entries(node)) {
-        if (k === 'log') continue // 历史记录里的步号说的是当时
-        visit(v, at ? at + '.' + k : k)
-      }
-    }
-  }
-  visit(story, '')
-  // 候选 #18、#19：步号、缺口编号会变，指着编号的字不会自己跟着变——跨场引用说事情不说步号，缺口之间用一句话点名
-  const crossScene = [], gapRefs = []
-  const walkText = (node, at) => {
-    if (typeof node === 'string') {
-      for (const m of node.match(/场景[一二三四五六七八九十\d]+\s?第\s?\d{1,3}\s?步/g) ?? []) crossScene.push({ at, text: m })
-      for (const m of node.match(/缺口第\s?\d{1,3}\s?条/g) ?? []) gapRefs.push({ at, text: m })
-      return
-    }
-    if (Array.isArray(node)) return node.forEach((v, i) => walkText(v, at + '[' + i + ']'))
-    if (node && typeof node === 'object') for (const [k, v] of Object.entries(node)) if (k !== 'log' && k !== 'choices') walkText(v, at ? at + '.' + k : k)
-  }
-  walkText(story, '')
-  if (crossScene.length) console.error(file + ' 里跨场指着步号 ' + crossScene.length + ' 处（第一百五十批：跨场引用说事情不说步号），例如 ' + crossScene.slice(0, 3).map((x) => x.at + '「' + x.text + '」').join('；'))
-  if (gapRefs.length) console.error(file + ' 里缺口之间用编号互指 ' + gapRefs.length + ' 处（候选 #19：改成一句话点名，指错了当场看得出），例如 ' + gapRefs.slice(0, 3).map((x) => x.at + '「' + x.text + '」').join('；'))
-  if (bad.length) {
-    console.error(file + ' 里指着不存在的步 ' + bad.length + ' 处（这一条只有 ' + max + ' 步；多半是删步或插步之后没跟上，逐处核内容再改）：')
-    for (const b of bad) console.error('  · ' + b.at + '　写着「' + b.text + '」，其中第 ' + b.n + ' 步没有')
-  }
-}
-scanStepRefs()

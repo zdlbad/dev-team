@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>订单 · 草稿原型</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --ink: #1f2328; --muted: #57606a; --line: #d0d7de; --bg: #f6f8fa; --brand: #0b6e4f; --bad: #b42318; }
+  body { margin: 0; font: 14px/1.6 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; color: var(--ink); background: var(--bg); }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--line); }
+  header b { color: var(--brand); } header select { margin-left: auto; font: inherit; padding: 4px 8px; }
+  main { max-width: 720px; margin: 16px auto; padding: 0 16px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  input { font: inherit; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; width: 110px; }
+  button { font: inherit; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--brand); background: var(--brand); color: #fff; cursor: pointer; }
+  button.plain { background: #fff; color: var(--brand); }
+  .err { color: var(--bad); margin-top: 6px; } .muted { color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; } td, th { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: left; }
+</style>
+</head>
+<body>
+<header><b>订单</b><span class="muted">草稿原型：数据只在这一次运行里</span>
+  <select id="who"><option value="c-1">陈太太</option><option value="c-2">李先生</option></select></header>
+<main>
+  <div class="card"><b>我的订单</b> <button id="new" class="plain">新建一张订单</button><div id="orders"></div><div class="err" id="err"></div></div>
+</main>
+<script>
+// 领域错误按类名回来；这里照模型里错误的说明翻成人话。页面不做业务判断，能不能做由领域代码说了算。
+const SAY = {
+  OrderFailed: '这张订单现在做不了这件事，比如已经确认了还要加行。',
+  InvalidOrderLine: '这一行不成立：要有商品，数量和单价都要是正数。',
+  InvalidMoney: '金额不成立：要是一个数，还要有币种。',
+  CurrencyMismatch: '这一行的币种跟订单里已有的不一样。',
+  InvalidPromotion: '这个优惠码用不了。',
+  NotFound: '找不到这个优惠码。起始数据里有一个：SAVE10（满 50 澳元打九折）。',
+}
+const $ = (id) => document.getElementById(id)
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+async function run(kind, name, input) {
+  const r = await (await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, name, input }) })).json()
+  $('err').textContent = r.ok ? '' : (SAY[String(r.error?.name).replace(/Error$/, '')] ?? r.error?.message ?? '没成') // 类名回来带 Error 后缀，模型里的错误名不带
+  await paint()
+  return r
+}
+async function paint() {
+  const state = await (await fetch('/api/state')).json()
+  const mine = (state['Ordering.Order'] ?? []).filter((o) => o.customerId === $('who').value)
+  $('orders').innerHTML = mine.length ? mine.map((o) => `
+    <div class="card"><b>${esc(o.id)}</b> <span class="muted">${esc(o.status ?? '')}</span>
+      <table><tr><th>商品</th><th>数量</th><th>单价</th></tr>${(o.lines ?? []).map((l) => `<tr><td>${esc(l.productId ?? l.props?.productId)}</td><td>${esc(l.quantity ?? l.props?.quantity)}</td><td>${esc(JSON.stringify(l.unitPrice ?? l.props?.unitPrice ?? ''))}</td></tr>`).join('')}</table>
+      <div class="row"><input placeholder="商品" data-f="productId"><input placeholder="数量" data-f="quantity" type="number"><input placeholder="单价" data-f="unitPriceAmount" type="number"><input placeholder="币种" data-f="currency" value="AUD">
+        <button data-add="${esc(o.id)}">加一行</button></div>
+      <div class="row"><input placeholder="优惠码" data-f="promotionCode" value="SAVE10"><button data-confirm="${esc(o.id)}">确认订单</button></div>
+    </div>`).join('') : '<p class="muted">还没有订单。</p>'
+}
+document.addEventListener('click', (e) => {
+  const card = e.target.closest('.card')
+  const v = (f) => card.querySelector(`[data-f="${f}"]`)?.value
+  if (e.target.id === 'new') return run('command', 'Ordering.CreateOrder', { customerId: $('who').value })
+  if (e.target.dataset.add) return run('command', 'Ordering.AddOrderLine', { orderId: e.target.dataset.add, productId: v('productId'), quantity: v('quantity'), unitPriceAmount: v('unitPriceAmount'), currency: v('currency') })
+  if (e.target.dataset.confirm) return run('command', 'Ordering.ConfirmOrder', { orderId: e.target.dataset.confirm, promotionCode: v('promotionCode') })
+})
+$('who').addEventListener('change', paint)
+paint()
+</script>
+</body>
+</html>

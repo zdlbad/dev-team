@@ -7,6 +7,8 @@ import { CreateOrderCommand } from '../ordering/application/command-handler.Crea
 import { GetOrderQuery } from '../ordering/application/query-handler.GetOrderQueryHandler'
 import { RenameCustomerCommand } from '../customers/application/command-handler.RenameCustomerCommandHandler'
 import { InMemoryEventPublisher } from '../ordering/adapters/adapter.InMemoryEventPublisher'
+import { PromotionAggregateRoot } from '../ordering/domain/promotion/aggregate-root.PromotionAggregateRoot'
+import { MoneyValueObject } from '../ordering/domain/order/value-object.MoneyValueObject'
 
 /**
  * 原型入口（示例）。组合根不带宿主参数时，在这里把处理器与仓储登记进去。
@@ -18,6 +20,8 @@ const host = new ProtoHost((h) => {
   const customers = new Map([['c-1', '陈太太'], ['c-2', '李先生']])
   const ordering = buildOrderingModule(customers)
   const custs = buildCustomersModule(new InMemoryEventPublisher())
+  // 草稿原型的起始数据：一条满 50 澳元打九折的促销，确认订单时才找得到优惠码
+  void ordering.repositories.promotions.save(PromotionAggregateRoot.CREATE({ id: 'promo-1', code: 'SAVE10', threshold: MoneyValueObject.CREATE(50, 'AUD'), discountPercent: 10 }))
   h.repository('Ordering.Order', rowsOf(ordering.repositories.orders))
   h.repository('Ordering.Promotion', rowsOf(ordering.repositories.promotions))
   h.repository('Customers.Customer', rowsOf(custs.repositories.customers))
