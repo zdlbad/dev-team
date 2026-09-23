@@ -286,11 +286,14 @@ const pass = sliceRec?.pass ?? '应用'
 const PASS_KINDS = { 骨架: new Set(), 行为: new Set(['事实', '约束', '公式', '情形']), 应用: null }
 const NEXT_PASS = { 骨架: '业务走查', 行为: '应用层（段落切片）' }
 const passAllows = (kind) => !PASS_KINDS[pass] || !kind || PASS_KINDS[pass].has(kind)
+// 修改切片自己不建应用层（第一百八十四批：它只改已经建好的模块里的一件事），所以它点亮的能力
+// 跟模块切片走查遍一样，留给做应用层的那一段；已经建好的命令照样追溯得到，这里只管还没有的（第二百一十三批）
+const buildsAppLayer = pass === '应用' && sliceRec?.kind !== 'change'
 // 覆盖：能力 → 命令/查询（命令与查询是应用遍的东西）
 for (const g of goals) {
   const hit = [...commands, ...queries].some((e) => e.data.traces.includes(g.id))
   if (!hit) {
-    if (pass !== '应用') { defer('coverage.pass', g.id, `能力的落点是命令 / 查询，留给应用层的段落切片：${g.text}`); continue }
+    if (!buildsAppLayer) { defer('coverage.pass', g.id, `能力的落点是命令 / 查询，留给应用层的段落切片：${g.text}`); continue }
     add(r1, 'error', 'coverage.goal', g.id, `能力没有任何命令或查询追溯：${g.text}`)
   }
 }
