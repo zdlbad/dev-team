@@ -93,10 +93,12 @@ export class ProtoHost {
         if (req.method === 'GET' && url === '/events') return json(res, 200, this.events())
         if (req.method === 'POST' && url === '/reset') { this.reset(); return json(res, 200, { ok: true }) }
         if (req.method === 'POST' && url === '/run') {
-          let body = ''
-          req.on('data', (c) => (body += c))
+          // 攒齐了再一次解码：一块一块转字符串，跨在两块交界的中文字会变成乱码（传文件时请求体很大）
+          const chunks: Buffer[] = []
+          req.on('data', (c: Buffer) => chunks.push(c))
           req.on('end', async () => {
             try {
+              const body = Buffer.concat(chunks).toString('utf8')
               const { kind, name, input } = JSON.parse(body || '{}')
               json(res, 200, await this.run(kind, name, input))
             } catch (e) { json(res, 400, { ok: false, error: { name: 'BadRequest', message: String((e as Error).message) } }) }
