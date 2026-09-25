@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
  * 现场看板。开发指挥在上面写：当前在哪条故事线的哪一段、走到哪一步、谁在干什么。
- * 人打开页面就近似实时看得见后台角色的动向（页面每 2 秒自己取一次）。
+ * 人打开页面就近似实时看得见后台角色的动向（页面每 3 秒自己取一次）。
  *
  * 用法：
  *   node tools/scene.js <项目> set --slice <id> --step "<这一步在做什么>" --who <角色>
  *                                  [--phase 业务|模型|编码|校验] [--note "<一句话>"] [--done]
- *   node tools/scene.js <项目> progress <角色> "<一句>"        细步：角色每做完一个小动作写一句（新建了什么、把什么从 xxx 改成 xxx）；挂在当前这一步下面，页面 2 秒一刷
+ *   node tools/scene.js <项目> plan <角色> "<第一步>|<第二步>|…"   计划：角色接活先报这一趟分几步做，报完照着做、不等人批；变了再报一次
+ *   node tools/scene.js <项目> progress <角色> "<一句>" [--步 N]  细步（--步 写明属于计划的第几步，页面据此打勾）：角色每做完一个小动作写一句（新建了什么、把什么从 xxx 改成 xxx）；挂在当前这一步下面，页面 3 秒一刷
  *                                （角色名也可以改用 --who 写在后面；写在前面与 dispatch、back 一致）
  *   node tools/scene.js <项目> ask "<问题>" --who <角色> --doing "<在做什么>" --context "<上下文>"
  *                                --options "甲：…|乙：…" --lean "<你偏向哪个>" --confidence 高|中|低
@@ -20,10 +21,9 @@
  *   node tools/scene.js <项目> back <角色> "<交回摘要，一句>" [--tokens n] [--tools n] [--ms n] [--outcome 交回|发问|没交回] [--交回行数 n]
  *                                                 角色交回时记一笔：算出这一趟从派到回花了多久、用了多少；
  *                                                 交回超二十行就提醒（分身那一笔由开发指挥代记，行数它报）
- *   node tools/scene.js <项目> journal [YYYY-MM-DD]  打印那一天的日志：按「派工」分块，每块里是角色的细步与耗时；给人复盘用
  *
- * 日志：现场看板上的每一笔（set / progress / ask / answer / mode / handoff / dispatch / back）都追加进
- * journal/<UTC 日期>.jsonl，只追加不裁剪（看板的 timeline 只留最近 60 条，日志是全的）。工作台「日志」页读它。
+ * 日志：现场看板上的每一笔（set / plan / progress / ask / answer / mode / handoff / dispatch / back）都追加进
+ * journal/<UTC 日期>.jsonl，只追加不裁剪（看板的 timeline 只留最近 60 条，日志是全的）。工作台的日志页与现场页读的都是这些 journal/*.jsonl。
  *   node tools/scene.js <项目> serve [--port 4873]
  *   node tools/scene.js <项目>                      打印一屏（不起页面）
  *
@@ -37,7 +37,7 @@ const path = require('path')
 const http = require('http')
 const os = require('os')
 const ME = os.hostname()
-const mel = require('./lib/time') // 打印给人看的钟点用墨尔本；写进文件的仍是 UTC 的 ISO 串
+const clock = require('./lib/time') // 打印给人看的钟点用本机时区；写进文件的仍是 UTC 的 ISO 串
 
 const ROLES = ['人', '开发指挥', '业务分析', '模型师', '编码', '审查', '文职', '分身']
 const PHASES = ['场景', '模型', '草稿原型', '一起按', '正式化']
@@ -172,10 +172,13 @@ if (cmd === 'set') {
 // 大步（这一步在做什么、谁在干）仍由开发指挥 set；细步挂在当前大步下面，换一步就清空，动态里保留。
 if (cmd === 'progress') {
   const whoOpt = opt('--who')
-  const rest = args.slice(2).filter((a) => !a.startsWith('--') && a !== whoOpt)
+  const stepNo = opt('--步') == null ? null : Number(opt('--步'))
+  if (stepNo != null && !(Number.isInteger(stepNo) && stepNo > 0)) die('--步 写计划里的第几步，一个正整数')
+  const rest = []
+  for (let i = 2; i < args.length; i++) { if (args[i].startsWith('--')) { i++; continue } rest.push(args[i]) }
   // 角色名写在正文前面也认。dispatch 与 back 都是「<角色> "<一句>"」，只有这里原先非得用 --who，
   // 三个角色命令两种写法，派工的人最容易在这里写错——而且错得不响：角色名被当成正文照样记下，
-  // 一直到 back 才报「0 句细步」（2026-09-18 业务分析那一趟四句细步就这么全丢了）。
+  // 一直到 back 才报「0 句细步」，这一趟的细步就全丢了。
   let who = whoOpt
   let text = rest[0]
   if (rest[0] && ROLES.includes(rest[0])) {
@@ -188,15 +191,35 @@ if (cmd === 'progress') {
   who = who ?? s.who
   if (who && !ROLES.includes(who)) die(`--who 要用 agents/README.md 的角色名：${ROLES.join('、')}`)
   const now = new Date().toISOString()
-  const entry = { ts: now, who, text, machine: ME }
+  const entry = { ts: now, who, text, ...(stepNo ? { 步: stepNo } : {}), machine: ME }
   writeScene({
     ...s,
     updatedAt: now,
     progress: [...(s.progress ?? []), entry].slice(-40),
     timeline: [...(s.timeline ?? []), { ts: now, slice: s.slice, phase: s.phase, step: s.step, who, note: text, kind: 'progress', machine: ME }].slice(-60),
   })
-  journal({ ts: now, kind: 'progress', who, slice: s.slice, phase: s.phase, text })
-  console.log(`细步：${who ?? '—'} · ${text}`)
+  journal({ ts: now, kind: 'progress', who, slice: s.slice, phase: s.phase, text, ...(stepNo ? { 步: stepNo } : {}) })
+  console.log(`细步：${who ?? '—'}${stepNo ? ' · 第 ' + stepNo + ' 步' : ''} · ${text}`)
+  process.exit(0)
+}
+
+// ---------- plan：角色接活先报的分步计划 ----------
+// 报完照着做，不等人批。细步用 --步 N 标它属于第几步，页面据此打勾、算进度：人一眼看得出这一趟一共几步、走到哪了。
+if (cmd === 'plan') {
+  const rest = args.slice(2).filter((a) => !a.startsWith('--'))
+  const who = rest[0], text = rest[1]
+  if (!who || !ROLES.includes(who) || !text) die(`用法：scene plan <项目> <角色> "<第一步>|<第二步>|…"；角色名：${ROLES.join('、')}`)
+  const steps = text.split('|').map((x) => x.trim()).filter(Boolean)
+  if (steps.length < 2) die('计划至少两步，用「|」隔开；一步就做完的活不用报计划，直接写细步')
+  const s = readScene()
+  const now = new Date().toISOString()
+  writeScene({
+    ...s,
+    updatedAt: now,
+    timeline: [...(s.timeline ?? []), { ts: now, slice: s.slice, phase: s.phase, step: s.step, who, note: `计划 ${steps.length} 步：${steps.join(' → ')}`, kind: 'progress', machine: ME }].slice(-60),
+  })
+  journal({ ts: now, kind: 'plan', who, slice: s.slice, phase: s.phase, text: steps.join(' | '), steps })
+  console.log(`计划已记：${who} · ${steps.length} 步\n` + steps.map((x, i) => `  ${i + 1}. ${x}`).join('\n') + `\n做的时候细步带上 --步 <第几步>`)
   process.exit(0)
 }
 
@@ -390,7 +413,7 @@ if (cmd === 'handoff') {
 }
 
 // ---------- dispatch / back：开发指挥派角色、角色交回，各记一笔 ----------
-// 2026-09-14 项目所有者：「一个任务 agent 们会跑很久……我没有 log 可以看到 agent 们是怎样配合的」。
+// 一趟活可能跑很久，人要事后看得见角色们是怎样配合的、慢在哪儿。
 // 派的时候记谁、什么活；回的时候记摘要、用了多少（tokens / 工具次数 / 毫秒，子 agent 的用量汇报里有），算出从派到回多久。
 if (cmd === 'dispatch') {
   const who = args[2]
@@ -416,9 +439,8 @@ if (cmd === 'dispatch') {
   journal({ ts: now, kind: 'dispatch', who, by: '开发指挥', slice: s.slice, phase: s.phase, text, ...(硬派理由 ? { 带着问题派: 硬派理由 } : {}) })
   console.log(`派工已记：${who} · ${text}`)
   if (硬派理由) console.log(`  ⚠ 带着 ${open.length} 件没答的问题派的，理由已记进日志：${硬派理由}`)
-  // 2026-09-17：角色不写细步，人就只看得见「开工了」。派工时提醒开发指挥把这句写进提示词。
-  // 2026-09-18：光提醒不够——开发指挥得自己现编命令，编错了还不响（业务分析那一趟四句细步全记成了「业务分析」）。
-  // 改成把两行命令连角色名一起印出来，直接抄进提示词。
+  // 角色不写细步，人就只看得见「开工了」；光提醒不够，开发指挥现编命令容易编错，错了还不响。
+  // 所以把两行命令连角色名一起印出来，直接抄进提示词。
   const job = opt('--活')
   const briefTip = job
     ? `node tools/brief.js ${who} --活 ${job} --写 <scratchpad>/brief-${who}.md`
@@ -428,7 +450,8 @@ if (cmd === 'dispatch') {
   const 是分身 = who === '分身'
   const 记法 = 是分身
     ? `  细步与交回：你都不跑——scene 是写，分身只读。交回就是你最后那段话，开发指挥收到后代你记一笔。`
-    : `  细步：node tools/scene.js ${args[0]} progress ${who} "<一句：做了什么，具体到名字、从什么到什么>"
+    : `  计划：node tools/scene.js ${args[0]} plan ${who} "<第一步>|<第二步>|…"　　接活先报，报完照着做
+  细步：node tools/scene.js ${args[0]} progress ${who} "<一句：做了什么，具体到名字、从什么到什么>" --步 <第几步>
   交回：node tools/scene.js ${args[0]} back ${who} "<交回摘要，一句>"　　二十行以内`
   console.log(`
   ——————— 提示骨架，改完直接用 ———————
@@ -476,47 +499,11 @@ if (cmd === 'back') {
   const 行数 = num('--交回行数') ?? String(text).split('\n').length
   journal({ ts: now, kind: 'back', who, slice: s.slice, phase: s.phase, text, outcome: opt('--outcome', '交回'), tokens: num('--tokens'), tools: num('--tools'), ms: num('--ms'), elapsedMs, steps, 交回行数: 行数, dispatchedAt: start?.ts ?? null })
   console.log(`交回已记：${who} · ${text}${elapsedMs != null ? `　从派到回 ${fmtMs(elapsedMs)}${steps != null ? `、写了 ${steps} 句细步` : ''}` : '　（没找到这一趟的派工记录）'}${num('--tokens') != null ? `、${fmtK(num('--tokens'))} tokens` : ''}${num('--tools') != null ? `、${num('--tools')} 次工具` : ''}`)
-  // 2026-09-17：一趟活一句细步都没有，人这段时间只看得见「开工了」。当场说出来，别等他问。
+  // 一趟活一句细步都没有，人这段时间只看得见「开工了」。当场说出来，别等他问。
   if (steps === 0 && elapsedMs != null && elapsedMs > 120000 && who !== '分身') console.log(`  这一趟 ${fmtMs(elapsedMs)} 里一句细步都没写，人只看得见开工。派下一趟时把「每改完一组跑 scene progress」写进提示词`)
   if (行数 > 20) console.log(`  ⚠ 这一趟交回 ${行数} 行，规矩是二十行以内。长出来的那些此后每一轮都跟着重送；下一趟把「只给结论与佐证的位置，原文我自己按位置取」写进提示词`)
   process.exit(0)
 }
-/** 把一天的日志按「派工」分块：块 = 从 dispatch 到同角色的 back；角色的 progress 挂进块里；别的事件平铺 */
-function groupJournal(entries) {
-  const blocks = []
-  const open = new Map() // 角色 → 块
-  for (const e of entries) {
-    if (e.kind === 'dispatch') { const b = { kind: 'block', who: e.who, start: e, items: [], end: null }; blocks.push(b); open.set(e.who, b); continue }
-    if (e.kind === 'back' && open.has(e.who)) { const b = open.get(e.who); b.end = e; open.delete(e.who); continue }
-    if ((e.kind === 'progress' || e.kind === 'ask') && open.has(e.who)) { open.get(e.who).items.push(e); continue }
-    blocks.push({ kind: 'event', e })
-  }
-  return blocks
-}
-if (cmd === 'journal') {
-  const day = args.slice(2).find((a) => /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(a)) ?? new Date().toISOString().slice(0, 10)
-  const entries = readJournal([day])
-  if (!entries.length) die(`${day} 没有日志（journal/${day}.jsonl 不存在或是空的）`)
-  const hm = (ts) => ts.slice(11, 19)
-  const L = [`日志 · ${projectName} · ${day}（UTC）　共 ${entries.length} 笔`, '']
-  const byRole = new Map()
-  for (const b of groupJournal(entries)) {
-    if (b.kind === 'event') { const e = b.e; L.push(`${hm(e.ts)}  ${e.who ?? '—'}　${{ set: e.done ? '看板（完）' : '看板', ask: '发问', answer: '答', mode: '模式', handoff: '交接', progress: '细步', back: '交回', confirm: '确认', unconfirm: '撤销确认', comment: '留话', review: '审阅' }[e.kind] ?? e.kind}：${e.text}${e.kind === 'set' && e.slice ? `　[${e.slice} · ${e.phase ?? '—'}]` : ''}`); continue }
-    const st = b.start, en = b.end
-    L.push(`${hm(st.ts)}  开发指挥　派 ${st.who}：${st.text}`)
-    let prev = new Date(st.ts).getTime()
-    for (const it of b.items) { const t = new Date(it.ts).getTime(); L.push(`    ${hm(it.ts)}  +${fmtMs(t - prev).padEnd(9)} ${it.kind === 'ask' ? '发问：' : ''}${it.text}`); prev = t }
-    if (en) {
-      L.push(`${hm(en.ts)}  ${en.who}　${en.outcome ?? '交回'}（${fmtMs(en.elapsedMs)}${en.steps != null ? `，${en.steps} 句细步` : ''}${en.tokens != null ? `，${fmtK(en.tokens)} tokens` : ''}${en.tools != null ? `，${en.tools} 次工具` : ''}）：${en.text}`)
-      const r = byRole.get(en.who) ?? { n: 0, ms: 0, tokens: 0, tools: 0 }; r.n++; r.ms += en.elapsedMs ?? 0; r.tokens += en.tokens ?? 0; r.tools += en.tools ?? 0; byRole.set(en.who, r)
-    } else L.push(`         ${st.who}　（还没交回）`)
-    L.push('')
-  }
-  if (byRole.size) { L.push('按角色算'); for (const [w, r] of byRole) L.push(`  ${w}　派 ${r.n} 趟　共 ${fmtMs(r.ms)}${r.tokens ? `　${fmtK(r.tokens)} tokens` : ''}${r.tools ? `　${r.tools} 次工具` : ''}`) }
-  console.log(L.join('\n'))
-  process.exit(0)
-}
-
 /** 换了机器还没同步的提醒；没换机器返回 null */
 function machineWarning(s) {
   if (!s.machine || s.machine === ME) return null
@@ -555,10 +542,10 @@ function textView() {
   L.push(`谁在干　${s.who ?? '—'}${s.since ? `　（${ago(s.since)}）` : ''}`)
   if (s.note) L.push(`说明　　${s.note}`)
   const prog = (s.progress ?? []).slice(-6)
-  if (prog.length) { L.push('细步'); for (const e of prog) L.push(`  ${mel.hm(e.ts)}　${e.who ?? '—'}　${e.text}`) }
+  if (prog.length) { L.push('细步'); for (const e of prog) L.push(`  ${clock.hm(e.ts)}　${e.who ?? '—'}　${e.text}`) }
   L.push('')
   L.push('动态')
-  for (const e of (s.timeline ?? []).slice(-8)) L.push(e.kind === 'progress' ? `  ${mel.mdhm(e.ts)}　${e.who ?? '—'}　　└ ${e.note}` : `  ${mel.mdhm(e.ts)}　${e.who ?? '—'}　${e.step}`)
+  for (const e of (s.timeline ?? []).slice(-8)) L.push(e.kind === 'progress' ? `  ${clock.mdhm(e.ts)}　${e.who ?? '—'}　　└ ${e.note}` : `  ${clock.mdhm(e.ts)}　${e.who ?? '—'}　${e.step}`)
   return L.join('\n')
 }
 
@@ -568,295 +555,36 @@ if (cmd === 'show') {
 }
 
 // ---------- serve ----------
-if (cmd !== 'serve') die(`不认得的子命令：${cmd}（set | progress | ask | questions | answer | mode | handoff | dispatch | back | journal | serve | 不带子命令打印一屏）`)
+if (cmd !== 'serve') die(`不认得的子命令：${cmd}（set | progress | ask | questions | answer | mode | handoff | dispatch | back | serve | 不带子命令打印一屏）`)
 
-const esc = (x) => String(x ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
-
-const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>现场 · ${esc(projectName)}</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--fg:#e6e9ef;--dim:#8b93a7;--hi:#7dd3fc;--ok:#86efac;--warn:#fcd34d;--live:#f472b6}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 "PingFang SC","Microsoft YaHei",system-ui,sans-serif}
-.wrap{max-width:900px;margin:0 auto;padding:24px 20px 60px}
-h1{font-size:19px;margin:0 0 2px;font-weight:600}
-.sub{color:var(--dim);font-size:13px;margin-bottom:20px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:14px}
-.row{display:flex;gap:14px;padding:5px 0;align-items:baseline}
-.k{color:var(--dim);font-size:13px;width:64px;flex:none}
-.v{flex:1;min-width:0}
-.big{font-size:22px;font-weight:600;line-height:1.4}
-.phases{display:flex;gap:8px;margin:6px 0 14px;flex-wrap:wrap}
-.ph{padding:4px 14px;border:1px solid var(--line);border-radius:999px;color:var(--dim);font-size:13px}
-.ph.on{background:var(--hi);color:#0b1220;border-color:var(--hi);font-weight:600}
-.who{display:inline-flex;align-items:center;gap:8px;font-weight:600}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--live);animation:p 1.4s ease-in-out infinite}
-.dot.idle{background:var(--warn);animation:none}
-.dot.you{background:var(--ok);animation:none}
-@keyframes p{0%,100%{opacity:1}50%{opacity:.25}}
-table{width:100%;border-collapse:collapse;font-size:13.5px}
-th{text-align:left;color:var(--dim);font-weight:500;padding:6px 10px 6px 0;border-bottom:1px solid var(--line)}
-td{padding:7px 10px 7px 0;border-bottom:1px solid var(--line);vertical-align:top}
-tr.cur td{background:rgba(125,211,252,.07)}
-.tag{font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--dim);white-space:nowrap;display:inline-block}
-td:nth-child(n+3),th:nth-child(n+3){white-space:nowrap;width:1%;padding-right:14px}td:nth-child(2){white-space:nowrap;padding-right:18px}td:first-child{min-width:260px}
-.tag.done{color:var(--ok);border-color:rgba(134,239,172,.4)}
-.tag.now{color:var(--hi);border-color:rgba(125,211,252,.5)}
-.tl{font-size:13.5px}
-.tl div{padding:4px 0;border-bottom:1px solid var(--line);display:flex;gap:12px}
-.tl .t{color:var(--dim);flex:none;width:92px}
-.tl .r{color:var(--hi);flex:none;width:88px}
-.dim{color:var(--dim)}
-.empty{color:var(--dim);padding:8px 0}
-.warn{background:rgba(252,211,77,.12);border:1px solid rgba(252,211,77,.5);color:var(--warn);border-radius:10px;padding:10px 14px;margin-bottom:14px}
-.hand{border-left:3px solid var(--hi);padding:4px 12px;margin:4px 0 6px;white-space:pre-wrap}
-.ask{background:rgba(134,239,172,.08);border:1px solid rgba(134,239,172,.45);border-radius:12px;padding:16px 20px;margin-bottom:14px}
-.ask h2{font-size:16px;margin:0 0 10px;color:var(--ok);font-weight:600}
-.ask .q{font-size:17px;font-weight:600;margin:10px 0 8px;line-height:1.5}
-.ask .opt{padding:4px 0 4px 16px;border-left:2px solid var(--line)}
-.ask .opt.lean{border-left-color:var(--ok)}
-.ask .meta{display:flex;gap:14px;padding:3px 0;font-size:13.5px}
-.ask .meta .k{color:var(--dim);width:64px;flex:none}
-.ask .how{color:var(--dim);font-size:12.5px;margin-top:10px}
-.ask .opt{cursor:pointer;border-radius:6px;transition:background .12s}
-.ask .opt:hover{background:rgba(134,239,172,.10)}
-.ask .opt.picked{background:rgba(134,239,172,.18);border-left-color:var(--ok)}
-.ask textarea{width:100%;margin-top:10px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:14px/1.6 inherit;resize:vertical;min-height:54px}
-.ask .send{margin-top:10px;display:flex;gap:10px;align-items:center}
-.ask button{background:var(--ok);color:#0b1220;border:0;border-radius:8px;padding:7px 18px;font:600 14px inherit;cursor:pointer}
-.ask button:disabled{opacity:.4;cursor:default}
-.ask button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);font-weight:400}
-.prog div{display:flex;gap:10px;padding:2px 0;font-size:13px;border-bottom:1px dashed var(--line,#e5e7eb)}.prog .t{color:#6b7280;font-variant-numeric:tabular-nums}.prog .r{color:#6b7280;min-width:4em}.tl .sub{padding-left:18px;font-size:12px}
-</style></head><body><div class="wrap">
-<h1>现场 · ${esc(projectName)}</h1>
-<div class="sub" id="upd">连接中…</div>
-<div id="app"></div>
-<div class="sub" style="margin-top:18px">页面每 2 秒自己刷新一次。开发指挥用 <code>scene set</code> 往上写。</div>
-</div>
-<script>
-const $=(s)=>document.querySelector(s)
-function hm(iso){var d=new Date(iso),p=function(n){return String(n).padStart(2,'0')};return p(d.getHours())+':'+p(d.getMinutes())}
-function mdhm(iso){var d=new Date(iso),p=function(n){return String(n).padStart(2,'0')};return p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())}
-function ago(iso){if(!iso)return '';const m=Math.floor((Date.now()-new Date(iso).getTime())/60000);if(m<1)return '刚刚';if(m<60)return m+' 分钟';const h=Math.floor(m/60);return h<24?h+' 小时':Math.floor(h/24)+' 天'}
-function esc(x){return String(x==null?'':x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-const PHASES=['场景','模型','草稿原型','一起按','正式化']
-function stageTag(s){if(s==='done')return '<span class="tag done">完</span>';if(s==='in-progress')return '<span class="tag now">在做</span>';return '<span class="tag">待</span>'}
-function render(d){
-  const s=d.scene,cur=d.slices.find(x=>x.id===s.slice)
-  let h=''
-  if(d.warning)h+='<div class="warn">⚠ '+esc(d.warning)+'</div>'
-  const all=(s.questions||[])
-  const open=all.filter(q=>!q.answeredAt)
-  const mode=s.askMode||'逐个'
-  if(open.length>1)h+='<div class="ask" style="padding:10px 20px"><b>攒着 '+open.length+' 个问题等你</b> <span class="dim">· 问答模式：'+esc(mode)+'</span>'+' ' + LINK + '</div>'
-  for(const q of open){
-    h+='<div class="ask"><h2>● '+esc(q.id)+' '+(q.answeredAt?'改一下':'等你回答')+' <span class="dim" style="font-weight:400;font-size:13px">'+esc(q.who||'—')+' · '+ago(q.ts)+'前</span></h2>'
-    h+='<div class="meta"><div class="k">在做什么</div><div>'+esc(q.doing)+'</div></div>'
-    h+='<div class="meta"><div class="k">上下文</div><div>'+esc(q.context)+'</div></div>'
-    h+='<div class="q">'+esc(q.question)+'</div>'
-    h+=q.options.map(function(o,i){var lean=String(o).indexOf(String(q.lean))===0||String(q.lean).indexOf(String(i+1))===0
-      return '<div class="opt'+(lean?' lean':'')+'">'+esc(o)+(lean?' <span class="dim">· 它偏向这个</span>':'')+'</div>'}).join('')
-    h+='<div class="meta" style="margin-top:8px"><div class="k">偏向</div><div>'+esc(q.lean)+' <span class="dim">· 信心'+esc(q.confidence)+'</span>'
-      +(q.wentAhead?' <span class="dim">· 你不在，已经照这个先做下去了，你选别的就要返工</span>':'')+'</div></div>'
-    // 现场页只把问题亮出来；两种模式都给出「等你答」那一页的路——逐个模式下开发指挥会在对话里端给你，
-    // 但你想点着答也随时点得到
-    h+='<div class="how">'+(mode==='问卷'
-      ? '现在是问卷模式：这些攒着等你，<a href="/questions" target="_top" style="color:var(--ok)">去「等你答」那一页</a>一口气答完。'
-      : '现在是逐个模式：开发指挥会在 Claude Code 的对话里把这个问题端给你；想点着答就<a href="/questions" target="_top" style="color:var(--ok)">去「等你答」那一页</a>。')+'</div>'
-    h+='</div>'
+// 群聊页的数据：某一天（本地日期）日志里的每一笔，加上看板上的问题（带选项）与这一步。
+// 日志文件按 UTC 日期分，本地一天可能跨两个文件，所以全读进来按本地日期重新分堆。
+function feed(date) {
+  const dir = path.join(root, 'journal')
+  const byDay = new Map(), gates = []
+  for (const f of fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(n)) : []) {
+    for (const line of fs.readFileSync(path.join(dir, f), 'utf8').split('\n')) {
+      if (!line.trim()) continue
+      try { const e = JSON.parse(line); const d = clock.date(e.ts); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d).push(e); if (e.kind === 'gate') gates.push(e) } catch { /* 坏行跳过 */ }
+    }
   }
-
-  if(s.handoff)h+='<div class="card"><div class="row"><div class="k">交接</div><div class="v"><div class="hand">'+esc(s.handoff.text)+'</div><span class="dim">'+esc(s.handoff.machine||'')+' · '+ago(s.handoff.at)+'前'+(s.handoff.slice?' · '+esc(s.handoff.slice):'')+'</span></div></div></div>'
-  h+='<div class="card">'
-  if(cur){
-    h+='<div class="row"><div class="k">切片</div><div class="v big">'+esc(cur.title)+' <span class="dim" style="font-size:14px;font-weight:400">'+esc(cur.id)+'</span></div></div>'
-    if(cur.scene)h+='<div class="row"><div class="k">场景</div><div class="v">'+esc(cur.scene)+'</div></div>'
-    h+='<div class="row"><div class="k">范围</div><div class="v">'+(cur.modules.length?esc(cur.modules.join('、')):'<span class="dim">未定</span>')+' <span class="dim">· 语句 '+cur.traces+' 条</span></div></div>'
-  }else{h+='<div class="empty">还没有指到哪一段（<code>scene set --slice …</code>）</div>'}
-  h+='</div>'
-
-  h+='<div class="card"><div class="phases">'+PHASES.map(p=>'<span class="ph'+(p===s.phase?' on':'')+'">'+p+'</span>').join('')+'</div>'
-  h+='<div class="row"><div class="k">这一步</div><div class="v big">'+(s.step?esc(s.step):'<span class="dim">—</span>')+'</div></div>'
-  const cls=s.who==='人'?'you':(s.who&&s.who!=='开发指挥'?'':'idle')
-  h+='<div class="row"><div class="k">谁在干</div><div class="v"><span class="who"><span class="dot '+cls+'"></span>'+esc(s.who||'—')+'</span>'
-    +(s.since?' <span class="dim">· 已 '+ago(s.since)+'</span>':'')+(s.who==='人'?' <span class="dim">· 等你</span>':'')+'</div></div>'
-  if(s.note)h+='<div class="row"><div class="k">说明</div><div class="v dim">'+esc(s.note)+'</div></div>'
-  const pg=(s.progress||[]).slice().reverse().slice(0,12)
-  if(pg.length)h+='<div class="row"><div class="k">细步</div><div class="v"><div class="prog">'+pg.map(function(e){return '<div><span class="t">'+esc(hm(e.ts))+'</span><span class="r">'+esc(e.who||'—')+'</span><span>'+esc(e.text)+'</span></div>'}).join('')+'</div></div></div>'
-  h+='</div>'
-
-  h+='<div class="card"><table><tr><th>切片</th><th>范围</th><th>走到哪</th></tr>'
-  h+=d.slices.map(x=>'<tr'+(x.id===s.slice?' class="cur"':'')+'><td><b>'+esc(x.title)+'</b><div class="dim">'+esc(x.id)+(x.scene?' · '+esc(x.scene):'')+'</div></td>'
-    +'<td class="dim">'+esc(x.modules.join('、'))+'</td>'
-    +'<td>'+x.stages.map(function(p){return '<span class="dim">'+esc(p[0])+'</span> '+stageTag(p[1])}).join(' ')+'</td></tr>').join('')
-  h+='</table></div>'
-
-  const tl=(s.timeline||[]).slice().reverse().slice(0,14)
-  h+='<div class="card"><div class="tl">'+(tl.length?tl.map(e=>e.kind==='progress'?'<div class="sub"><span class="t">'+esc(mdhm(e.ts))+'</span><span class="r">'+esc(e.who||'—')+'</span><span class="dim">└ '+esc(e.note)+'</span></div>':'<div><span class="t">'+esc(mdhm(e.ts))+'</span><span class="r">'+esc(e.who||'—')+'</span><span>'+esc(e.step)+(e.note?' <span class="dim">· '+esc(e.note)+'</span>':'')+'</span></div>').join(''):'<div class="empty">还没有动态</div>')+'</div></div>'
-  $('#app').innerHTML=h
-
-  $('#upd').textContent=s.updatedAt?('更新于 '+ago(s.updatedAt)+'前'):'还没人写过现场'
-}
-// 正在答题时不重画，不然两秒一刷会把选的和写的字冲掉
-let answering=false
-const picked={}
-const reopened={}
-function wireAsk(open){
-  for(const q of open){
-    const box=document.getElementById('t-'+q.id),btn=document.getElementById('b-'+q.id),msg=document.getElementById('m-'+q.id)
-    if(!box||!btn)continue
-    const card=btn.closest('.ask')
-    const opts=[...card.querySelectorAll('.opt')]
-    const refresh=()=>{const has=picked[q.id]!=null||box.value.trim();btn.disabled=!has;answering=!!has}
-    opts.forEach(function(el,i){
-      el.addEventListener('click',function(){
-        picked[q.id]=i
-        opts.forEach(x=>x.classList.remove('picked'))
-        el.classList.add('picked')
-        msg.textContent='选的是：'+q.options[i]
-        refresh()
-      })
-      if(picked[q.id]===i){el.classList.add('picked');msg.textContent='选的是：'+q.options[i]}
-    })
-    box.addEventListener('input',refresh)
-    box.addEventListener('focus',function(){answering=true})
-    refresh()
-    btn.addEventListener('click',async function(){
-      const i=picked[q.id],extra=box.value.trim()
-      const text=(i!=null?q.options[i]:'')+(i!=null&&extra?'　'+extra:extra)
-      if(!text)return
-      btn.disabled=true;msg.textContent='记上…'
-      try{
-        const r=await (await fetch('/answer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:q.id,text:text})})).json()
-        if(!r.ok){msg.textContent='没记上：'+(r.error||'不知道为什么');btn.disabled=false;return}
-        delete picked[q.id];answering=false;tick()
-      }catch(e){msg.textContent='没记上：'+e.message;btn.disabled=false}
-    })
+  const dates = [...byDay.keys()].sort().reverse()
+  const day = byDay.has(date) ? date : dates[0] ?? clock.date(new Date())
+  const entries = (byDay.get(day) ?? []).sort((a, b) => String(a.ts).localeCompare(String(b.ts)))
+  const sc = readScene()
+  return {
+    project: projectName, date: day, dates: dates.map((d) => ({ date: d, n: byDay.get(d).length })), entries,
+    questions: sc.questions ?? [], mode: sc.askMode ?? null,
+    mine: { gates }, // 他拍过的板，跨所有日子；答过的问题在 questions 里
+    board: { slice: sc.slice ?? null, phase: sc.phase ?? null, step: sc.step ?? null, who: sc.who ?? null, since: sc.since ?? null, handoff: sc.handoff ?? null },
   }
 }
-async function tick(){if(answering)return;try{render(await (await fetch('/data')).json())}catch(e){$('#upd').textContent='取不到数据：'+e.message}}
-tick();setInterval(tick,2000)
-</script></body></html>`
-
-const QUESTIONS_PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>等你答 · ${esc(projectName)}</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--fg:#e6e9ef;--dim:#8b93a7;--hi:#7dd3fc;--ok:#86efac;--warn:#fcd34d}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 "PingFang SC","Microsoft YaHei",system-ui,sans-serif}
-.wrap{max-width:820px;margin:0 auto;padding:24px 20px 80px}
-h1{font-size:19px;margin:0 0 2px;font-weight:600}
-.sub{color:var(--dim);font-size:13px;margin-bottom:20px}
-.q{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
-.q.open{border-color:rgba(134,239,172,.45);background:rgba(134,239,172,.06)}
-.q .no{color:var(--ok);font-weight:600;font-size:13px}
-.q .ttl{font-size:17px;font-weight:600;margin:8px 0 10px;line-height:1.5}
-.meta{display:flex;gap:14px;padding:3px 0;font-size:13.5px}
-.meta .k{color:var(--dim);width:64px;flex:none}
-.opt{padding:7px 12px;margin:4px 0;border:1px solid var(--line);border-radius:8px;cursor:pointer}
-.opt:hover{background:rgba(134,239,172,.10)}
-.opt.picked{background:rgba(134,239,172,.18);border-color:var(--ok)}
-.lean{color:var(--dim);font-size:12.5px;margin-top:6px}
-textarea{width:100%;margin-top:10px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:14px/1.6 inherit;resize:vertical;min-height:50px}
-.act{margin-top:12px;display:flex;gap:10px;align-items:center}
-button{background:var(--ok);color:#0b1220;border:0;border-radius:8px;padding:7px 18px;font:600 14px inherit;cursor:pointer}
-button:disabled{opacity:.4;cursor:default}
-button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);font-weight:400}
-.done{opacity:.75}
-.done .ans{color:var(--ok)}
-.empty{color:var(--dim);padding:28px 0}
-a{color:var(--hi)}
-</style></head><body><div class="wrap">
-<h1>等你答 · ${esc(projectName)}</h1>
-<div class="sub" id="sub">连接中…</div>
-<div id="app"></div>
-</div>
-<script>
-const $=(x)=>document.querySelector(x)
-function esc(x){return String(x==null?'':x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-function hm(iso){var d=new Date(iso),p=function(n){return String(n).padStart(2,'0')};return p(d.getHours())+':'+p(d.getMinutes())}
-function mdhm(iso){var d=new Date(iso),p=function(n){return String(n).padStart(2,'0')};return p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())}
-function ago(iso){if(!iso)return '';const m=Math.floor((Date.now()-new Date(iso).getTime())/60000);if(m<1)return '刚刚';if(m<60)return m+' 分钟';const h=Math.floor(m/60);return h<24?h+' 小时':Math.floor(h/24)+' 天'}
-let busy=false
-const picked={},reopened={}
-function render(d){
-  const qs=d.scene.questions||[]
-  const open=qs.filter(q=>!q.answeredAt||reopened[q.id])
-  const done=qs.filter(q=>q.answeredAt&&!reopened[q.id]).slice(-8).reverse()
-  const mode=d.scene.askMode||'逐个'
-  let h=''
-  if(!open.length)h+='<div class="empty">没有攒着的问题。'+(mode==='逐个'?'现在是逐个模式，角色问出来的问题开发指挥会在 Claude Code 的对话里端给你。':'角色一有要你裁的事就会攒到这儿。')+'</div>'
-  open.forEach(function(q,i){
-    h+='<div class="q open"><div class="no">'+(i+1)+' / '+open.length+'　'+esc(q.id)+'　'+esc(q.who||'—')+' 问的 · '+ago(q.ts)+'前'+(q.answeredAt?'　（在改）':'')+'</div>'
-    h+='<div class="meta"><div class="k">在做什么</div><div>'+esc(q.doing)+'</div></div>'
-    h+='<div class="meta"><div class="k">上下文</div><div>'+esc(q.context)+'</div></div>'
-    h+='<div class="ttl">'+esc(q.question)+'</div>'
-    h+=q.options.map(function(o,j){return '<div class="opt" data-q="'+esc(q.id)+'" data-i="'+j+'">'+esc(o)+'</div>'}).join('')
-    h+='<div class="lean">它偏向：'+esc(q.lean)+'（信心'+esc(q.confidence)+'）'+(q.wentAhead?'　——你不在，已经照这个先做下去了，你选别的就要返工':'')+'</div>'
-    if(q.answeredAt)h+='<div class="lean">你原来答的是「'+esc(q.answer)+'」，改了原答复不会被抹掉。</div>'
-    h+='<textarea id="t-'+esc(q.id)+'" placeholder="想补充什么就写在这儿（可以不写）"></textarea>'
-    h+='<div class="act"><button data-send="'+esc(q.id)+'" disabled>答这个</button><span class="lean" id="m-'+esc(q.id)+'">点一个答案，或者只写几句话也行</span></div></div>'
-  })
-  if(done.length){
-    h+='<div class="sub" style="margin:26px 0 8px">答过的</div>'
-    for(const q of done)h+='<div class="q done"><div class="no">'+esc(q.id)+'　'+esc(q.who||'—')+' 问的 · '+ago(q.answeredAt)+'前'+((q.answerHistory||[]).length?'　改过 '+q.answerHistory.length+' 次':'')+'</div><div class="ttl" style="font-size:15px">'+esc(q.question)+'</div><div class="ans">'+esc(q.answer)+'</div><div class="act"><button class="ghost" data-redo="'+esc(q.id)+'">改一下</button></div></div>'
-  }
-  $('#app').innerHTML=h
-  $('#sub').textContent='问答模式：'+mode+(mode==='逐个'?'（你在电脑前或手机上，开发指挥在对话里一个个问；这一页备着）':'（你没在专注，问题攒在这儿，回来一口气答完）')
-  wire()
-}
-function wire(){
-  document.querySelectorAll('.opt').forEach(function(el){
-    const id=el.dataset.q,i=Number(el.dataset.i)
-    if(picked[id]===i)el.classList.add('picked')
-    el.addEventListener('click',function(){
-      picked[id]=i;busy=true
-      document.querySelectorAll('.opt[data-q="'+id+'"]').forEach(x=>x.classList.remove('picked'))
-      el.classList.add('picked')
-      refresh(id)
-    })
-  })
-  document.querySelectorAll('textarea').forEach(function(t){
-    const id=t.id.slice(2)
-    t.addEventListener('input',function(){busy=true;refresh(id)})
-    t.addEventListener('focus',function(){busy=true})
-  })
-  document.querySelectorAll('[data-send]').forEach(function(b){
-    const id=b.dataset.send
-    refresh(id)
-    b.addEventListener('click',async function(){
-      const t=document.getElementById('t-'+id),msg=document.getElementById('m-'+id)
-      const i=picked[id],extra=t.value.trim()
-      const q=(LAST.scene.questions||[]).find(x=>x.id===id)
-      const text=(i!=null?q.options[i]:'')+(i!=null&&extra?'　'+extra:extra)
-      if(!text)return
-      b.disabled=true;msg.textContent='记上…'
-      try{
-        const r=await (await fetch('/answer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:id,text:text})})).json()
-        if(!r.ok){msg.textContent='没记上：'+(r.error||'不知道为什么');b.disabled=false;return}
-        delete picked[id];delete reopened[id];busy=false;tick()
-      }catch(e){msg.textContent='没记上：'+e.message;b.disabled=false}
-    })
-  })
-  document.querySelectorAll('[data-redo]').forEach(function(b){
-    b.addEventListener('click',function(){reopened[b.dataset.redo]=true;busy=false;tick()})
-  })
-}
-function refresh(id){
-  const t=document.getElementById('t-'+id),b=document.querySelector('[data-send="'+id+'"]')
-  if(!t||!b)return
-  b.disabled=!(picked[id]!=null||t.value.trim())
-}
-let LAST=null
-async function tick(){if(busy)return;try{LAST=await (await fetch('/data')).json();render(LAST)}catch(e){$('#sub').textContent='取不到数据：'+e.message}}
-tick();setInterval(tick,3000)
-</script></body></html>`
 
 const wanted = Number(opt('--port', '4873'))
 function listen(port, tries = 12) {
   const srv = http.createServer((req, res) => {
     if (req.method === 'POST' && req.url.startsWith('/answer')) {
-      const chunks = [] // 攒 Buffer 再一次解码：一个汉字的三个字节可能分在两块里，逐块拼字符串会出乱码（2026-09-21）
+      const chunks = [] // 攒 Buffer 再一次解码：一个汉字的三个字节可能分在两块里，逐块拼字符串会出乱码
       req.on('data', (d) => chunks.push(d))
       req.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8')
@@ -871,17 +599,17 @@ function listen(port, tries = 12) {
       })
       return
     }
-    if (req.url.split('?')[0] === '/questions') {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-      return res.end(QUESTIONS_PAGE)
-    }
-    if (req.url.startsWith('/data')) {
+    if (req.url.startsWith('/feed')) {
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
-      const sc = readScene()
-      return res.end(JSON.stringify({ scene: sc, slices: slices(), machine: ME, warning: machineWarning(sc) }))
+      return res.end(JSON.stringify(feed(new URLSearchParams(req.url.split('?')[1] ?? '').get('date'))))
     }
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    res.end(PAGE)
+    if (req.url.split('?')[0] === '/page.js') {
+      res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' })
+      return res.end(fs.readFileSync(path.join(__dirname, 'scene-page', 'page.js')))
+    }
+    // 「谁在干什么」页是群聊的样子：tools/scene-page/，每次现读，改了刷新就见
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    res.end(fs.readFileSync(path.join(__dirname, 'scene-page', 'index.html')))
   })
   srv.on('error', (e) => {
     if (e.code === 'EADDRINUSE' && tries > 0) return listen(port + 1, tries - 1)

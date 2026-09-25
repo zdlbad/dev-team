@@ -10,49 +10,23 @@
  *   卡片   —— 每个模型文件一张卡片，全部内容。
  *   业务覆盖 —— 每条业务语句落到了哪些元素。
  *
- * 用法：node tools/render.js <项目目录> [--decoded <解码目录>] [--out <html>]
- *   --decoded 时与解码出的实际模型比对：图上有差异的节点描红，卡片底部并排列出「模型 ｜ 代码」。
+ * 用法：node tools/render.js <项目目录> [--out <html>]
  *   --out 缺省为 <项目目录>/reports/model.html。
  */
 const fs = require('node:fs')
 const path = require('node:path')
-const { spawnSync } = require('node:child_process')
 const { loadProject, ruleText, conditionText, labelOf } = require('./lib/project')
 
 const args = process.argv.slice(2)
 const root = args[0] && path.resolve(args[0])
 const opt = (n) => (args.indexOf(n) >= 0 ? args[args.indexOf(n) + 1] : undefined)
 if (!root || !fs.existsSync(path.join(root, 'model'))) {
-  console.error('用法：node tools/render.js <项目目录> [--decoded <解码目录> | --baseline <基线模型目录>] [--out <html>]')
+  console.error('用法：node tools/render.js <项目目录> [--out <html>]')
   process.exit(2)
 }
-const decodedDir = opt('--decoded') && path.resolve(opt('--decoded'))
-// --baseline <目录>：与切片开工时的模型（基线）比，人只看增量；机制与 --decoded 相同，只是对面不是代码而是上一版
-const baselineDir = opt('--baseline') && path.resolve(opt('--baseline'))
-const otherDir = decodedDir ?? baselineDir
-const other = baselineDir ? '上一版' : '代码'
 const out = path.resolve(opt('--out') ?? path.join(root, 'reports', 'model.html'))
 const { business, glossary, model } = loadProject(root)
 const projectName = fs.existsSync(path.join(root, 'project.json')) ? JSON.parse(fs.readFileSync(path.join(root, 'project.json'), 'utf8')).name : path.basename(root)
-
-// ---------- 差异（可选） ----------
-let findings = []
-let decodedFiles = new Set()
-if (otherDir) {
-  const tmp = path.join(root, 'reports', '_render-diff.json')
-  fs.mkdirSync(path.dirname(tmp), { recursive: true })
-  spawnSync(process.execPath, [path.join(__dirname, 'diff-model.js'), path.join(root, 'model'), otherDir, '--json', tmp], { encoding: 'utf8' })
-  if (fs.existsSync(tmp)) {
-    findings = JSON.parse(fs.readFileSync(tmp, 'utf8')).findings.map((f) => ({ ...f, file: f.file.replace(/^model\//, '') }))
-    fs.rmSync(tmp, { force: true })
-  }
-  const walk = (d, o = []) => {
-    for (const e of fs.readdirSync(d, { withFileTypes: true })) e.isDirectory() ? walk(path.join(d, e.name), o) : o.push(path.join(d, e.name))
-    return o
-  }
-  decodedFiles = new Set(walk(otherDir).filter((p) => p.endsWith('.json') && !path.basename(p).startsWith('_')).map((p) => path.relative(otherDir, p).replaceAll('\\', '/')))
-}
-const findingsOf = (file) => findings.filter((f) => f.file === file.replace(/^model\//, ''))
 
 // ---------- 小工具 ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
@@ -60,7 +34,6 @@ const chips = (xs, cls = 'trace') => (xs ?? []).map((x) => `<span class="chip ${
 const params = (ps) => (ps ?? []).map((p) => `${esc(p.name)}: ${esc(p.type)}`).join(', ')
 const raiseText = (r) => (typeof r === 'string' ? r : `${r.event}（当 ${r.when}）`)
 const raiseName = (r) => (typeof r === 'string' ? r : r.event)
-const show = (v) => (v === null || v === undefined ? '—' : typeof v === 'string' ? v : JSON.stringify(v))
 const KIND_LABEL = { 'aggregate-root': '聚合根', entity: '实体', 'value-object': '值对象', event: '事件', error: '错误', repository: '仓储', service: '领域服务', 'command-handler': '命令', 'query-handler': '查询', 'event-handler': '事件处理', port: '端口' }
 
 // ---------- 卡片 ----------
@@ -70,13 +43,6 @@ function fieldsTable(fields) {
 }
 // 卡片头：种类 + 名字一行，追溯标签自己一行（原来挤在名字后面，七八个标签把标题冲散）
 const cardHead = (kind, name, traces) => `<div class="hd"><span class="kind">${kind}</span><b class="name">${esc(name)}</b></div>${traces?.length ? `<div class="traces">${chips(traces)}</div>` : ''}`
-function diffBlock(file) {
-  const fs_ = findingsOf(file)
-  if (!fs_.length) return ''
-  const rows = fs_.map((f) => `<tr><td class="k">${esc(f.kind === 'missing-file' ? '整个文件' : f.path)}</td><td>${esc(f.kind === 'missing-file' ? '（模型有）' : show(f.model))}</td><td>${esc(f.kind === 'missing-file' ? `（${other}无）` : show(f.code))}</td></tr>`).join('')
-  return `<div class="diff"><div class="dt">与${other}的差异（${fs_.length}）</div><table><tr><th>位置</th><th>模型</th><th>${other}</th></tr>${rows}</table></div>`
-}
-const cardCls = (file) => (findingsOf(file).length ? 'card bad' : otherDir ? 'card ok' : 'card')
 /**
  * 一个方法的七段：作用、入参、做法（每一步改哪几栏）、规则、错误、事件、返回。
  * 项目所有者读 Invoice.attachSupportingDocument：「模型方法这里说的没有条理」——五条规则用分号连成一串。
@@ -103,13 +69,13 @@ function domainCard(el) {
     : ''
   // 创建：怎么被建出来，与行为同一套七段
   const create = d.create ? `<div class="sec"><div class="sec-title">创建</div><ul class="meths">${methodBlock(d.create, `<code>create(${params(d.create.input ?? [])})</code> ${chips(d.create.traces ?? [])}`)}</ul></div>` : ''
-  return `<div class="${cardCls(el.file)}" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], d.name, d.traces)}
+  return `<div class="card" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], d.name, d.traces)}
   ${d.aggregateNarrative ? `<p class="narr">${esc(d.aggregateNarrative)}</p>` : ''}
   ${d.fields?.length ? `<div class="sec"><div class="sec-title">字段</div>${fieldsTable(d.fields)}</div>` : ''}
-  ${create}${inv(d.aggregateInvariants, '聚合级规则')}${inv(d.invariants, d.create ? '不变量' : '规则')}${behaviors}${diffBlock(el.file)}</div>`
+  ${create}${inv(d.aggregateInvariants, '聚合级规则')}${inv(d.invariants, d.create ? '不变量' : '规则')}${behaviors}</div>`
 }
 function smallCard(el, body) {
-  return `<div class="${cardCls(el.file)} small" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], el.data.name, el.data.traces)}${body}${diffBlock(el.file)}</div>`
+  return `<div class="card small" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], el.data.name, el.data.traces)}${body}</div>`
 }
 function steps(list) {
   if (!list?.length) return '<span class="muted">（无步骤）</span>'
@@ -129,7 +95,7 @@ function useCaseCard(el) {
     d.raises?.length ? `发出：${d.raises.map(raiseText).map(esc).join('，')}` : '',
     d.throws?.length ? `抛出：${esc(d.throws.join('，'))}` : '',
   ].filter(Boolean)
-  return `<div class="${cardCls(el.file)}" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], d.name, d.traces)}<div class="sec">${head}</div>${steps(d.steps)}${tail.length ? `<div class="sec muted2">${tail.join('　')}</div>` : ''}${diffBlock(el.file)}</div>`
+  return `<div class="card" id="${esc(el.file)}">${cardHead(KIND_LABEL[el.kind], d.name, d.traces)}<div class="sec">${head}</div>${steps(d.steps)}${tail.length ? `<div class="sec muted2">${tail.join('　')}</div>` : ''}</div>`
 }
 function serviceCard(el) {
   const d = el.data
@@ -138,7 +104,7 @@ function serviceCard(el) {
       ? methodBlock(op, `<code>${esc(op.name)}(${params(op.input)})${op.output ? ` → ${esc(op.output)}` : ''}</code> ${chips(op.traces)}`, `<div class="m7"><span class="m7k">读 / 写</span><div>读 ${esc(op.reads.join('，') || '无')}；写 ${esc(op.writes.join('，') || '无')}</div></div>`)
       : `<li><code>${esc(op.name)}(${params(op.input)})${op.output ? ` → ${esc(op.output)}` : ''}</code> ${chips(op.traces)}<div class="sub">读：${esc(op.reads.join('，') || '无')}　写：${esc(op.writes.join('，') || '无')}</div>${op.rules?.length ? `<div class="sub">规则：</div><ul class="sub">${op.rules.map((r) => `<li>${esc(ruleText(r))}</li>`).join('')}</ul>` : ''}${steps(op.steps)}</li>`)
     .join('')
-  return `<div class="${cardCls(el.file)}" id="${esc(el.file)}"><div class="hd"><span class="kind">领域服务</span> <b>${esc(d.name)}</b> <span class="muted">协调：${esc(d.coordinates.join('，'))}</span></div><ul>${ops}</ul>${diffBlock(el.file)}</div>`
+  return `<div class="card" id="${esc(el.file)}"><div class="hd"><span class="kind">领域服务</span> <b>${esc(d.name)}</b> <span class="muted">协调：${esc(d.coordinates.join('，'))}</span></div><ul>${ops}</ul></div>`
 }
 const els = model.elements.filter((e) => e.kind !== 'invalid')
 const handlersOf = (ev) => els.filter((e) => e.kind === 'event-handler' && e.data.trigger === ev)
@@ -178,7 +144,7 @@ const edges = []
 const nodeIds = new Set()
 for (const el of els) {
   if (el.kind === 'repository') continue // 仓储折叠成「用例 → 聚合」的读 / 写边
-  nodes.push({ id: el.file, label: el.data.name, kind: el.kind, module: el.module, agg: ['aggregate-root', 'entity', 'value-object', 'event', 'error'].includes(el.kind) ? aggregateOf(el) : null, bad: findingsOf(el.file).length > 0, sub: el.kind === 'port' ? `${el.data.kind === 'external-system' ? '外部' : '模块'} ${el.data.target}` : el.kind === 'command-handler' || el.kind === 'query-handler' ? el.data.actor : el.kind === 'event-handler' ? `← ${el.data.trigger}` : '' })
+  nodes.push({ id: el.file, label: el.data.name, kind: el.kind, module: el.module, agg: ['aggregate-root', 'entity', 'value-object', 'event', 'error'].includes(el.kind) ? aggregateOf(el) : null, sub: el.kind === 'port' ? `${el.data.kind === 'external-system' ? '外部' : '模块'} ${el.data.target}` : el.kind === 'command-handler' || el.kind === 'query-handler' ? el.data.actor : el.kind === 'event-handler' ? `← ${el.data.trigger}` : '' })
   nodeIds.add(el.file)
 }
 const seen = new Set()
@@ -246,7 +212,7 @@ for (const el of els) {
 }
 // 模块端口指向的模块：用一个模块节点承接
 for (const e of edges) if (e.to.startsWith('mod:') && !nodeIds.has(e.to)) {
-  nodes.push({ id: e.to, label: e.to.slice(4), kind: 'module', module: e.to.slice(4), agg: null, bad: false, sub: '模块' })
+  nodes.push({ id: e.to, label: e.to.slice(4), kind: 'module', module: e.to.slice(4), agg: null, sub: '模块' })
   nodeIds.add(e.to)
 }
 // 同一对节点之间的调用 / 读 / 写合并成一条边：种类取最强（写 > 调用 > 读），标签列出全部方法
@@ -349,15 +315,10 @@ const moduleMap = (() => {
 
 const traced = (id) => els.filter((e) => JSON.stringify(e.data).includes(`"${id}"`)).map((e) => `<a href="#${esc(e.file)}" class="jump">${esc(e.data.name)}</a>`)
 const coverage = business.map((s) => `<tr><td><code>${esc(s.id)}</code></td><td>${esc(labelOf(s) ? `(${labelOf(s)}) ` : '')}${esc(s.text)}</td><td>${traced(s.id).join('，') || '<span class="bad-text">无落点</span>'}</td></tr>`)
-const extraFiles = [...decodedFiles].filter((f) => !model.byFile.has('model/' + f))
-const diffSection = otherDir
-  ? `<section id="view-diff" class="view"><h2>差异汇总</h2>${findings.length ? `<ul>${findings.map((f) => `<li><a href="#model/${esc(f.file)}" class="jump">${esc(f.file)}</a> <span class="muted">${esc(f.path || '整个文件')}</span> — ${esc({ 'missing-file': `模型有、${other}无`, 'extra-file': `${other}有、模型无`, missing: `模型有、${other}无`, extra: `${other}有、模型无`, changed: '不一致' }[f.kind])}</li>`).join('')}</ul>` : '<p class="muted">设计模型与解码模型一致。</p>'}${extraFiles.length ? `<h3>${other}有、模型无的文件</h3><ul>${extraFiles.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</section>`
-  : ''
-
 // ---------- 页面 ----------
 const html = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>模型 · ${esc(projectName)}</title>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--line:#e3e6ea;--muted:#6b7280;--ok:#16a34a;--bad:#dc2626;--chip:#eef2ff;--chip-t:#3730a3}
+:root{--bg:#f6f7f9;--card:#fff;--line:#e3e6ea;--muted:#6b7280;--bad:#dc2626;--chip:#eef2ff;--chip-t:#3730a3}
 body{margin:0;font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:#111}
 header{background:#111827;color:#fff;padding:12px 24px;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}header h1{margin:0;font-size:18px}header .muted{color:#cbd5e1}
 nav{padding:6px 24px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2;display:flex;gap:4px;flex-wrap:wrap;align-items:center}
@@ -371,16 +332,15 @@ main{padding:12px 24px;max-width:1600px}.view{display:none}.view.on{display:bloc
 section{margin-bottom:28px}h2{margin:18px 0 4px;font-size:17px}h3{margin:18px 0 8px;font-size:15px;color:#374151}.resp{margin:0 0 8px;color:#374151}
 .agg{border:1px solid var(--line);border-radius:8px;background:#fafafa;padding:8px 12px;margin:10px 0}.agg summary{cursor:pointer}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:10px;margin:8px 0}.small-grid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
-.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-x:auto}.card.ok{border-left:4px solid var(--ok)}.card.bad{border-left:4px solid var(--bad)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-x:auto}.card.bad{border-left:4px solid var(--bad)}
 .hd{margin-bottom:4px}.kind{display:inline-block;font-size:11px;background:#e5e7eb;color:#374151;border-radius:4px;padding:0 6px;margin-right:4px}
 .chip{display:inline-block;font-size:11px;background:var(--chip);color:var(--chip-t);border-radius:10px;padding:0 7px;margin-left:3px}
 .meths{list-style:none;padding-left:0}.meth{border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;margin:6px 0}.mhd{margin-bottom:4px}.m7{display:grid;grid-template-columns:4.5em 1fr;gap:6px;padding:3px 0;border-top:1px dashed #e5e7eb;font-size:13px}.m7k{color:#6b7280;font-weight:600}.m7 ol,.m7 ul{margin:0;padding-left:18px}.chg{color:#2563eb;font-size:12px}
 .sec{margin:4px 0}.sub{color:#374151;font-size:13px;margin-left:8px}.muted{color:var(--muted)}.muted2{color:#374151;font-size:13px}.narr{color:#374151;margin:4px 0;font-size:13px}
 ul{margin:2px 0 2px 18px;padding:0}ul.plain{list-style:none;margin-left:0}ol.steps{margin:4px 0 4px 20px;padding:0}.when{color:#b45309}
 code{background:#f3f4f6;padding:0 4px;border-radius:3px;font-size:12.5px}a{color:#1d4ed8;text-decoration:none}a:hover{text-decoration:underline}
-.diff{margin-top:8px;border-top:1px dashed var(--bad);padding-top:6px}.dt{color:var(--bad);font-weight:600;font-size:13px}.diff table{border-collapse:collapse;width:100%;font-size:12.5px}.diff th,.diff td{border:1px solid var(--line);padding:3px 6px;text-align:left;vertical-align:top}.diff td.k{color:var(--muted);white-space:nowrap}
 table.cov{border-collapse:collapse;width:100%;background:#fff}table.cov th,table.cov td{border:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}.bad-text{color:var(--bad)}
-/* 卡片排版：留白、分行、字段成表（2026-09-13 项目所有者要求好看一些、容易看） */
+/* 卡片排版：留白、分行、字段成表，让人一眼看得清 */
 .card{padding:14px 16px 12px;line-height:1.6}
 .hd{display:flex;align-items:center;gap:8px;margin-bottom:2px}.hd .name{font-size:16px}
 .traces{margin:0 0 6px;line-height:1.9}.traces .chip,.meta .chip{margin:0 4px 0 0}
@@ -400,17 +360,16 @@ ul.inv{list-style:none;margin:0;padding:0}ul.inv li{padding:7px 0;border-top:1px
 #panel{position:absolute;right:0;top:0;bottom:0;width:min(520px,60%);background:#fff;border-left:1px solid var(--line);box-shadow:-4px 0 12px rgba(0,0,0,.06);overflow:auto;padding:10px 14px;display:none;z-index:1}#panel.on{display:block}#panel .close{float:right;border:0;background:#eee;border-radius:4px;cursor:pointer;padding:2px 8px}#panel .card{border:0;padding:0}.focus-btn{border:1px solid var(--line);background:#f3f4f6;border-radius:6px;padding:3px 10px;cursor:pointer;margin-bottom:8px}
 #focus-bar{position:absolute;left:12px;top:10px;z-index:1;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:4px 10px;font-size:12.5px}#focus-bar button{margin-left:8px;border:1px solid #d97706;background:#fff;border-radius:4px;cursor:pointer;padding:1px 8px}
 .hull{fill-opacity:.06;stroke-width:1.5;stroke-dasharray:6 4}.hull[style*="opacity: 1"]{stroke:#374151;stroke-width:3;stroke-dasharray:none}.hull-label{font-size:13px;font-weight:600;fill:#374151}.agg-hull{fill:none;stroke:#9ca3af;stroke-width:1;stroke-dasharray:3 3;rx:10}
-.node{cursor:pointer}.node rect,.node polygon,.node ellipse{stroke-width:1.5}.node text{font-size:12px;pointer-events:none}.node .sub{font-size:10px;fill:#6b7280}.node.dim{opacity:.15}.node.bad rect,.node.bad ellipse,.node.bad polygon{stroke:#dc2626;stroke-width:2.5}
+.node{cursor:pointer}.node rect,.node polygon,.node ellipse{stroke-width:1.5}.node text{font-size:12px;pointer-events:none}.node .sub{font-size:10px;fill:#6b7280}.node.dim{opacity:.15}
 .edge{fill:none;stroke-width:1.5}.edge.dim{opacity:.06}.edge-label{font-size:10px;fill:#374151;pointer-events:none;paint-order:stroke;stroke:#fff;stroke-width:3px}
 </style></head><body>
-<header><h1>模型 · ${esc(projectName)}</h1><div class="muted">${modules.length} 个模块 · ${els.length} 个模型文件 · 业务语句 ${business.length} 条 · 词汇 ${glossary.terms.length} 个${otherDir ? ` · ${baselineDir ? "与上一版比对（本段增量）：" : "与解码模型比对："}${findings.length ? `<b style="color:#fca5a5">${findings.length} 处差异</b>` : '<b style="color:#86efac">一致</b>'}` : ''}</div></header>
-<nav><button data-v="modules"${els.length ? '' : ' class="on"'}>模块图</button><button data-v="graph"${els.length ? ' class="on"' : ''}>关系图</button><button data-v="cards">卡片</button><button data-v="cov">业务覆盖</button>${otherDir ? '<button data-v="diff">差异</button>' : ''}<span class="sp"></span><button id="lay-toggle" title="按聚合分块：一个聚合一块，根在上、成员在下；分层：按命令→服务→聚合→成员→端口分列">布局：按聚合分块</button><label id="nav-hint">拖拽节点移动 · 滚轮缩放 · 拖空白平移 · 点节点看详情 · 双击空白重排</label></nav>
+<header><h1>模型 · ${esc(projectName)}</h1><div class="muted">${modules.length} 个模块 · ${els.length} 个模型文件 · 业务语句 ${business.length} 条 · 词汇 ${glossary.terms.length} 个</div></header>
+<nav><button data-v="modules"${els.length ? '' : ' class="on"'}>模块图</button><button data-v="graph"${els.length ? ' class="on"' : ''}>关系图</button><button data-v="cards">卡片</button><button data-v="cov">业务覆盖</button><span class="sp"></span><button id="lay-toggle" title="按聚合分块：一个聚合一块，根在上、成员在下；分层：按命令→服务→聚合→成员→端口分列">布局：按聚合分块</button><label id="nav-hint">拖拽节点移动 · 滚轮缩放 · 拖空白平移 · 点节点看详情 · 双击空白重排</label></nav>
 <main>
 <section id="view-modules" class="view${els.length ? '' : ' on'}">${moduleMap}</section>
 <section id="view-graph" class="view${els.length ? ' on' : ''}"><div id="graph-wrap"><div class="legend" id="legend"></div><div id="graph-area"><div id="focus-bar" style="display:none">只显示所选节点及其邻居 <button id="focus-clear">显示全部</button></div><svg id="graph"></svg><div id="panel"><button class="close" id="panel-close">关闭</button><div id="panel-body"></div></div></div></div></section>
-<section id="view-cards" class="view">${otherDir ? `<p class="muted">${baselineDir ? "左边绿条 = 与上一版一致（本段没动）；红条 = 本段新增或改动，卡片底部列出「现在 ｜ 上一版」。" : "左边绿条 = 与代码一致；红条 = 有差异，卡片底部列出「模型 ｜ 代码」。"}</p>` : ''}${cardSections.join('')}</section>
+<section id="view-cards" class="view">${cardSections.join('')}</section>
 <section id="view-cov" class="view"><h2>业务覆盖</h2><table class="cov"><tr><th>编号</th><th>业务语句</th><th>落点</th></tr>${coverage.join('')}</table></section>
-${diffSection}
 </main>
 <script>
 {
@@ -459,7 +418,7 @@ const on = { node: Object.fromEntries(Object.keys(NODE_STYLE).map(k => [k, !NODE
 const svg = document.getElementById('graph')
 const NS = 'http://www.w3.org/2000/svg'
 const el = (t, a = {}) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); return e }
-// 框宽跟着名字走：从前是死宽 110~160，ClassificationAmountForQuarter 这种长名字整截出框外（2026-09-17 项目所有者截图点名）
+// 框宽跟着名字走：定死宽度会把长名字截出框外
 const textW = s => { let w = 0; for (const ch of String(s)) w += ch.charCodeAt(0) > 255 ? 13 : 7.3; return w }
 const fitW = n => { const s = NODE_STYLE[n.kind] || NODE_STYLE.module, pad = s.shape === 'ellipse' || s.shape === 'diamond' ? 44 : 22; return Math.max(s.w, Math.ceil(textW(n.label) + pad), n.sub ? Math.ceil(textW(n.sub) + pad) : 0) }
 const nodes = G.nodes.map(n => ({ ...n, w: fitW(n), h: (NODE_STYLE[n.kind] || NODE_STYLE.module).h }))
@@ -635,11 +594,11 @@ function draw() {
     if (e.label) { const t = el('text', { class: 'edge-label', 'text-anchor': 'middle' }); t.textContent = e.label; e.tl = t; gEdge.appendChild(t) }
   }
   for (const n of nodes) {
-    const g = el('g', { class: 'node' + (n.bad ? ' bad' : ''), 'data-id': n.id })
+    const g = el('g', { class: 'node', 'data-id': n.id })
     g.appendChild(shapeOf(n))
     const t = el('text', { 'text-anchor': 'middle', y: n.sub ? -1 : 4 }); t.textContent = n.label; g.appendChild(t)
     if (n.sub) { const t2 = el('text', { class: 'sub', 'text-anchor': 'middle', y: 12 }); t2.textContent = n.sub; g.appendChild(t2) }
-    const title = el('title'); title.textContent = (NODE_STYLE[n.kind] || {}).label + ' ' + n.label + (n.bad ? '（与${other}有差异）' : ''); g.appendChild(title)
+    const title = el('title'); title.textContent = (NODE_STYLE[n.kind] || {}).label + ' ' + n.label; g.appendChild(title)
     n.el = g; gNode.appendChild(g)
     g.addEventListener('mouseenter', () => highlight(n)); g.addEventListener('mouseleave', () => highlight(null))
     g.addEventListener('mousedown', ev => startDrag(n, ev)); g.addEventListener('click', () => { if (!n.moved) openPanel(n) })
@@ -733,7 +692,7 @@ function buildLegend() {
   h += '<b>边</b>'
   for (const k in EDGE_STYLE) if (edges.some(e => e.kind === k)) h += '<div><label><input type="checkbox" data-t="edge" data-k="' + k + '"' + (on.edge[k] ? ' checked' : '') + '><span class="sw" style="border-color:' + EDGE_STYLE[k].stroke + ';border-top-style:' + (EDGE_STYLE[k].dash ? 'dashed' : 'solid') + '"></span>' + EDGE_STYLE[k].label + '</label></div>'
   h += '<b>显示</b><div><label><input type="checkbox" id="lbl-toggle"' + (showLabels ? ' checked' : '') + '>全部边标签</label></div>'
-  h += '<div class="hint">虚线框 = 模块；点框 = 聚合' + (${JSON.stringify(!!otherDir)} ? '；红边框 = 与${other}有差异' : '') + '。悬停看相邻，点节点看详情，详情里可只看它的关系。</div>'
+  h += '<div class="hint">虚线框 = 模块；点框 = 聚合。悬停看相邻，点节点看详情，详情里可只看它的关系。</div>'
   legend.innerHTML = h
   legend.querySelectorAll('input[data-t]').forEach(i => i.addEventListener('change', () => { on[i.dataset.t][i.dataset.k] = i.checked; relayout() }))
   document.getElementById('lbl-toggle').addEventListener('change', ev => { showLabels = ev.target.checked; position() })
@@ -756,4 +715,4 @@ window.addEventListener('resize', () => position())
 </body></html>`
 fs.mkdirSync(path.dirname(out), { recursive: true })
 fs.writeFileSync(out, html)
-console.log(`已写出 ${path.relative(process.cwd(), out)}（${modules.length} 个模块，${nodes.length} 个节点，${merged.length} 条边${otherDir ? `，${findings.length} 处差异` : ''}）`)
+console.log(`已写出 ${path.relative(process.cwd(), out)}（${modules.length} 个模块，${nodes.length} 个节点，${merged.length} 条边）`)

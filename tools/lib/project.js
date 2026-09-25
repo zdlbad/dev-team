@@ -10,8 +10,7 @@ function walk(dir, out = []) {
   if (!fs.existsSync(dir)) return out
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name)
-    // 点开头的目录不进：.git、.proto-build，还有走查页每次保存前留旧版的 slices/.history/。
-    // 那些备份是纯拷贝、不是工件，扫进来会被当成切片文件校验（2026-09-18 真出过，check-schema 报 1 个不合规）。
+    // 点开头的目录不进（.git、.proto-build 这类）：那里是工具自己的东西，不是工件。
     if (e.isDirectory()) { if (!e.name.startsWith('.')) walk(p, out) }
     else out.push(p)
   }
@@ -24,14 +23,11 @@ function readJson(p) {
 /** 业务语句的标签：层（业务抽象 / 业务落地）与种类（能力 / 事实 / 约束 / 公式 / 触发 / 流程 / 情形）。形状：- [R-001] (业务落地-约束) 文本 */
 const LAYERS = ['业务抽象', '业务落地']
 const KINDS = { 能力: 'G', 事实: 'R', 约束: 'R', 公式: 'R', 触发: 'R', 流程: 'R', 情形: 'R' }
-// 旧标签自动对上新名。「使用」是已停发的 U 类：老项目里还有，整体迁移时逐条过五问——公司事实改写成 R，软件行为作废
-const LEGACY_KINDS = { 目标: '能力', 不变量: '约束', 推导: '公式', 反应: '触发', 使用: '使用' }
 const LAYER_FILES = { 'abstraction.md': '业务抽象', 'practice.md': '业务落地' }
-const LEGACY_LAYER_FILES = { '业务抽象.md': '业务抽象', '业务落地.md': '业务落地', '领域.md': '业务抽象', '公司.md': '业务落地' }
 /** 给人看的标签：层-种类，缺哪样省哪样 */
 const labelOf = (s) => [s.layer, s.ruleKind].filter(Boolean).join('-')
 
-/** 业务描述：- [G-001] (层-种类) 文本。层与种类都可省：层省了从文件位置推（business/<Module>/<层>.md），老布局（business/<主题>.md）没有层 */
+/** 业务描述：- [G-001] (层-种类) 文本。层与种类都可省：层省了从文件位置推（business/<Module>/<层>.md） */
 function loadBusiness(root) {
   const dir = path.join(root, 'business')
   const statements = []
@@ -39,7 +35,7 @@ function loadBusiness(root) {
     const rel = path.relative(root, f).replaceAll('\\', '/')
     const base = path.basename(f)
     const stem = base.replace(/\.md$/, '')
-    const fileLayer = rel.split('/').length === 3 ? (LAYER_FILES[base] ?? LEGACY_LAYER_FILES[base] ?? null) : null
+    const fileLayer = rel.split('/').length === 3 ? (LAYER_FILES[base] ?? null) : null
     const lines = fs.readFileSync(f, 'utf8').split('\n')
     let inFence = false
     lines.forEach((line, i) => {
@@ -48,22 +44,20 @@ function loadBusiness(root) {
         return
       }
       if (inFence) return // 围栏代码块里的示例不是业务语句
-      const m = line.match(/^\s*-\s*\[([GRU]-\d{3,})\]\s*(?:\(([^)]*)\))?\s*(.*)$/)
+      const m = line.match(/^\s*-\s*\[([GR]-\d{3,})\]\s*(?:\(([^)]*)\))?\s*(.*)$/)
       if (!m) return
-      // G = 能力（谁能做到什么）；R = 规则（事实 / 约束 / 公式 / 触发 / 流程 / 情形）；U = 旧的使用语句，不再新发
+      // G = 能力（谁能做到什么）；R = 规则（事实 / 约束 / 公式 / 触发 / 流程 / 情形）
       const letter = m[1][0]
-      const kind = letter === 'G' ? 'goal' : letter === 'U' ? 'usage' : 'rule'
-      let labelLayer = null, kindWord = null, rawKind = null, legacy = false
+      const kind = letter === 'G' ? 'goal' : 'rule'
+      let labelLayer = null, kindWord = null, rawKind = null
       const unknown = []
       for (const tok of (m[2] ?? '').split(/[-・·／/\s]+/).filter(Boolean)) {
         if (LAYERS.includes(tok)) labelLayer = tok
         else if (KINDS[tok]) { kindWord = tok; rawKind = tok }
-        else if (LEGACY_KINDS[tok]) { kindWord = LEGACY_KINDS[tok]; rawKind = tok; legacy = true }
         else unknown.push(tok)
       }
-      if (!kindWord && kind === 'usage') { kindWord = '使用'; legacy = true }
       if (!kindWord && kind === 'goal' && labelLayer) kindWord = '能力'
-      statements.push({ id: m[1], kind, ruleKind: kindWord, rawKind, layer: labelLayer ?? fileLayer, labelLayer, fileLayer, legacy, unknownLabel: unknown.length ? unknown : null, text: m[3].trim(), file: rel, line: i + 1 })
+      statements.push({ id: m[1], kind, ruleKind: kindWord, rawKind, layer: labelLayer ?? fileLayer, labelLayer, fileLayer, unknownLabel: unknown.length ? unknown : null, text: m[3].trim(), file: rel, line: i + 1 })
     })
   }
   return statements
@@ -115,11 +109,6 @@ function loadProject(root) {
   return { root, business: loadBusiness(root), glossary: loadGlossary(root), model: loadModel(root), slices: loadSlices(root) }
 }
 
-/** 故事一步的走法名字里可能写了不止一个动作（「A + B」，按写的顺序做），逐个拆出来 */
-function walkNames(name) {
-  return String(name ?? '').split('+').map((x) => x.trim()).filter(Boolean)
-}
-
 /** 一条规则可以是一句话，也可以是 { text, traces, carries }（标明它管哪几个编号）；给人看的时候只要那句话 */
 function ruleText(r) {
   return r && typeof r === 'object' ? String(r.text ?? '') : String(r ?? '')
@@ -159,26 +148,6 @@ function folderOf(moduleName) {
 function moduleOfFolder(folder) {
   return String(folder).split(/[-_]/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('')
 }
-/** model/<Module>/x/y.json → src/<folder>/x/y.ts（或 tests/…/y.test.ts） */
-function codePathOf(modelRel, kind = 'src') {
-  const parts = String(modelRel).replaceAll('\\', '/').split('/')
-  if (parts[0] === 'model') parts.shift()
-  parts[0] = folderOf(parts[0])
-  const p = parts.join('/')
-  return kind === 'tests' ? 'tests/' + p.replace(/\.json$/, '.test.ts') : 'src/' + p.replace(/\.json$/, '.ts')
-}
-/** src/<folder>/x/y.ts 或 tests/<folder>/x/y.test.ts → <Module>/x/y.json；moduleNames 给了就按它对回真名，没给就换算 */
-function modelKeyOf(codeRel, moduleNames) {
-  const f = String(codeRel).replaceAll('\\', '/')
-  let rest = null
-  if (f.startsWith('src/') && f.endsWith('.ts')) rest = f.slice(4, -3)
-  else if (f.startsWith('tests/') && f.endsWith('.test.ts')) rest = f.slice(6, -8)
-  if (!rest) return null
-  const parts = rest.split('/')
-  const byFolder = moduleNames ? [...moduleNames].find((m) => folderOf(m) === parts[0]) : null
-  parts[0] = byFolder ?? moduleOfFolder(parts[0])
-  return parts.join('/') + '.json'
-}
 
 /**
  * 看板上这条切片还没答的问题。模型师开工与派工都看它；`scene` 递进来就不再读文件。
@@ -189,4 +158,4 @@ function openQuestions(root, sliceId, scene = null) {
   if (!sc) { try { sc = JSON.parse(fsx.readFileSync(px.join(root, 'reports', '_scene.json'), 'utf8')) } catch { return [] } }
   return (sc.questions ?? []).filter((q) => q.slice === sliceId && !q.answeredAt)
 }
-module.exports = { openQuestions, folderOf, moduleOfFolder, codePathOf, modelKeyOf, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, walkNames, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }
+module.exports = { openQuestions, folderOf, moduleOfFolder, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }

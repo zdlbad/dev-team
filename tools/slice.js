@@ -17,6 +17,7 @@
  */
 const fs = require('fs')
 const path = require('path')
+const os = require('os')
 const { openQuestions } = require('./lib/project')
 
 const args = process.argv.slice(2)
@@ -40,6 +41,14 @@ const save = (s) => { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(f
 const all = () => (fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /^[sf]-\d+\.json$/.test(f)).sort().map((f) => readJson(path.join(dir, f))) : [])
 const closed = (s) => STAGES[s.kind].every((k) => s.stages[k]?.status === 'done')
 const log = (s, text) => (s.log = s.log ?? []).push({ at: today, text })
+// 人拍板的那几关也记进日志（journal/<UTC 日期>.jsonl）：「我的」页要列出他几点拍了什么板，切片 log 只有日期
+// 页面上按的，说明里带「页面上按的」；开发指挥照他口头的话跑的，算在对话里
+function gateJournal(s, text, note) {
+  const ts = new Date().toISOString()
+  const via = /页面上按的|切片页按的/.test(note ?? '') ? '页面' : '对话'
+  fs.mkdirSync(path.join(root, 'journal'), { recursive: true })
+  fs.appendFileSync(path.join(root, 'journal', `${ts.slice(0, 10)}.jsonl`), JSON.stringify({ ts, machine: os.hostname(), kind: 'gate', who: '人', slice: s.id, text, via }) + '\n')
+}
 
 if (cmd === 'new') {
   const [, , id, title] = args
@@ -89,6 +98,8 @@ if (cmd === 'advance') {
   }
   log(s, `${NAMES[stage]} → ${status}${note ? '：' + note : ''}`)
   save(s)
+  if (status === 'done' && stage === 'scene') gateJournal(s, `场景定下：${s.title}${s.scene ? '（' + s.scene + '）' : ''}`, note)
+  if (status === 'done' && stage === 'accept') gateJournal(s, `验收：${s.title}`, note)
   console.log(`${id} 的${NAMES[stage]}：${status}`)
   process.exit(0)
 }
@@ -117,6 +128,7 @@ if (cmd === 'enough') {
   s.stages.walk = { status: 'done', at: today, ...(rest.length ? { note: rest.join(' ') } : {}) }
   log(s, '他说这一段够了' + (rest.length ? '：' + rest.join(' ') : ''))
   save(s)
+  gateJournal(s, `这一段够了：${s.title}`, rest.join(' '))
   console.log(`${id} 收口。下一个场景 slice new；攒够了开 f-xxx 正式化。`)
   process.exit(0)
 }

@@ -37,7 +37,7 @@
       "rules": ["只有草稿状态可以确认", "没有订单行的订单被拒绝而不是确认"],
       "raises": ["OrderConfirmed", { "event": "OrderRejected", "when": "没有订单行" }],
       "throws": ["OrderFailed", "CurrencyMismatch", "InvalidMoney"],
-      "traces": ["G-004", "R-001", "U-001"]
+      "traces": ["G-004", "R-001", "R-011"]
     },
     {
       "name": "total",

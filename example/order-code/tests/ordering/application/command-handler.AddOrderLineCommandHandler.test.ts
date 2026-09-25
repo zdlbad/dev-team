@@ -20,7 +20,7 @@ async function setup(status: 'draft' | 'confirmed' = 'draft') {
 }
 
 describe('AddOrderLine', () => {
-  it('[G-001][U-003] 一次加一行，订单多一行', async () => {
+  it('[G-001][R-013] 一次加一行，订单多一行', async () => {
     const { orders, handler } = await setup()
     await handler.execute(new AddOrderLineCommand('o-1', 'p-1', 2, 10, 'AUD'))
     assert.equal((await orders.findById('o-1'))?.lineCount, 1)

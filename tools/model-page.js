@@ -5,7 +5,7 @@
  *   node tools/model-page.js <项目> [--port 4871]
  *
  * 意见存在 reports/_model-notes.json，按模型文件路径分组：{ "<文件>": [{ text, at, handled }] }。
- * 模型师处理完一条把 handled 置真；工作台顶栏数的是 handled 为假的那几条。
+ * 模型师处理完一条把 handled 置真；slice next 数的是 handled 为假的那几条，还有就派模型师去处理。
  */
 const fs = require('fs')
 const path = require('path')

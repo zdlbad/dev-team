@@ -9,6 +9,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const ts = require('typescript')
+const { moduleOfFolder } = require('./lib/project')
 
 // ---------- 参数 ----------
 const args = process.argv.slice(2)
@@ -71,7 +72,7 @@ function moduleNameOfFolder(folder, modDir) {
     const m = fs.readFileSync(modFile, 'utf8').match(/export\s+function\s+build([A-Za-z0-9]+)Module\s*\(/)
     if (m) return m[1]
   }
-  return folder.split(/[-_]/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('')
+  return moduleOfFolder(folder)
 }
 for (const folder of fs.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== 'shared' && e.name !== 'proto').map((e) => e.name)) {
   const modDir = path.join(srcDir, folder)
@@ -602,7 +603,7 @@ function stepsOf(body, currentModule, ctx) {
           else if (e.prefix === 'command-handler') kind = 'command'
           if (kind) {
             call = { kind, target, method: r.method }
-            // 记下被调节点：处理器算完 raises / throws 闭包后，把被调工厂 / 行为会抛的错挂回这一步（agents/model/shapes.md「步骤语法」的步骤级 throws；2026-09-13 之前从不产出，方向 ② 永远差一条）
+            // 记下被调节点：处理器算完 raises / throws 闭包后，把被调工厂 / 行为会抛的错挂回这一步（agents/model/shapes.md「步骤语法」的步骤级 throws；不挂回，方向 ② 核对时这一步永远少一条错）
             if (kind === 'factory' || kind === 'behavior' || kind === 'service') call._callee = nodeId(e, r.method) // service：交给领域服务那一步，服务操作会抛的错也挂回这一步
             ctx.onCall?.(e, r, kind)
             if (output && ['behavior', 'factory', 'service'].includes(kind)) domainOutputs.add(output)
