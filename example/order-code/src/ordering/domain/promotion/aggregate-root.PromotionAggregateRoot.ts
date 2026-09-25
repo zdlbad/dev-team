@@ -29,7 +29,7 @@ export class PromotionAggregateRoot extends AggregateRoot<string> {
   }
 
   /**
-   * @trace R-005 U-002
+   * @trace R-005 R-012
    * @rule 促销启用且总额达到门槛才适用
    */
   appliesTo(total: MoneyValueObject): boolean {

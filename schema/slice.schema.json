@@ -119,25 +119,6 @@
           }
         }
       }
-    },
-    "backgroundTraces": {
-      "type": "array",
-      "description": "本段用得到、却落不到本段模型里的语句：只作背景，校验单列",
-      "items": {
-        "type": "object",
-        "required": [
-          "id",
-          "why"
-        ],
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "why": {
-            "type": "string"
-          }
-        }
-      }
     }
   },
   "$defs": {

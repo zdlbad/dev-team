@@ -4,7 +4,7 @@
  *
  *   node tools/workbench.js <项目> [--code <代码库>] [--port 4870] [--no-open]
  *
- * 六个页签：谁在干什么（scene）· 等你答（scene 的 /questions）· 切片 · 日志 · 模型图（model-page）· 草稿原型（proto）。
+ * 四个页签：谁在干什么（scene，群聊的样子；等他答的问题、等他拍板的关卡列成待办；日志从这一页进）· 切片 · 模型图（model-page）· 草稿原型（proto）。
  * 子服务各挑一个空闲口、只听本机、不自己弹浏览器，全从这一个口代理出去（/p/<页面>/…）。退出时一并关掉。
  * 顶栏「N 件等你」数的是：看板上没答的问题，加上停在他手里的那一段（场景等他定下、草稿原型等他按）。
  */
@@ -13,7 +13,7 @@ const path = require('node:path')
 const http = require('node:http')
 const net = require('node:net')
 const { spawn, spawnSync } = require('node:child_process')
-const mel = require('./lib/time')
+const clock = require('./lib/time')
 
 const args = process.argv.slice(2)
 const root = args[0] && path.resolve(args[0])
@@ -102,7 +102,7 @@ function todo() {
   const sc = readJson(path.join(root, 'reports', '_scene.json'), {})
   const qs = (sc.questions ?? []).filter((q) => !q.answeredAt)
   const gates = allSlices().map((s) => ({ s, g: gateOf(s) })).filter((x) => x.g)
-  return { n: qs.length + gates.length, questions: qs.length, gates: gates.map((x) => ({ slice: x.s.id, button: x.g.button })) }
+  return { n: qs.length + gates.length, questions: qs.length, gates: gates.map((x) => ({ slice: x.s.id, title: x.s.title ?? '', kind: x.g.kind, ask: x.g.ask, button: x.g.button })) }
 }
 
 const wrap = (body) => `<!doctype html><html lang="zh"><head><meta charset="utf-8"><style>
@@ -167,33 +167,34 @@ document.addEventListener('click', async (e) => {
 
 function journalPage(date) {
   const dir = path.join(root, 'journal')
-  // 日志文件按 UTC 日期分，可墨尔本比 UTC 早十到十一个小时：一个 UTC 文件里装的是墨尔本的两天，
-  // 墨尔本一天的事也散在两个文件里。给人看的「哪一天」按墨尔本算，所以把文件全读进来、按墨尔本日期重新分堆。
+  // 日志文件按 UTC 日期分，本机时区和 UTC 差着几个小时：一个 UTC 文件里可能装着本地的两天，
+  // 本地一天的事也可能散在两个文件里。给人看的「哪一天」按本地算，所以把文件全读进来、按本地日期重新分堆。
   // （几天下来也就一两百 KB，读全份最省心；存进文件的仍是 UTC 的 ISO 串。）
   const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(f)) : []
   const byDay = new Map()
   for (const f of files) {
     for (const line of fs.readFileSync(path.join(dir, f), 'utf8').split('\n')) {
       if (!line.trim()) continue
-      try { const e = JSON.parse(line); const d = mel.date(e.ts); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d).push(e) } catch { /* 坏行跳过 */ }
+      try { const e = JSON.parse(line); const d = clock.date(e.ts); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d).push(e) } catch { /* 坏行跳过 */ }
     }
   }
   const days = [...byDay.keys()].sort().reverse()
   const day = date && byDay.has(date) ? date : days[0]
+  const back = `<div style="text-align:right;margin:0 0 8px"><a href="/p/scene/${day ? '?date=' + day : ''}" style="text-decoration:none;color:#0969da;font-size:13px;border:1px solid #d0d7de;border-radius:6px;padding:2px 10px;background:#fff">← 回到现场</a></div>`
   const nav = `<div class="jnav">${days.map((d) => `<a href="/journal?date=${d}" class="${d === day ? 'on' : ''}">${d}</a>`).join('') || '<span>还没有日志</span>'}</div>`
   if (!day) return `<div class="ptree"><div class="ph">日志记的是角色们怎么配合：开发指挥几点派了谁做什么、角色每一句细步、几点交回、花了多久。scene.js 每写一笔看板就往 <code>journal/&lt;日期&gt;.jsonl</code> 追加一行，只追加不裁剪。</div></div>${nav}`
   const entries = byDay.get(day)
   entries.sort((a, b) => String(a.ts).localeCompare(String(b.ts)))
   const fmtMs = (ms) => { if (ms == null) return ''; const s = Math.round(ms / 1000); if (s < 60) return `${s} 秒`; const m = Math.floor(s / 60); return m < 60 ? `${m} 分 ${s % 60} 秒` : `${Math.floor(m / 60)} 小时 ${m % 60} 分` }
   const fmtK = (n) => (n == null ? '' : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n))
-  const hm = (ts) => mel.hms(ts)
-  const KIND = { set: '看板', ask: '发问', answer: '答', mode: '模式', handoff: '交接', progress: '细步', back: '交回', dispatch: '派工', confirm: '确认', unconfirm: '撤销确认', comment: '留话', review: '审阅' }
+  const hm = (ts) => clock.hms(ts)
+  const KIND = { plan: '计划', set: '看板', ask: '发问', answer: '答', mode: '模式', handoff: '交接', progress: '细步', back: '交回', dispatch: '派工', confirm: '确认', unconfirm: '撤销确认', comment: '留话', review: '审阅' }
   // 分块
   const blocks = [], open = new Map()
   for (const e of entries) {
     if (e.kind === 'dispatch') { const b = { kind: 'block', who: e.who, start: e, items: [], end: null }; blocks.push(b); open.set(e.who, b); continue }
     if (e.kind === 'back' && open.has(e.who)) { open.get(e.who).end = e; open.delete(e.who); continue }
-    if ((e.kind === 'progress' || e.kind === 'ask') && open.has(e.who)) { open.get(e.who).items.push(e); continue }
+    if ((e.kind === 'progress' || e.kind === 'ask' || e.kind === 'plan') && open.has(e.who)) { open.get(e.who).items.push(e); continue }
     blocks.push({ kind: 'event', e })
   }
   // 汇总：按角色；等人的时间（看板 who=人 到下一次 who≠人）
@@ -204,10 +205,10 @@ function journalPage(date) {
     if (e.kind === 'back') { const r = byRole.get(e.who) ?? { n: 0, ms: 0, tokens: 0, tools: 0, steps: 0 }; r.n++; r.ms += e.elapsedMs ?? 0; r.tokens += e.tokens ?? 0; r.tools += e.tools ?? 0; r.steps += e.steps ?? 0; byRole.set(e.who, r) }
   }
   const stillOpen = [...open.keys()]
-  const sum = `<div class="ptree"><div class="ph">${esc(day)}（墨尔本 ${esc(mel.zone(entries[0]?.ts ?? new Date()))}，下面的钟点都是墨尔本时间）共 ${entries.length} 笔：派工 ${blocks.filter((b) => b.kind === 'block').length} 趟${stillOpen.length ? `（${stillOpen.map(esc).join('、')} 还没交回）` : ''}；等你拍板累计 ${fmtMs(waitMs) || '0 秒'}。每块是一趟派工：开发指挥几点派了谁做什么、角色每一句细步与上一句隔了多久、几点交回、这一趟多长、用了多少。<b>最近的排在最上面</b>，一趟里面的细步仍按先后读下去。复盘时看：一趟里细步之间的空档在哪、哪一趟来回最多。</div></div>
+  const sum = `<div class="ptree"><div class="ph">${esc(day)}（${esc(clock.zone(entries[0]?.ts ?? new Date()))}，下面的钟点都是本地时间）共 ${entries.length} 笔：派工 ${blocks.filter((b) => b.kind === 'block').length} 趟${stillOpen.length ? `（${stillOpen.map(esc).join('、')} 还没交回）` : ''}；等你拍板累计 ${fmtMs(waitMs) || '0 秒'}。每块是一趟派工：开发指挥几点派了谁做什么、角色每一句细步与上一句隔了多久、几点交回、这一趟多长、用了多少。<b>最近的排在最上面</b>，一趟里面的细步仍按先后读下去。复盘时看：一趟里细步之间的空档在哪、哪一趟来回最多。</div></div>
 ${byRole.size ? `<table class="jsum"><tr><th>角色</th><th>派了几趟</th><th>共多久</th><th>细步</th><th>tokens</th><th>工具次数</th></tr>${[...byRole].map(([w, r]) => `<tr><td>${esc(w)}</td><td>${r.n}</td><td>${fmtMs(r.ms)}</td><td>${r.steps || ''}</td><td>${fmtK(r.tokens) || ''}</td><td>${r.tools || ''}</td></tr>`).join('')}</table>` : ''}`
-  const item = (it, prev) => `<div class="ji"><span class="t">${hm(it.ts)}</span><span class="gap">+${fmtMs(new Date(it.ts) - prev)}</span><span class="tx">${it.kind === 'ask' ? '<b>发问：</b>' : ''}${esc(it.text)}</span></div>`
-  // 最近的排在上面（2026-09-17 项目所有者要的）：一天下来几十笔，他要看的是刚刚发生了什么，不该每次滚到底。
+  const item = (it, prev) => `<div class="ji"><span class="t">${hm(it.ts)}</span><span class="gap">+${fmtMs(new Date(it.ts) - prev)}</span><span class="tx">${it.kind === 'ask' ? '<b>发问：</b>' : it.kind === 'plan' ? '<b>计划：</b>' : it['步'] ? '<b>' + it['步'] + '.</b> ' : ''}${esc(it.text)}</span></div>`
+  // 最近的排在上面：一天下来几十笔，人要看的是刚刚发生了什么，不该每次滚到底。
   // 一趟派工里面的细步仍按先后读下去——那是一趟活的经过，倒着读不成话；派工块自己按开工时间排。
   const html = blocks.slice().reverse().map((b) => {
     if (b.kind === 'event') { const e = b.e; return `<div class="je k-${esc(e.kind)}${e.done ? ' done' : ''}"><span class="t">${hm(e.ts)}</span><span class="who">${esc(e.who ?? '—')}</span><span class="k">${KIND[e.kind] ?? esc(e.kind)}${e.kind === 'set' && e.done ? '（完）' : ''}</span><span class="tx">${esc(e.text)}${e.kind === 'set' && e.slice ? `<span class="sl">${esc(e.slice)} · ${esc(e.phase ?? '—')}</span>` : ''}${e.kind === 'set' && e.note ? `<span class="sl">结果：${esc(e.note)}</span>` : ''}</span></div>` }
@@ -219,15 +220,15 @@ ${byRole.size ? `<table class="jsum"><tr><th>角色</th><th>派了几趟</th><th
       : '<div class="jb-end open">还没交回</div>'
     return `<details class="jb" open><summary><span class="t">${hm(st.ts)}</span> 开发指挥派 <b>${esc(st.who)}</b>：${esc(st.text)}${en ? `<span class="stat">${fmtMs(en.elapsedMs)} · ${b.items.length} 句细步</span>` : '<span class="stat open">进行中</span>'}</summary><div class="jbody">${items || '<div class="ji none">（没有写细步）</div>'}${endLine}</div></details>`
   }).join('')
-  return sum + nav + `<div class="journal">${html}</div>`
+  return back + sum + nav + `<div class="journal">${html}</div>`
 }
 
-const TABS = [['scene', '谁在干什么', '/p/scene/'], ['ask', '等你答', '/p/scene/questions'], ['slices', '切片', '/slices'], ['journal', '日志', '/journal'], ['model', '模型图', '/p/model/'], ['proto', '草稿原型', '/p/proto/']]
+const TABS = [['scene', '谁在干什么', '/p/scene/'], ['slices', '切片', '/slices'], ['model', '模型图', '/p/model/'], ['proto', '草稿原型', '/p/proto/']]
 const shell = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>${esc(project.name ?? '工作台')}</title><style>
 html,body{margin:0;height:100%;font:14px system-ui,"Segoe UI","Microsoft YaHei",sans-serif}
 header{display:flex;align-items:center;gap:6px;padding:6px 12px;background:#24292f;color:#fff}
 header b{margin-right:12px}header button{background:none;border:1px solid transparent;color:#d0d7de;padding:4px 10px;border-radius:6px;cursor:pointer;font:inherit}
-header button.on{background:#fff;color:#24292f}header .todo{margin-left:auto;color:#ffd33d}
+header button.on{background:#fff;color:#24292f}header .todo{margin-left:auto;color:#ffd33d;cursor:pointer}
 iframe{border:0;width:100%;height:calc(100% - 40px);display:block}
 </style></head><body><header><b>${esc(project.name ?? '')}</b>${TABS.map(([k, n]) => '<button data-t="' + k + '">' + n + '</button>').join('')}<span class="todo" id="todo"></span></header>
 <iframe id="f"></iframe><script>
@@ -235,8 +236,9 @@ const T = ${JSON.stringify(Object.fromEntries(TABS.map(([k, , u]) => [k, u])))}
 const f = document.getElementById('f')
 function show(t) { for (const b of document.querySelectorAll('header button')) b.classList.toggle('on', b.dataset.t === t); f.src = T[t]; try { localStorage.setItem('wb-tab', t) } catch (e) {} }
 document.querySelectorAll('header button').forEach((b) => b.addEventListener('click', () => show(b.dataset.t)))
-async function todo() { try { const d = await (await fetch('/todo')).json(); document.getElementById('todo').textContent = d.n ? d.n + ' 件等你' : '' } catch (e) {} }
+async function todo() { try { const d = await (await fetch('/todo')).json(); document.getElementById('todo').textContent = d.n ? d.n + ' 件待办 ›' : '' } catch (e) {} }
 let first = 'scene'; try { first = localStorage.getItem('wb-tab') || 'scene' } catch (e) {}
+document.getElementById('todo').addEventListener('click', () => show('scene'))
 show(T[first] ? first : 'scene'); todo(); setInterval(todo, 5000)
 </script></body></html>`
 
@@ -249,14 +251,14 @@ function proxy(name, req, res, rest) {
   const up = http.request({ host: '127.0.0.1', port: INNER[name], method: req.method, path: rest, headers: { ...req.headers, host: `127.0.0.1:${INNER[name]}` } }, (ur) => {
     const ct = String(ur.headers['content-type'] ?? '')
     // 逐跳的头一律不转：body 到这里已经被 Node 解成了普通字节，再声明 chunked / gzip 就成了坏包，
-    // 浏览器那一侧 fetch 报错、页面停在「连接中…」（2026-09-13 现场页踩过）
+    // 浏览器那一侧 fetch 报错、页面停在「连接中…」
     const hop = (h) => { const o = { ...h }; delete o['transfer-encoding']; delete o['content-encoding']; delete o['connection']; delete o['keep-alive']; return o }
     if (!/text\/html/.test(ct)) { res.writeHead(ur.statusCode ?? 200, hop(ur.headers)); return ur.pipe(res) }
     const buf = []
     ur.on('data', (c) => buf.push(c)).on('end', () => {
       let body = Buffer.concat(buf).toString('utf8')
       const shim = shimOf('/p/' + name)
-      // 必须排在页面自己的脚本之前：页面一加载就 fetch('/data')，晚一步就打到工作台根上 404，框里是空的（2026-09-13 踩过）
+      // 必须排在页面自己的脚本之前：页面一加载就 fetch('/feed')，晚一步就打到工作台根上 404，框里是空的
       body = body.includes('</head>') ? body.replace('</head>', shim + '</head>')
         : body.includes('<body>') ? body.replace('<body>', '<body>' + shim)
         : shim + body
@@ -299,9 +301,9 @@ const server = http.createServer((req, res) => {
   if (url === '/todo') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify(todo())) }
   if (url === '/slices') return html(wrap(slicesPage()))
   if (url === '/journal') return html(wrap(journalPage(q.date)))
-  if (req.method === 'POST' && url === '/slice/scene-ok') return runSlice(res, ['advance', root, q.slice, 'scene', 'done', '他在切片页按的'])
-  if (req.method === 'POST' && url === '/slice/enough') return runSlice(res, ['enough', root, q.slice, '他在切片页按的'])
-  if (req.method === 'POST' && url === '/slice/accept') return runSlice(res, ['advance', root, q.slice, 'accept', 'done', '他在切片页按的'])
+  if (req.method === 'POST' && url === '/slice/scene-ok') return runSlice(res, ['advance', root, q.slice, 'scene', 'done', '他在页面上按的'])
+  if (req.method === 'POST' && url === '/slice/enough') return runSlice(res, ['enough', root, q.slice, '他在页面上按的'])
+  if (req.method === 'POST' && url === '/slice/accept') return runSlice(res, ['advance', root, q.slice, 'accept', 'done', '他在页面上按的'])
   res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('没有这一页')
 })
 

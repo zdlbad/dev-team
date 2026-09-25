@@ -39,7 +39,7 @@ describe('Order', () => {
     assert.deepEqual(order.pullEvents().map((e) => e.eventName), ['OrderRejected'])
   })
 
-  it('[U-001] 连点两次确认，第二次被挡住', () => {
+  it('[R-011] 连点两次确认，第二次被挡住', () => {
     const order = draftWithOneLine()
     order.confirm(day)
     assert.throws(() => order.confirm(day), OrderFailedError)

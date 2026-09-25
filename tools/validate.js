@@ -53,12 +53,6 @@ const GUIDES = {
     fail: '条件里比较了命令输入、聚合字段或数值——判断泄漏到了编排层。',
     how: '找到 when 引用的变量，确认它是某个 behavior / service / factory 步骤的 output。',
   },
-  '模型对使用场景的回应是否充分？': {
-    question: '这条旧的使用语句（会不会同时、会不会重复、一次几条、失败怎么处置、谁能看见）在模型里有没有一个明确的回应？',
-    pass: '落点说清了系统怎么应对：同时改 → 版本号或状态守卫；重复触发 → 状态守卫或幂等；一次几条 → 命令的输入形状与部分失败的语义；失败处置 → 事件或错误；可见性 → 查询的范围。',
-    fail: '只是挂了编号，落点的文字没有回应这条语句说的用法；或回应方式与语句矛盾（语句说两人可能同时改，模型没有任何守卫）。',
-    how: '把语句拆成「谁、在什么情况下、做什么」，在落点里找对应的守卫、规则或输入；找不到就是不通过。',
-  },
   '这条不变量是否需要另一个聚合才能成立？': {
     question: '这条聚合级不变量要成立，是否需要同时看另一个聚合的状态？',
     pass: '只涉及本聚合内部的成员（根、实体、值对象）。',
@@ -92,7 +86,7 @@ const GUIDES = {
 
 // ---------- 结果收集 ----------
 function makeReport(direction) {
-  return { direction, project: root, slice: sliceId, at: new Date().toISOString(), decodedVersion: null, guides: GUIDES, errors: [], warnings: [], confirms: [], judgments: [], decided: [], blindSpots: [], conclusion: null }
+  return { direction, project: root, slice: sliceId, at: new Date().toISOString(), decodedVersion: null, guides: GUIDES, errors: [], warnings: [], confirms: [], judgments: [], blindSpots: [], conclusion: null }
 }
 const readOnly = args.includes('--只看') // 角色跑校验只看自己改出没改出毛病，不重写报告
 function fingerprint(text) {
@@ -146,7 +140,6 @@ function outOfScope(file) {
 }
 const goals = business.filter((s) => s.kind === 'goal' && inScope(s.id))
 const rules = business.filter((s) => s.kind === 'rule' && inScope(s.id))
-const usages = business.filter((s) => s.kind === 'usage' && inScope(s.id))
 const els = model.elements.filter((e) => e.kind !== 'invalid')
 const of = (kind) => els.filter((e) => e.kind === kind)
 const roots = of('aggregate-root')
@@ -189,29 +182,18 @@ if (schemaRun.status !== 0) {
 for (const el of model.elements.filter((e) => e.kind === 'invalid')) add(r1, 'error', 'schema', el.file, `JSON 解析失败：${el.error}`)
 
 // 标签：层与文件对得上、字母与种类对得上、分层文件里每条都标了层（agents/business/layers.md）
-let unlayered = 0
 for (const s of business) {
   if (!inScope(s.id)) continue
   if (s.unknownLabel) add(r1, 'error', 'label.unknown', s.id, `标签认不得：(${s.unknownLabel.join('-')})——层只有 ${LAYERS.join(' / ')}，种类只有 ${Object.keys(KINDS).join(' / ')}`)
   if (s.labelLayer && s.fileLayer && s.labelLayer !== s.fileLayer) add(r1, 'error', 'label.layer-file', s.id, `标签写的是「${s.labelLayer}」，却放在 ${s.file}`)
   if (s.ruleKind && KINDS[s.ruleKind] && KINDS[s.ruleKind] !== s.id[0]) add(r1, 'error', 'label.kind-letter', s.id, `种类「${s.ruleKind}」只能标在 ${KINDS[s.ruleKind]} 开头的编号上`)
-  if (s.kind === 'usage' && s.labelLayer === '业务抽象') add(r1, 'error', 'label.usage-layer', s.id, '旧的使用语句只可能是业务落地')
   if (s.fileLayer && !s.labelLayer) add(r1, 'error', 'label.missing-layer', s.id, `${s.file} 是分层文件，每条语句都要标层：(${s.fileLayer}-种类)`)
-  if (!s.fileLayer && !s.labelLayer) unlayered++
 }
-if (unlayered) add(r1, 'warning', 'label.unlayered', 'business/', `${unlayered} 条语句还没分层（老布局；按段落点亮时补标签、搬进 business/<Module>/abstraction.md 或 practice.md）`)
 
-const pass = '应用'
-const NEXT_PASS = {}
-const passAllows = () => true
-const buildsAppLayer = true
-// 覆盖：能力 → 命令/查询（命令与查询是应用遍的东西）
+// 覆盖：能力 → 命令/查询
 for (const g of goals) {
   const hit = [...commands, ...queries].some((e) => e.data.traces.includes(g.id))
-  if (!hit) {
-    if (!buildsAppLayer) { defer('coverage.pass', g.id, `能力的落点是命令 / 查询，留给后面的场景：${g.text}`); continue }
-    add(r1, 'error', 'coverage.goal', g.id, `能力没有任何命令或查询追溯：${g.text}`)
-  }
+  if (!hit) add(r1, 'error', 'coverage.goal', g.id, `能力没有任何命令或查询追溯：${g.text}`)
 }
 // 覆盖：规则 → 按种类的落点
 const sig = (name, input, output) => `${name}(${(input ?? []).map((p) => `${p.name}: ${p.type}`).join(', ')})${output ? ` → ${output}` : ''}`
@@ -244,8 +226,6 @@ const pickText = (items, id, sep) => {
  * 这个方法（或领域服务的操作）承不承载这条业务语句：自己挂着这个编号算，**里面哪一条规则挂着也算**。
  * 规则可以各自标自己管哪几个编号（`rulesText` 就是按这个挑的），可认落点这一步早先只看方法自己那一层，
  * 于是只写在规则上的追溯谁也看不见——语句被当成「没有落点」，再被种类归进「留给后面的遍」，一路无声绕过所有人。
- * 2026-09-16 k-001 真出过：R-103（共付比例往高往低两种改法）、R-118、R-119（先动哪一本账）三条规则早就写好了，
- * 却因为追溯只挂在规则上而没人判。
  */
 const tracedHere = (m, id) => (m.traces ?? []).includes(id) || (m.rules ?? []).some((r) => typeof r !== 'string' && (r.traces ?? []).includes(id))
   || (m.purpose?.traces ?? []).includes(id) || (m.steps ?? []).some((s) => (s.traces ?? []).includes(id))
@@ -269,25 +249,22 @@ function ruleLandings(id) {
   for (const s of services) for (const op of s.data.operations) if (tracedHere(op, id)) out.push({ kind: 'service', el: s, label: `领域服务 ${s.data.name}.${op.name}`, text: `领域服务 ${s.data.name}.${sig(op.name, op.input, op.output)}　${methodText(op)}${rulesText(op.rules, id)}${throwsText(op.throws)}` })
   for (const h of handlers) if (h.data.traces.includes(id)) out.push({ kind: 'event-handler', el: h, label: `事件处理 ${h.data.name}`, text: `事件处理 ${h.data.name}（触发：${h.data.trigger}）：${h.data.steps.map((s) => s.text).join(' → ')}` })
   for (const e of errors) if (e.data.traces.includes(id)) out.push({ kind: 'error', el: e, label: `错误 ${e.data.name}`, text: `错误 ${e.data.name}：${e.data.condition ? pickText(e.data.condition, id, '；') : '（无条件说明）'}` })
-  // 端口也是落点：描述我方系统之外的业务流程（政府门户上收到转介）的事实落在边界上，不落聚合（agents/model/shapes.md；验收项目）
+  // 端口也是落点：描述我方系统之外的业务流程（政府门户上收到转介）的事实落在边界上，不落聚合（agents/model/shapes.md）
+  // 命令与查询也是落点：情形、流程的回应常在命令的输入形状与动作的先后上
+  for (const c of commands) if (c.data.traces.includes(id)) out.push({ kind: 'command', el: c, label: `命令 ${c.data.name}`, text: `命令 ${c.data.name}（输入：${(c.data.input ?? []).map((p) => p.name).join(', ') || '无'}）：${pickText(c.data.steps, id, ' → ')}` })
+  for (const q of queries) if (q.data.traces.includes(id)) out.push({ kind: 'query', el: q, label: `查询 ${q.data.name}`, text: `查询 ${q.data.name}（输入：${(q.data.input ?? []).map((p) => p.name).join(', ') || '无'}）` })
   for (const p of ports) if ((p.data.traces ?? []).includes(id)) out.push({ kind: 'port', el: p, label: `端口 ${p.data.name}`, text: `端口 ${p.data.name}（${p.data.kind === 'external-system' ? '外部系统' : '模块'} ${p.data.target}）：${(p.data.operations ?? []).map((op) => `${op.name}${op.note ? '——' + op.note : ''}`).join('；')}` })
   return out
 }
 // 种类 → 该落在哪种元素上（只是提醒，报警告）。消息里用文件里写的那个词（rawKind），旧标签的语句指纹才对得上以前的裁决：事实落字段或结构性的不变量；约束落不变量、守卫、错误；公式落计算；触发落事件处理
 // 跨实例、跨聚合才判得了的规则归领域服务，事实与约束落在那儿是对的，从前会被误报
 const EXPECTED = { 事实: ['field', 'invariant', 'behavior', 'port', 'service'], 约束: ['invariant', 'behavior-guard', 'error', 'field', 'service'], 公式: ['behavior', 'behavior-guard', 'service', 'field'], 触发: ['event-handler', 'port'], 流程: ['behavior-guard', 'behavior', 'invariant', 'error', 'command', 'port', 'service'], 情形: ['behavior', 'behavior-guard', 'invariant', 'error', 'field', 'command'] }
-// 本段只作背景的语句：故事里讲到它，可本段没有能承载它的动作（次序、核对这类要等后面的段落）。
-// 切片里写明编号与理由，校验器就不因「没有落点」报错——但记进 deferred 单列出来，谁也别忘了它还欠着。
-const background = new Map((sliceRec?.backgroundTraces ?? []).map((b) => [b.id, b.why]))
 for (const r of rules) {
   const landings = ruleLandings(r.id)
   if (!landings.length) {
-    if (background.has(r.id)) { defer('coverage.background', r.id, `本段只作背景，落点等后面的段落：${background.get(r.id)}`); continue }
-    if (!passAllows(r.ruleKind)) { defer('coverage.pass', r.id, `种类「${r.rawKind ?? r.ruleKind}」的落点留给${NEXT_PASS[pass] ?? '后面的遍'}：${r.text}`); continue }
     add(r1, 'error', 'coverage.rule', r.id, `规则没有任何落点：${r.text}`)
     continue
   }
-  if (background.has(r.id)) add(r1, 'warning', 'coverage.background', r.id, `切片把它记成本段只作背景，模型里却给了落点：要么去掉切片里那一条，要么去掉落点`)
   // 创建是一个方法、也是建时的规则，落点种类表里认不变量、行为、带守卫的行为的，都认创建
   const kindOk = (l, want) => want.includes(l.kind) || (l.kind === 'create' && want.some((k) => ['invariant', 'behavior', 'behavior-guard'].includes(k)))
   if (r.ruleKind && EXPECTED[r.ruleKind] && !landings.some((l) => kindOk(l, EXPECTED[r.ruleKind]))) {
@@ -298,21 +275,6 @@ for (const r of rules) {
   const where = [...new Set(landings.map((l) => l.label).filter(Boolean))]
   const ask = `${r.id}「${r.text}」——模型把它写在 ${where.join('、') || '这几处'}。这几处合起来是不是把这句话说全了？有没有多加限制、少了条件，或方向反了？`
   judge(r1, '模型规则是否与业务一致？', r.id, { business: `[${r.id}]${labelOf(r) ? ` (${labelOf(r)})` : ''} ${r.text}`, model: landings.map((l) => l.text).join('\n') }, importance, [...new Set(landings.map((l) => l.el.file))], { ask })
-}
-// 覆盖：旧的使用语句（U，已停发，老项目里还有）→ 落点不限种类，但必须有；一条一判。新项目按五问问出来的情形是普通的 R（种类「情形」），走上面那条路
-function usageLandings(id) {
-  const out = ruleLandings(id)
-  for (const c of commands) if (c.data.traces.includes(id)) out.push({ kind: 'command', el: c, text: `命令 ${c.data.name}（输入：${(c.data.input ?? []).map((p) => p.name).join(', ') || '无'}）：${pickText(c.data.steps, id, ' → ')}` })
-  for (const q of queries) if (q.data.traces.includes(id)) out.push({ kind: 'query', el: q, text: `查询 ${q.data.name}（输入：${(q.data.input ?? []).map((p) => p.name).join(', ') || '无'}）` })
-  return out
-}
-for (const u of usages) {
-  const landings = usageLandings(u.id)
-  if (!landings.length) {
-    add(r1, 'error', 'coverage.usage', u.id, `旧的使用语句没有任何落点（模型必须回应系统会被怎么用）：${u.text}`)
-    continue
-  }
-  judge(r1, '模型对使用场景的回应是否充分？', u.id, { business: `[${u.id}] (${labelOf(u)}) ${u.text}`, model: landings.map((l) => l.text).join('\n') }, 'high', [...new Set(landings.map((l) => l.el.file))], { ask: `${u.id}「${u.text}」——模型在 ${[...new Set(landings.map((l) => l.label).filter(Boolean))].join('、') || '这几处'} 的回应，够不够应付这种用法？` })
 }
 // 追溯反向：每个元素 traces 非空且存在
 function checkTraces(target, traces, level = 'error') {
@@ -671,7 +633,7 @@ function renderMd(r) {
   if (r.slice) L.push(`- 切片：${r.slice}`)
   if (r.decodedVersion) L.push(`- 解码版本：${r.decodedVersion}`)
   L.push(`- 时间：${r.at}`)
-  L.push(`- 错误 ${r.errors.length} · 警告 ${r.warnings.length} · 需人确认 ${r.confirms.length + r.judgments.filter((j) => j.escalated).length} · 待判断 ${r.judgments.length} · 已裁决 ${r.decided.length}`)
+  L.push(`- 错误 ${r.errors.length} · 警告 ${r.warnings.length} · 需人确认 ${r.confirms.length + r.judgments.filter((j) => j.escalated).length} · 待判断 ${r.judgments.length}`)
   L.push(`- **结论：${r.conclusion === 'clean' ? '干净' : '不干净'}**`)
   const section = (title, items, fmt) => {
     L.push('', `## ${title}`, '')
@@ -683,7 +645,6 @@ function renderMd(r) {
   section('警告', r.warnings, (e) => `\`${e.target}\` [${e.check}] ${e.text}`)
   section('需人确认', r.confirms, (e) => `\`${e.target}\` [${e.check}] ${e.text}${e.options ? `\n   - 选项：${e.options.join(' / ')}` : ''}${e.note ? `\n   - 备注：${e.note}` : ''}`)
   section('待判断（按重要度降序）', r.judgments, (j) => `\`${j.target}\` **${j.importance}** ${j.ask || j.check}\n   - 业务：${show(j.sides.business)}\n   - 模型：${show(j.sides.model)}${j.sides.code !== undefined ? `\n   - 代码：${show(j.sides.code)}` : ''}`)
-  section('已裁决（未变化，未重复提出）', r.decided, (d) => `\`${d.target}\` [${d.check}] ${d.verdict} — ${d.note}（${d.at}）`)
   L.push('', '## 盲区', '')
   for (const b of r.blindSpots) L.push(`- ${b}`)
   L.push('')

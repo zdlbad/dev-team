@@ -21,7 +21,7 @@ describe('Promotion', () => {
     assert.equal(save10().appliesTo(MoneyValueObject.CREATE(20, 'USD')), false)
   })
 
-  it('[U-002] 已停用的促销不适用，哪怕总额够', () => {
+  it('[R-012] 已停用的促销不适用，哪怕总额够', () => {
     const stopped = PromotionAggregateRoot.FROM_PERSISTENCE('promo-2', { code: 'OLD', threshold: aud(1), discountPercent: 10, active: false }, 0)
     assert.equal(stopped.appliesTo(aud(100)), false)
   })

@@ -59,7 +59,7 @@ describe('ConfirmOrder', () => {
     assert.equal(confirmed.events[0].payload.total.amount, 20)
   })
 
-  it('[U-001] 连点两次确认：第二次 OrderFailed，事件只发一次', async () => {
+  it('[R-011] 连点两次确认：第二次 OrderFailed，事件只发一次', async () => {
     const { confirmed, handler } = await setup(15)
     await handler.execute(new ConfirmOrderCommand('o-1', 'SAVE10'))
     await assert.rejects(handler.execute(new ConfirmOrderCommand('o-1', 'SAVE10')), OrderFailedError)
