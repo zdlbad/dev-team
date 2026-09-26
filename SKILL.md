@@ -30,7 +30,7 @@ description: 模型驱动的开发团队。一个场景一个场景往前滚：�
 | 子命令 | 作用 | 执行 |
 |---|---|---|
 | `new <目录> <系统名> [--codebase <代码库>]` | 建项目（git init；可拷入构建块） | `node $DEV_TEAM/tools/new-project.js …` |
-| `workbench <项目>` | 工作台：给人看的页面全在一个地址（谁在干什么、切片、模型图、草稿原型；等他答的问题与拍板的关卡列成「谁在干什么」页顶上的待办，日志从那一页进）。开工先起，pull 之后重起 | `node $DEV_TEAM/tools/workbench.js <项目> --code <代码库> --port 4870 --no-open` |
+| `workbench <项目>` | 工作台：给人看的页面全在一个地址（谁在干什么、业务、切片、模型图、草稿原型；「业务」给人翻业务分析写的全景、清单、导读与词汇表，每一段能留言、业务分析用 `tools/comments.js` 答在下面；等他答的问题与拍板的关卡列成「谁在干什么」页顶上的待办，日志从那一页进）。开工先起，pull 之后重起 | `node $DEV_TEAM/tools/workbench.js <项目> --code <代码库> --port 4870 --no-open` |
 | `slice new / next / advance / lit / enough / list` | 切片：场景与正式化；`next` 算下一步该谁做什么 | `node $DEV_TEAM/tools/slice.js …` |
 | `scene set / plan / progress / ask / answer / mode / questions / dispatch / back / handoff` | 现场看板、发问、派工日志、交接 | `node $DEV_TEAM/tools/scene.js <项目> …` |
 | `brief <角色> [--活 <…>] --写 <文件>` | 装一个角色这一趟的派工书 | `node $DEV_TEAM/tools/brief.js …` |

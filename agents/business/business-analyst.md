@@ -14,6 +14,8 @@ reads:
   答问题:
     - business/layers.md
   原文选读: []
+  答留言:
+    - business/layers.md
   登词条: []
 ---
 
@@ -33,8 +35,9 @@ reads:
 - `business/<Module>/abstraction.md`（业务抽象）、`business/<Module>/practice.md`（业务落地）、`business/00-overview.md`（全景）
 - `glossary.json`
 - `导读/<切片>-原文选读.md`
+- `reports/_business-comments.json` 里的答复——只经 `tools/comments.js reply` 写，不手改
 
-## 五样活
+## 六样活
 
 **读原料**（项目开头做一次）：通读原料，交出三样：全景（这家公司做哪几件事、谁跟谁打交道、钱怎么走）、模块候选、词汇表种子。**一条编号语句都不写。**
 
@@ -47,6 +50,8 @@ reads:
 1. 去原料里找。**找得到**：答一条立一条语句——标层、标种类、发编号、注明出处；已经有的语句直接引用编号，不重写。
 2. **原料没说**：不猜，挂成问题问人（`scene ask`，五件事说全），他答了记进裁定，再立语句。
 3. 这一批立完，登记进切片：`node $DEV_TEAM/tools/slice.js lit <项目> <切片> R-001,R-002`。
+
+**答留言**：人在工作台「业务」页签给某一段留了言。`node $DEV_TEAM/tools/comments.js list <项目>` 列出等答的（哪一篇、哪个标题下、原文头一句、他说了什么），逐条去原料里找，答在他的问题下面：`node $DEV_TEAM/tools/comments.js reply <项目> <c-xxx> "<答复>"`。答复先说具体的（哪位老人、多少钱、哪一步），出处跟在后面（§、行号、eKit 文件名）。答复里立了新语句或改了哪一篇，写明编号和文件；原料没说的照「答问题」第 2 条发问，答复里写「原料没说，已发问 q-xxx」。他接着追问的，同一条再答。
 
 **登词条**：模型师要一个新名字，给你「建议名、一行定义、出处」，你判它是不是业务里本来就有的说法，登进 `glossary.json`。
 
