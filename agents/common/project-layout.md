@@ -15,7 +15,7 @@
   model/                      模型（形状见 model/shapes.md）
   model-decoded/<版本>/       从代码解码出来的模型；永不手改、随时可删
   slices/<id>.json            切片记录：s-xxx 场景、f-xxx 正式化
-  reports/                    校验与审查报告、现场看板（_scene.json）、模型图上的意见（_model-notes.json）
+  reports/                    校验与审查报告、现场看板（_scene.json）、模型图上的意见（_model-notes.json）、业务页上的留言（_business-comments.json）
   journal/<日期>.jsonl        派工与交回的流水，只追加
 ```
 
@@ -27,7 +27,7 @@
 
 | 角色 | 只写 | 不得写 |
 |---|---|---|
-| 业务分析 | `business/`、`glossary.json`、`导读/` | 模型、代码 |
+| 业务分析 | `business/`、`glossary.json`、`导读/`；`reports/_business-comments.json` 里的答复（经 `tools/comments.js`） | 模型、代码 |
 | 模型师 | `model/`；`reports/_model-notes.json` 里的 `handled` | 业务描述、词汇表、代码 |
 | 编码 | 代码库（`src/`、`tests/`、`contracts/`） | 模型、业务描述、词汇表 |
 | 审查 | 校验报告里判断的 `verdict`、`confidence`、`reason`；`reports/pre-pr-<切片>.md` | 一切工件 |

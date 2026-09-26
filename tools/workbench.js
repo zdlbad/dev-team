@@ -14,6 +14,7 @@ const http = require('node:http')
 const net = require('node:net')
 const { spawn, spawnSync } = require('node:child_process')
 const clock = require('./lib/time')
+const business = require('./business-page')
 
 const args = process.argv.slice(2)
 const root = args[0] && path.resolve(args[0])
@@ -223,7 +224,7 @@ ${byRole.size ? `<table class="jsum"><tr><th>角色</th><th>派了几趟</th><th
   return back + sum + nav + `<div class="journal">${html}</div>`
 }
 
-const TABS = [['scene', '谁在干什么', '/p/scene/'], ['slices', '切片', '/slices'], ['model', '模型图', '/p/model/'], ['proto', '草稿原型', '/p/proto/']]
+const TABS = [['scene', '谁在干什么', '/p/scene/'], ['business', '业务', '/business'], ['slices', '切片', '/slices'], ['model', '模型图', '/p/model/'], ['proto', '草稿原型', '/p/proto/']]
 const shell = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>${esc(project.name ?? '工作台')}</title><style>
 html,body{margin:0;height:100%;font:14px system-ui,"Segoe UI","Microsoft YaHei",sans-serif}
 header{display:flex;align-items:center;gap:6px;padding:6px 12px;background:#24292f;color:#fff}
@@ -300,6 +301,9 @@ const server = http.createServer((req, res) => {
   if (url === '/') return html(shell)
   if (url === '/todo') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify(todo())) }
   if (url === '/slices') return html(wrap(slicesPage()))
+  if (url === '/business') return html(business.page(root, q.doc))
+  if (url.startsWith('/business/comments') && business.handle(root, req, res, url)) return
+  if (url === '/business/stamp') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); return res.end(JSON.stringify({ t: business.stamp(root) })) }
   if (url === '/journal') return html(wrap(journalPage(q.date)))
   if (req.method === 'POST' && url === '/slice/scene-ok') return runSlice(res, ['advance', root, q.slice, 'scene', 'done', '他在页面上按的'])
   if (req.method === 'POST' && url === '/slice/enough') return runSlice(res, ['enough', root, q.slice, '他在页面上按的'])
