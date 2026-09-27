@@ -27,7 +27,7 @@ model/
 ```
 
 - 六边形核心圈 = `domain` + `application` + `ports`，进模型、可解码。实现圈 = 代码里的 `adapters`，不进模型。
-- 仓储是接口，放在领域层；实现在 `adapters`。查询直接调用仓储的读方法，不经过聚合行为，不设独立读模型。
+- 仓储是接口，放在领域层；实现在 `adapters`。查询不引起任何改变：调用仓储的读方法取数，要算的交给不写、不发事件的领域服务操作（`writes`、`raises` 都为空）；不经过聚合行为，不设独立读模型。
 - 事件只在**发出它的聚合**里声明一次；事件处理的 `trigger` 引用事件名。
 - 模型文字一事一处（见 [common/wording.md](../common/wording.md)）：同一件事只在它归属的元素上写全，别处至多指一句「住在 X 上」。
 - 不变量是聚合**随时能拿自己的状态核对**的一句话（五项参与者信息齐全、出生日期不晚于今天）；核对不了的（别人的流程、事情的先后）不是不变量，是叙述或别处的规则。
@@ -213,7 +213,7 @@ model/
 { "name": "GetOrder", "module": "Ordering", "actor": "Coordinator",
   "input": [ { "name": "id", "type": "string" } ],
   "result": [ { "name": "status", "type": "OrderStatus" } ],
-  "steps": [ /* call.kind 只允许 repository，且所调方法 kind 为 read */ ],
+  "steps": [ /* call.kind 只允许 repository（所调方法 kind 为 read）与 service（所调操作 writes、raises 都为空） */ ],
   "traces": ["G-002"], "questions": [] }
 ```
 
@@ -260,7 +260,7 @@ model/
 
 1. 模型中的每个名字必须是词汇表中的词。
 2. 领域服务只协调本模块的聚合；跨模块只经端口或事件。
-3. 查询的步骤只允许调用仓储的 `read` 方法。
+3. 查询不引起任何改变：步骤只允许调用仓储的 `read` 方法，和 `writes`、`raises` 都为空的领域服务操作。页面要先带出一个算好、人还能改的数时，由查询调这样的领域服务算出来，不为此存一个中间状态。
 4. 命令与事件处理的 `writes` 大于 1 必须有 `writesNote`，校验列为需人确认。
 5. 每个事件、每个错误至少有一个发布方（某个行为或领域服务操作的 `raises` / `throws`，创建的 `throws`，或不变量的 `throws`）。
 6. 用例的 `raises` / `throws` 必须等于其步骤所调用的行为与服务的 `raises` / `throws` 之并集。

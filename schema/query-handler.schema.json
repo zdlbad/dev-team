@@ -15,7 +15,7 @@
       "items": {
         "allOf": [
           { "$ref": "urn:dev-team:common#/$defs/step" },
-          { "type": "object", "properties": { "call": { "type": "object", "properties": { "kind": { "const": "repository" } } } } }
+          { "type": "object", "properties": { "call": { "type": "object", "properties": { "kind": { "enum": ["repository", "service"] } } } } }
         ]
       }
     },

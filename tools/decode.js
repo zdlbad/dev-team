@@ -877,7 +877,8 @@ for (const mod of modules.values()) {
           for (const w of opWrites) if (!writes.includes(w)) writes.push(w)
         }
         if (kind === 'repository' && e.prefix === 'query-handler' && !READ_PREFIX.test(r.method)) issue(e.file, `查询调用了写方法 ${r.method}`)
-        if (kind !== 'repository' && e.prefix === 'query-handler') issue(e.file, `查询只能调用仓储：${kind} ${te.modelName}.${r.method}`)
+        if (kind === 'service' && e.prefix === 'query-handler' && serviceWrites(te, r.method).length) issue(e.file, `查询不许引起改变，调用了会写的领域服务操作 ${te.modelName}.${r.method}`)
+        if (kind !== 'repository' && kind !== 'service' && e.prefix === 'query-handler') issue(e.file, `查询只能调用仓储的读方法与不写的领域服务：${kind} ${te.modelName}.${r.method}`)
       },
     })
     // 最后一步是否 publish
