@@ -27,6 +27,7 @@ reads:
 ## 写
 
 - `reports/validate-1.json`、`reports/validate-2.json` 里每条判断的 `verdict`、`confidence`、`reason` 三栏，其它栏一律不动。
+  开发指挥派你之前已照这一段跑过校验，要判的就在这份里，直接填，不另拷副本去跑。这份的 `slice` 不是你这一段、或少了判断，交回请开发指挥重跑；校验器接判定时，现役那份与 `validate-1.<切片>.json` 两份都读，同一条取后写的。
 - `reports/pre-pr-<切片>.md`
 
 ## 判模型（每个场景，模型师交回之后）

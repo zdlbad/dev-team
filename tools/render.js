@@ -318,9 +318,9 @@ const coverage = business.map((s) => `<tr><td><code>${esc(s.id)}</code></td><td>
 // ---------- 页面 ----------
 const html = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>模型 · ${esc(projectName)}</title>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--line:#e3e6ea;--muted:#6b7280;--bad:#dc2626;--chip:#eef2ff;--chip-t:#3730a3}
+:root{--bg:#fff;--card:#fff;--line:#e3e6ea;--muted:#6b7280;--bad:#dc2626;--chip:#eef2ff;--chip-t:#3730a3}
 body{margin:0;font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:#111}
-header{background:#111827;color:#fff;padding:12px 24px;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}header h1{margin:0;font-size:18px}header .muted{color:#cbd5e1}
+header{background:#fff;color:#111;border-bottom:1px solid var(--line);padding:12px 24px;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}header h1{margin:0;font-size:18px}header .muted{color:var(--muted)}
 nav{padding:6px 24px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2;display:flex;gap:4px;flex-wrap:wrap;align-items:center}
 nav button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;font:inherit}nav button.on{background:#111827;color:#fff;border-color:#111827}
 nav .sp{flex:1}nav label{font-size:12.5px;color:#374151;margin-left:8px;white-space:nowrap}

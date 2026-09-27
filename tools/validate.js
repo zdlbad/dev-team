@@ -354,7 +354,7 @@ function checkUseCase(el, { allowMembers, queryOnly, hasWrites }) {
     if (s.output) outputs.push(s.output)
     if (!s.call) return
     if (s.call.target.includes('.')) cross.push(s.call)
-    if (queryOnly && s.call.kind !== 'repository') add(r1, 'error', 'query.read-only', `${el.file}#steps.${i}`, `查询只能调用仓储：${s.call.kind} ${s.call.target}.${s.call.method}`)
+    if (queryOnly && s.call.kind !== 'repository' && s.call.kind !== 'service') add(r1, 'error', 'query.read-only', `${el.file}#steps.${i}`, `查询只能调用仓储的读方法与不写的领域服务：${s.call.kind} ${s.call.target}.${s.call.method}`)
     const r = resolveCall(s.call, el.module, allowMembers)
     if (!r.el) return add(r1, 'error', 'call.unresolved', `${el.file}#steps.${i}`, r.reason)
     if (r.reason) add(r1, 'error', 'call.unresolved', `${el.file}#steps.${i}`, r.reason)
@@ -369,6 +369,7 @@ function checkUseCase(el, { allowMembers, queryOnly, hasWrites }) {
     if (s.call.kind === 'service') {
       const op = r.el.data.operations.find((x) => x.name === s.call.method)
       for (const w of op?.writes ?? []) touched.add(w)
+      if (queryOnly && op && ((op.writes ?? []).length || (op.raises ?? []).length)) add(r1, 'error', 'query.read-only', `${el.file}#steps.${i}`, `查询不许引起改变，所调领域服务操作会写或会发事件：${s.call.target}.${s.call.method}`)
     }
     const c = closureOf(s.call, el.module)
     for (const x of c.raises) union.raises.set(raiseKey(x), x)
@@ -568,37 +569,58 @@ function archivePrevious(dir, name, slice) {
   let old
   try { old = JSON.parse(fs.readFileSync(p, 'utf8')) } catch { return }
   if (!old.slice || old.slice === slice) return
-  fs.copyFileSync(p, path.join(dir, `${name}.${old.slice}.json`))
+  const archived = path.join(dir, `${name}.${old.slice}.json`)
+  const kept = readReport(archived, old.slice, old.direction)
+  if (kept && mergeVerdicts(old, kept)) fs.writeFileSync(archived, JSON.stringify(old, null, 2) + '\n')
+  else fs.copyFileSync(p, archived)
   const md = path.join(dir, `${name}.md`)
   if (fs.existsSync(md)) fs.copyFileSync(md, path.join(dir, `${name}.${old.slice}.md`))
   console.log(`（${old.slice} 的上一份报告已存为 ${name}.${old.slice}.json）`)
 }
-/** 这一趟要接的上一份报告：同切片、同方向；没有就 null */
-function previousReport(report, name) {
+/** 读一份报告；不是这一切片、这一方向的就当没有 */
+function readReport(p, slice, direction) {
+  let r
+  try { r = JSON.parse(fs.readFileSync(p, 'utf8')) } catch { return null }
+  return r.slice === slice && r.direction === direction ? r : null
+}
+/** 把 from 里判过的并进 into：同一条两边都判过，取后写的那份（按报告的 at）；返回并进了几条 */
+function mergeVerdicts(into, from) {
+  const newer = String(from.at ?? '') > String(into.at ?? '')
+  const by = new Map((from.judgments ?? []).map((x) => [judgeKey(x), x]))
+  let n = 0
+  for (const j of into.judgments ?? []) {
+    const o = by.get(judgeKey(j))
+    if (!o?.verdict || (j.verdict && !newer)) continue
+    if (j.verdict === o.verdict && j.reason === o.reason) continue
+    j.verdict = o.verdict; j.confidence = o.confidence; j.reason = o.reason; n++
+  }
+  return n
+}
+/**
+ * 这一趟要接的上一份报告：同切片、同方向的都算。
+ * 现役那份和按切片存的那份可能各有一截判定——审查只看不写，判定写在按切片存的那份里——
+ * 所以两份都读，按写的先后排，后写的盖前写的。
+ */
+function previousReports(report, name) {
   const dir = path.join(root, 'reports')
-  // 当前那份是本切片的就读它（它最新）；是别的切片的，才回头找自己那份存档
-  const live = path.join(dir, `${name}.json`)
-  const liveIsMine = (() => {
-    try { return JSON.parse(fs.readFileSync(live, 'utf8')).slice === report.slice } catch { return false }
-  })()
-  const p = liveIsMine ? live : path.join(dir, `${name}.${report.slice}.json`)
-  if (!fs.existsSync(p)) return null
-  let old
-  try { old = JSON.parse(fs.readFileSync(p, 'utf8')) } catch { return null }
-  if (old.slice !== report.slice || old.direction !== report.direction) return null
-  return old
+  return [path.join(dir, `${name}.json`), path.join(dir, `${name}.${report.slice}.json`)]
+    .map((p) => readReport(p, report.slice, report.direction))
+    .filter(Boolean)
+    .sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')))
 }
 function carryOver(report, name) {
-  const old = previousReport(report, name)
-  if (!old) return 0
-  const by = new Map((old.judgments ?? []).map((x) => [judgeKey(x), x]))
-  let kept = 0
-  for (const j of report.judgments) {
-    const o = by.get(judgeKey(j))
-    if (o?.verdict) { j.verdict = o.verdict; j.confidence = o.confidence; j.reason = o.reason; kept++ }
+  const olds = previousReports(report, name)
+  if (!olds.length) return 0
+  const kept = new Set()
+  for (const old of olds) {
+    const by = new Map((old.judgments ?? []).map((x) => [judgeKey(x), x]))
+    report.judgments.forEach((j, i) => {
+      const o = by.get(judgeKey(j))
+      if (o?.verdict) { j.verdict = o.verdict; j.confidence = o.confidence; j.reason = o.reason; kept.add(i) }
+    })
+    if ((old.blindSpots ?? []).length > (report.blindSpots ?? []).length) report.blindSpots = old.blindSpots
   }
-  if ((old.blindSpots ?? []).length > (report.blindSpots ?? []).length) report.blindSpots = old.blindSpots
-  return kept
+  return kept.size
 }
 function finish(report, name) {
   report.judgments.sort((a, b) => rank(b.importance) - rank(a.importance))
