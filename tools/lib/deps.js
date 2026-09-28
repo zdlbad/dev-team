@@ -57,7 +57,7 @@ const WHY_LAYER = {
 const WHY = {
   moduleInfras: '模块里只有 adapters/ 可以依赖 infras',
   crossModule: '模块之间不互相 import（跨模块走端口：本模块 ports/ 里写接口，adapters/ 里的直连适配器收一个形状对得上的函数或对象，由 bootstrap 把对方的处理器递进来）',
-  infrasModule: 'infras 不含业务：只 import 各模块 application/ 里的处理器与命令、查询类型',
+  infrasModule: 'infras 不含业务、不认模块：各模块的路由在它自己的 adapters/ 里，由 bootstrap 收起来递给 HTTP 应用',
   sharedOut: '构建块不含业务：不 import 模块、infras、bootstrap',
   sharedInside: '构建块里 domain ← application ← ports，proto 在最外面，里层不依赖外层',
   sharedProto: '构建块的 proto/ 是原型宿主与进程内事件总线，只给外壳（bootstrap/、proto/）用，模块里认 ports 里的接口',
@@ -241,7 +241,7 @@ function checkDependencies(codebase) {
         if (to.area === 'module' && !IN_MODULE[me.layer].includes(to.layer)) { say(WHY_LAYER[me.layer]); continue }
         if (to.area === 'shared' && !TO_SHARED[me.layer].includes(to.layer)) { say(to.layer === 'proto' ? WHY.sharedProto : WHY_LAYER[me.layer]); continue }
       } else if (me.area === 'infras') {
-        if (to.area === 'module' && to.layer !== 'application') say(WHY.infrasModule)
+        if (to.area === 'module') say(WHY.infrasModule)
       } else if (me.area === 'shared') {
         if (to.area !== 'shared') say(WHY.sharedOut)
         else if (!SHARED_INSIDE[me.layer].includes(to.layer)) say(WHY.sharedInside)
