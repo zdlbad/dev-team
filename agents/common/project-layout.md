@@ -20,12 +20,12 @@
   journal/<日期>.jsonl        派工与交回的流水，只追加
 ```
 
-代码库在项目目录之外：`src/`、`tests/`、`contracts/`；组合根、HTTP 入口、示例数据在 `src/app/`。
+代码库在项目目录之外：`src/`、`tests/`、`contracts/`。模块都放在 `src/modules/<module-folder>/`，测试镜像在 `tests/modules/<module-folder>/`；组合根、起服务、示例数据在 `src/bootstrap/`，技术件（HTTP 入口、事件总线，以后数据库连接、登录）在 `src/infras/`，基础构建块在 `src/shared/`，原型宿主在 `src/proto/`——这四样不是模块；谁能 import 谁见 `code/coding-standard.md`「依赖方向」。
 
 **前端工程**：产品页面写在一个单独的前端工程里（React + TypeScript + Vite，界面用 Ant Design），放在代码库旁边的 `frontend/`：代码库是 `code/backend`，前端就是 `code/frontend`。放在别处的，在 `project.json` 里写 `"frontend": "<相对项目目录的路径>"`；写 `false` 表示这个项目没有前端工程。目录里有 `package.json` 才算数。工具都按这个找：`proto.js` 起它的开发服务，`validate.js` 读它上面的 `@trace`。
 没有前端工程的项目（样例 `example/order-code`）用原型宿主：入口 `src/proto/main.ts`、产品页面 `src/proto/web/`（`src/shared/building-block/proto/README.md`）。
 
-**名字的两套写法**：模块名、类名、模型目录（`model/<Module>/`）用 PascalCase，只许每个词首字母大写，不许整段大写的缩写（`HCPBilling` 换不回来）；代码与测试的文件夹全小写、多词用连字符：模块 `ServiceAgreements` 的代码在 `src/service-agreements/`，聚合文件夹同理，测试镜像 `tests/<module-folder>/`。两套靠换算来回对应。
+**名字的两套写法**：模块名、类名、模型目录（`model/<Module>/`）用 PascalCase，只许每个词首字母大写，不许整段大写的缩写（`HCPBilling` 换不回来）；代码与测试的文件夹全小写、多词用连字符：模块 `ServiceAgreements` 的代码在 `src/modules/service-agreements/`，聚合文件夹同理，测试镜像 `tests/modules/<module-folder>/`。两套靠换算来回对应。
 
 ## 写入权：每个工件只有一个写入角色
 

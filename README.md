@@ -31,7 +31,7 @@ tools/             脚本，全部 Node
 ```
 node tools/check-schema.js --self                                  # schema 本身
 node tools/check-schema.js example/order-sample                    # 样例的 JSON 形状
-node tools/validate.js example/order-sample --code example/order-code   # 业务对模型、代码对模型
+node tools/validate.js example/order-sample --code example/order-code   # 业务对模型、代码对模型、依赖方向
 node tools/proto.js check example/order-sample --code example/order-code
 node tools/test.js example/order-code
 ```

@@ -3,7 +3,7 @@
  * 校验器：机械检查业务对模型（方向 ①）、代码对模型（方向 ②）；判断项留给审查角色填。
  *
  * 用法：node tools/validate.js <项目目录> [--code <代码库目录>] [--slice <切片id>]
- *   方向 ①（模型 ↔ 业务描述）总是执行；带 --code 时执行方向 ②（解码代码并与模型比对）。
+ *   方向 ①（模型 ↔ 业务描述）总是执行；带 --code 时执行方向 ②（解码代码并与模型比对，并查 src 下每条 import 的依赖方向）。
  * 输出：reports/validate-1.json/.md、reports/validate-2.json/.md（每方向只留最新一份）。
  * 退出码：0 干净；1 不干净；2 用法或前置错误。
  *
@@ -13,6 +13,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync, spawnSync } = require('node:child_process')
 const { applyWordMap, loadProject, LAYERS, KINDS, labelOf } = require('./lib/project')
+const { checkDependencies } = require('./lib/deps')
 
 const args = process.argv.slice(2)
 const root = args[0] && path.resolve(args[0])
@@ -610,6 +611,8 @@ if (codebase) {
     }
     fs.rmSync(diffJson, { force: true })
   }
+  // 依赖方向（编码规范第二节）：不靠解码，代码库在就查；越界是机器判得出的对错，只出错误
+  for (const p of checkDependencies(codebase).problems) add(r2, 'error', p.check, p.target, p.text)
   finish(r2, 'validate-2')
 }
 

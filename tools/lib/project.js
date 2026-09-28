@@ -162,7 +162,7 @@ function applyWordMap(text, pairs, keys) {
 
 /**
  * 模块名 ↔ 代码文件夹名（agents/common/project-layout.md「名字的两套写法」）：模块名是 PascalCase（Participants、ServiceAgreements），
- * 代码库里的文件夹全小写、多词连字符（participants、service-agreements）；模型目录 model/<Module>/ 仍用模块名。
+ * 代码库里的文件夹全小写、多词连字符（src/modules/participants、src/modules/service-agreements）；模型目录 model/<Module>/ 仍用模块名。
  * 模块名只允许「每个词首字母大写、其余小写」这样才能来回换算；HCPBilling 这种全大写缩写会换不回来，规范里不许。
  */
 function folderOf(moduleName) {
@@ -171,6 +171,12 @@ function folderOf(moduleName) {
 function moduleOfFolder(folder) {
   return String(folder).split(/[-_]/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('')
 }
+/** 代码库里放模块的目录：每个模块一个文件夹，都在 src/modules/ 底下；src/ 底下的 bootstrap、infras、shared、proto 不是模块 */
+function modulesDirOf(codebase) {
+  return path.join(codebase, 'src', 'modules')
+}
+/** src/ 底下不是模块、也不放模块的文件夹 */
+const NON_MODULE_SRC_FOLDERS = ['bootstrap', 'infras', 'shared', 'proto']
 
 /**
  * 看板上这条切片还没答的问题。模型师开工与派工都看它；`scene` 递进来就不再读文件。
@@ -181,4 +187,4 @@ function openQuestions(root, sliceId, scene = null) {
   if (!sc) { try { sc = JSON.parse(fsx.readFileSync(px.join(root, 'reports', '_scene.json'), 'utf8')) } catch { return [] } }
   return (sc.questions ?? []).filter((q) => q.slice === sliceId && !q.answeredAt)
 }
-module.exports = { openQuestions, folderOf, moduleOfFolder, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }
+module.exports = { openQuestions, folderOf, moduleOfFolder, modulesDirOf, NON_MODULE_SRC_FOLDERS, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }

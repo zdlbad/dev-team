@@ -2,7 +2,8 @@
 /**
  * 新建项目：拷贝模板、填占位符、git init + 首次提交。
  * 用法：node tools/new-project.js <目标目录> <系统名> [--codebase <代码库目录>]
- * 加 --codebase 时，把样例代码库 example/order-code 里的基础构建块拷到 <代码库目录>/src/shared/building-block/；
+ * 加 --codebase 时，把样例代码库 example/order-code 里的基础构建块拷到 <代码库目录>/src/shared/building-block/，
+ * 并建好放模块的 <代码库目录>/src/modules/（模块都放这里，见 agents/code/coding-standard.md 第一节）；
  * 拷过去以后构建块归那个代码库管，跟代码一起提交，不再指回 dev-team。
  */
 const fs = require('node:fs')
@@ -83,4 +84,9 @@ if (codebase) {
   }
   fs.copyFileSync(path.join(bbSrc, 'README.md'), path.join(bbDst, 'README.md'))
   console.log(`基础构建块已拷入：${bbDst}`)
+  // 空目录进不了 git，放一个 .gitkeep 占住；解码器只读 .ts，不碍事
+  const modulesDst = path.join(path.resolve(codebase), 'src', 'modules')
+  fs.mkdirSync(modulesDst, { recursive: true })
+  if (!fs.readdirSync(modulesDst).length) fs.writeFileSync(path.join(modulesDst, '.gitkeep'), '')
+  console.log(`放模块的目录已建：${modulesDst}`)
 }

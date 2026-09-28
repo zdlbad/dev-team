@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 解码器：从代码库的核心圈（domain / application / ports）还原模型 JSON。
+ * 解码器：从代码库的核心圈（domain / application / ports）还原模型 JSON。模块都在 src/modules/<module-folder>/ 底下。
  * 依据：agents/code/coding-standard.md「解码规则汇总」。
  *
  * 用法：node tools/decode.js <代码库目录> <输出目录> [--system <系统名>]
@@ -9,7 +9,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const ts = require('typescript')
-const { moduleOfFolder } = require('./lib/project')
+const { moduleOfFolder, modulesDirOf, NON_MODULE_SRC_FOLDERS } = require('./lib/project')
 
 // ---------- 参数 ----------
 const args = process.argv.slice(2)
@@ -21,7 +21,8 @@ if (!codebase || !outDir) {
   console.error('用法：node tools/decode.js <代码库目录> <输出目录> [--system <系统名>]')
   process.exit(2)
 }
-const srcDir = fs.existsSync(path.join(codebase, 'src')) ? path.join(codebase, 'src') : codebase
+const srcDir = path.join(codebase, 'src')
+const modulesDir = modulesDirOf(codebase)
 
 // ---------- 常量 ----------
 const PREFIX_SUFFIX = {
@@ -45,8 +46,9 @@ const issues = []
 function issue(file, text) {
   issues.push({ file: rel(file), text })
 }
+// 报出来的路径相对代码库（src/modules/…），人照着就能找到文件
 function rel(p) {
-  return path.relative(srcDir, p).replaceAll('\\', '/')
+  return path.relative(codebase, p).replaceAll('\\', '/')
 }
 
 // ---------- 文件登记：路径 → 种类 ----------
@@ -74,9 +76,16 @@ function moduleNameOfFolder(folder, modDir) {
   }
   return moduleOfFolder(folder)
 }
-// 不是模块的文件夹：shared 是构建块，proto 是原型宿主入口，app 是整个后端的组合根与 HTTP 入口（外壳，不解码）
-for (const folder of fs.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== 'shared' && e.name !== 'proto' && e.name !== 'app').map((e) => e.name)) {
-  const modDir = path.join(srcDir, folder)
+// 模块只从 src/modules/ 底下找。src/ 底下别的文件夹：shared 是构建块，proto 是原型宿主入口，
+// bootstrap 是整个后端的组合根与起服务，infras 是技术件（HTTP 入口、事件总线；都是外壳，不解码）；
+// 除了这四样还有别的，就是放错了地方的模块，报出来让它挪进去
+const srcFolders = fs.existsSync(srcDir) ? fs.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name) : []
+for (const folder of srcFolders.filter((f) => f !== 'modules' && !NON_MODULE_SRC_FOLDERS.includes(f))) {
+  issue(path.join(srcDir, folder), `模块要放在 src/modules/ 底下：src/${folder} → src/modules/${folder}`)
+}
+const moduleFolders = fs.existsSync(modulesDir) ? fs.readdirSync(modulesDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name) : []
+for (const folder of moduleFolders) {
+  const modDir = path.join(modulesDir, folder)
   const modName = moduleNameOfFolder(folder, modDir)
   if (folder !== folder.toLowerCase()) issue(modDir, `模块文件夹应全小写、多词连字符：${folder} → ${folder.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`)
   modules.set(modName, { name: modName, dir: modDir, aggregates: new Map() })

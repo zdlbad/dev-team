@@ -437,7 +437,8 @@ if (cmd === 'dispatch') {
   const 硬派理由 = 硬派 >= 0 ? (args[硬派 + 1] ?? '') : null
   if (硬派 >= 0 && !硬派理由) die('--带着问题派 后面要写一句为什么这几条不影响这一趟')
   journal({ ts: now, kind: 'dispatch', who, by: '开发指挥', slice: s.slice, phase: s.phase, text, ...(硬派理由 ? { 带着问题派: 硬派理由 } : {}) })
-  console.log(`派工已记：${who} · ${text}`)
+  // 同一角色同时开着几趟时，交回要靠派工时刻指明是哪一趟（scene back … --趟 <时刻>），所以回显它
+  console.log(`派工已记：${who} · ${text}　（派工时刻 ${now}；同时派着这个角色别的活时，交回加 --趟 ${now.slice(11, 19)}）`)
   if (硬派理由) console.log(`  ⚠ 带着 ${open.length} 件没答的问题派的，理由已记进日志：${硬派理由}`)
   // 角色不写细步，人就只看得见「开工了」；光提醒不够，开发指挥现编命令容易编错，错了还不响。
   // 所以把两行命令连角色名一起印出来，直接抄进提示词。
@@ -476,15 +477,30 @@ ${记法}
 if (cmd === 'back') {
   const who = args[2]
   const text = args.slice(3).find((a) => !a.startsWith('--') && !USED.has(a))
-  if (!who || !ROLES.includes(who)) die(`用法：scene back <项目> <角色> "<交回摘要>" [--tokens n] [--tools n] [--ms n] [--outcome 交回|发问|没交回] [--交回行数 n]`)
+  if (!who || !ROLES.includes(who)) die(`用法：scene back <项目> <角色> "<交回摘要>" [--趟 <派工时刻>] [--tokens n] [--tools n] [--ms n] [--outcome 交回|发问|没交回] [--交回行数 n]`)
   if (!text) die('要写交回了什么，一句')
   const s = readScene()
   const now = new Date().toISOString()
   const today = now.slice(0, 10), yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
   const all = readJournal([yesterday, today])
-  // 这一趟从哪次派工算起：同一角色最近一次 dispatch，且它后面还没有 back
-  let start = null, already = null
-  for (let i = all.length - 1; i >= 0; i--) { const e = all[i]; if (e.who !== who) continue; if (e.kind === 'back') { already = e; break } if (e.kind === 'dispatch') { start = e; break } }
+  // 同一角色可能同时派着几趟：照日志从头走一遍，交回按它记下的派工时刻配对（老记录没有这一栏的，配最近那一趟），
+  // 剩下没配上的就是还开着的那几趟
+  const opened = [], lastBack = { e: null }
+  for (const e of all) {
+    if (e.who !== who) continue
+    if (e.kind === 'dispatch') opened.push(e)
+    else if (e.kind === 'back') {
+      lastBack.e = e
+      const k = e.dispatchedAt ? opened.findIndex((d) => d.ts === e.dispatchedAt) : opened.length - 1
+      if (k >= 0) opened.splice(k, 1)
+    }
+  }
+  // --趟 给派工时刻（完整时间，或其中一段如 16:52）指定关哪一趟；不给就关最近派的那一趟
+  const pick = opt('--趟')
+  let start = pick ? opened.find((d) => d.ts.includes(pick)) ?? null : opened[opened.length - 1] ?? null
+  const already = opened.length ? null : lastBack.e
+  if (pick && !start) die(`${who} 没有派工时刻含「${pick}」、还开着的那一趟。还开着的：${opened.map((d) => `${d.ts}「${String(d.text).slice(0, 24)}」`).join('；') || '没有'}`)
+  if (!pick && opened.length > 1) console.log(`  ${who} 这会儿开着 ${opened.length} 趟，这一笔记在最近派的那一趟（${start.ts}）；要记别的一趟，加 --趟 <派工时刻>：${opened.slice(0, -1).map((d) => `${d.ts}「${String(d.text).slice(0, 24)}」`).join('；')}`)
   // 角色自己交回过、开发指挥又补记一次：从前会在日志里多出一条没有派工可配的假记录
   if (!start && already) {
     console.log(`这一趟 ${who} 已经交回过了（${already.ts.slice(11, 16)}「${String(already.text).slice(0, 30)}」），不再记一条。`)
