@@ -37,20 +37,25 @@ window.Scene = (function () {
     return (d.entries || []).map((e, i) => ({ ...e, i, q: e.id ? qs.get(e.id) || null : null }))
   }
 
-  // 一趟派工：dispatch 起，到同一角色的 back 止；中间这个角色的细步、发问都挂进来
+  // 一趟派工：dispatch 起，到配上它的 back 止。同一角色可能同时开着几趟：back 记着它对的是哪一次派工（dispatchedAt），
+  // 照那个配；老记录没有这一栏的配最近那一趟。细步、计划、发问分不出是哪一趟的，挂在这个角色最近派的那一趟上
   function trips(evs) {
-    const open = new Map()
+    const open = new Map() // 角色 → 还开着的几趟，按派工先后
     const out = []
+    const latest = (who) => { const l = open.get(who); return l && l.length ? l[l.length - 1] : null }
     for (const e of evs) {
       if (e.kind === 'dispatch') {
         const t = { who: e.who, text: e.text, start: e, steps: [], asks: [], plan: null, end: null }
-        open.set(e.who, t); out.push(t)
-      } else if (e.kind === 'back' && open.has(e.who)) {
-        open.get(e.who).end = e; open.delete(e.who)
-      } else if (e.kind === 'plan' && open.has(e.who)) {
-        open.get(e.who).plan = e // 计划变了再报一次，取最后一份
-      } else if ((e.kind === 'progress' || e.kind === 'ask') && open.has(e.who)) {
-        open.get(e.who)[e.kind === 'ask' ? 'asks' : 'steps'].push(e)
+        if (!open.has(e.who)) open.set(e.who, [])
+        open.get(e.who).push(t); out.push(t)
+      } else if (e.kind === 'back' && latest(e.who)) {
+        const l = open.get(e.who)
+        const k = e.dispatchedAt ? l.findIndex((t) => t.start.ts === e.dispatchedAt) : l.length - 1
+        if (k >= 0) { l[k].end = e; l.splice(k, 1) }
+      } else if (e.kind === 'plan' && latest(e.who)) {
+        latest(e.who).plan = e // 计划变了再报一次，取最后一份
+      } else if ((e.kind === 'progress' || e.kind === 'ask') && latest(e.who)) {
+        latest(e.who)[e.kind === 'ask' ? 'asks' : 'steps'].push(e)
       }
     }
     return out

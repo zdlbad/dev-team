@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { OrderAggregateRoot } from '../../../../src/ordering/domain/order/aggregate-root.OrderAggregateRoot'
-import { MoneyValueObject } from '../../../../src/ordering/domain/order/value-object.MoneyValueObject'
-import { OrderFailedError } from '../../../../src/ordering/domain/order/error.OrderFailedError'
+import { OrderAggregateRoot } from '../../../../../src/modules/ordering/domain/order/aggregate-root.OrderAggregateRoot'
+import { MoneyValueObject } from '../../../../../src/modules/ordering/domain/order/value-object.MoneyValueObject'
+import { OrderFailedError } from '../../../../../src/modules/ordering/domain/order/error.OrderFailedError'
 
 const aud = (amount: number) => MoneyValueObject.CREATE(amount, 'AUD')
 const day = new Date('2026-09-05T00:00:00Z')

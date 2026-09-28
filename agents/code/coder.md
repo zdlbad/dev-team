@@ -23,16 +23,16 @@ reads:
 
 ## 写
 
-代码库（后端，如 `code/backend`）：`src/`、`tests/`、`contracts/`；前端工程（代码库旁边的 `frontend/`，如 `code/frontend`）：`src/` 与它的配置。
+代码库（后端，如 `code/backend`）：`src/`（模块在 `src/modules/`）、`tests/`、`contracts/`；前端工程（代码库旁边的 `frontend/`，如 `code/frontend`）：`src/` 与它的配置。
 
 ## 三样活
 
 **起草稿原型**（每个场景）：
 
 1. **领域层与应用层**：照模型这个场景碰到的那一截写，聚合、行为、领域服务、命令、查询、事件处理。
-2. **内存仓储与组合根**：每个模块的 `module.ts` 装配、交出处理器与仓储；整个后端一个组合根，示例数据放它旁边（放法见编码规范第十三节）。数据先存内存，仓储就是内存适配器。
+2. **内存仓储与组合根**：每个模块的 `module.ts` 装配、交出处理器与仓储，外面给的东西只认端口接口；整个后端一个组合根（`src/bootstrap/`），示例数据放它旁边；HTTP 入口、事件总线放 `src/infras/`（放法见编码规范第八节「HTTP 入口的文件位置与命名」，谁能 import 谁见第二节「依赖方向」）。数据先存内存，仓储就是内存适配器。
 3. **契约** `contracts/<模块>.md`：每个命令、查询一段——HTTP 方法与路径（按业务名词分，如 `POST /api/participants/:participantId/start-notification`）、请求字段（类型、必填）、返回、领域错误对哪个状态码。名字、字段照模型。**先写契约，再写路由和页面**；答案回来改了命令、查询，契约先跟着改。
-4. **后端路由**：照契约一个口一行，登记名是模型里的限定名（`模块.名字`）。开发用的口（`/api/_dev/manifest`、`state`、`events`、`reset`）只在非生产挂，`manifest` 就是 `proto.js check` 拿去对模型的那一份。
+4. **后端路由**（`src/infras/http/routes/<module-folder>.ts`）：照契约一个口一行，登记名是模型里的限定名（`模块.名字`）。开发用的口（`/api/_dev/manifest`、`state`、`events`、`reset`）只在非生产挂，`manifest` 就是 `proto.js check` 拿去对模型的那一份。
 5. **产品页面**，写在前端工程里（React + TypeScript + Vite，界面用 Ant Design）：给人按的，不是给开发看的。
    - **按身份分**：页面上能切换身份，每个身份只看得见、只按得了它该做的。老人只有「交凭据」，案例经理看得见交上来的凭据、能录花费。切身份只放一处（`src/session/`），以后换成登录只动这一处。
    - **一个按钮调一个命令，一栏对应模型的一个字段。** 页面经 `src/api/<module-folder>.ts` 调契约里的口，类型照契约写。

@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { ChargeCustomerOnOrderConfirmedEventHandler } from '../../../src/ordering/application/event-handler.ChargeCustomerOnOrderConfirmedEventHandler'
-import { OrderConfirmedEvent } from '../../../src/ordering/domain/order/event.OrderConfirmedEvent'
-import { MoneyValueObject } from '../../../src/ordering/domain/order/value-object.MoneyValueObject'
-import type { PaymentGatewayInterface } from '../../../src/ordering/ports/port.PaymentGatewayInterface'
+import { ChargeCustomerOnOrderConfirmedEventHandler } from '../../../../src/modules/ordering/application/event-handler.ChargeCustomerOnOrderConfirmedEventHandler'
+import { OrderConfirmedEvent } from '../../../../src/modules/ordering/domain/order/event.OrderConfirmedEvent'
+import { MoneyValueObject } from '../../../../src/modules/ordering/domain/order/value-object.MoneyValueObject'
+import type { PaymentGatewayInterface } from '../../../../src/modules/ordering/ports/port.PaymentGatewayInterface'
 
 /** 记录每次收款的测试替身 */
 class RecordingPaymentGateway implements PaymentGatewayInterface {

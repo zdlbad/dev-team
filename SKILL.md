@@ -34,7 +34,7 @@ description: 模型驱动的开发团队。一个场景一个场景往前滚：�
 | `slice new / next / advance / lit / enough / list` | 切片：场景与正式化；`next` 算下一步该谁做什么 | `node $DEV_TEAM/tools/slice.js …` |
 | `scene set / plan / progress / ask / answer / mode / questions / dispatch / back / handoff` | 现场看板、发问、派工日志、交接 | `node $DEV_TEAM/tools/scene.js <项目> …` |
 | `brief <角色> [--活 <…>] --写 <文件>` | 装一个角色这一趟的派工书 | `node $DEV_TEAM/tools/brief.js …` |
-| `validate <项目> [--slice <id>] [--code <代码库>] [--只看]` | 校验：业务对模型；带 `--code` 再解码代码、对模型 | `node $DEV_TEAM/tools/validate.js …` |
+| `validate <项目> [--slice <id>] [--code <代码库>] [--只看]` | 校验：业务对模型；带 `--code` 再解码代码、对模型，并查 import 的依赖方向 | `node $DEV_TEAM/tools/validate.js …` |
 | `proto check / serve` | 草稿原型：核登记（读后端的 `/api/_dev/manifest` 对模型）、起后端与前端开发服务；没有前端工程的项目走原型宿主。工作台会自己起它 | `node $DEV_TEAM/tools/proto.js …` |
 | `test <代码库>` | 跑测试 | `node $DEV_TEAM/tools/test.js …` |
 | `check-schema <项目>` | 核项目里的 JSON 形状 | `node $DEV_TEAM/tools/check-schema.js …` |

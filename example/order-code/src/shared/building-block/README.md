@@ -7,7 +7,7 @@
 ```
 domain/        AggregateRoot · Entity · ValueObject · DomainEvent · DomainError · ConcurrencyError
 application/   NotFoundError · assertFound · DomainEventHandler
-ports/         EventPublisherInterface
+ports/         EventPublisherInterface · EventBusInterface（带订阅）
 proto/         ProtoHost · InMemoryEventPublisher（原型宿主，一次性的壳，生产不用）
 ```
 

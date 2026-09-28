@@ -9,13 +9,13 @@ ProtoHost                原型宿主：登记命令 / 查询 / 内存仓储，�
 
 ## 草稿原型怎么跑，看有没有前端工程
 
-- **有前端工程**（代码库旁边的 `frontend/`，或 `project.json` 的 `"frontend"`）：后端照最终版写——契约、按业务分的 HTTP 路由、组合根，数据先存内存；前端工程调这些口。这时不用 `ProtoHost`，只用 `InMemoryEventPublisher`（把事件记进后端的事件流水，开发口 `/api/_dev/events` 读它）。放法见 dev-team 的 `agents/code/coding-standard.md` 第十三节，dev-team 的 `tools/proto.js` 起后端与前端开发服务。
+- **有前端工程**（代码库旁边的 `frontend/`，或 `project.json` 的 `"frontend"`）：后端照最终版写——契约、按业务分的 HTTP 路由、组合根，数据先存内存；前端工程调这些口。这时整个 `proto/` 都不用：进程内事件总线放项目的 `src/infras/events/`（把事件记进后端的事件流水，开发口 `/api/_dev/events` 读它），构建块里不留 `proto/`。放法见 dev-team 的 `agents/code/coding-standard.md` 第八节「HTTP 入口的文件位置与命名」、第二节「依赖方向」与第一节「前端工程的放法」，dev-team 的 `tools/proto.js` 起后端与前端开发服务。
 - **没有前端工程**（dev-team 的样例 `example/order-code`）：用下面的原型宿主，产品页面是 `src/proto/web/` 里的静态页面。
 
 ## 原型宿主：编码要写的三样东西
 
-1. **内存仓储适配器**（`src/<module-folder>/adapters/adapter.InMemory<Aggregate>Repository.ts`）：实现仓储接口，另加一个 `all(): unknown[]`，返回全部行的纯数据（`{ id, version, ...props }`），原型页面用它显示聚合的状态。两种做法都要它。
-2. **组合根**（`src/<module-folder>/module.ts`）：`build<Module>Module(host, deps)`，实例化适配器 → 领域服务 → 处理器 → 事件订阅，并把每个处理器与仓储登记到宿主：
+1. **内存仓储适配器**（`src/modules/<module-folder>/adapters/adapter.InMemory<Aggregate>Repository.ts`）：实现仓储接口，另加一个 `all(): unknown[]`，返回全部行的纯数据（`{ id, version, ...props }`），原型页面用它显示聚合的状态。两种做法都要它。
+2. **组合根**（`src/modules/<module-folder>/module.ts`）：`build<Module>Module(host, deps)`，实例化适配器 → 领域服务 → 处理器 → 事件订阅，并把每个处理器与仓储登记到宿主：
    - `host.command('<Module>.<CommandName>', (input) => new XxxCommand(…), handler)`
    - `host.query('<Module>.<QueryName>', (input) => new XxxQuery(…), handler)`
    - `host.repository('<Module>.<Aggregate>', repo)`

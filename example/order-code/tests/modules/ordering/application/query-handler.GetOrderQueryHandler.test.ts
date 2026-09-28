@@ -1,10 +1,10 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { NotFoundError } from '@shared/building-block/application'
-import { GetOrderQuery, GetOrderQueryHandler } from '../../../src/ordering/application/query-handler.GetOrderQueryHandler'
-import { InMemoryOrderRepository } from '../../../src/ordering/adapters/adapter.InMemoryOrderRepository'
-import { OrderAggregateRoot } from '../../../src/ordering/domain/order/aggregate-root.OrderAggregateRoot'
-import { MoneyValueObject } from '../../../src/ordering/domain/order/value-object.MoneyValueObject'
+import { GetOrderQuery, GetOrderQueryHandler } from '../../../../src/modules/ordering/application/query-handler.GetOrderQueryHandler'
+import { InMemoryOrderRepository } from '../../../../src/modules/ordering/adapters/adapter.InMemoryOrderRepository'
+import { OrderAggregateRoot } from '../../../../src/modules/ordering/domain/order/aggregate-root.OrderAggregateRoot'
+import { MoneyValueObject } from '../../../../src/modules/ordering/domain/order/value-object.MoneyValueObject'
 
 describe('GetOrder', () => {
   it('[G-002] 返回订单的状态与行数', async () => {

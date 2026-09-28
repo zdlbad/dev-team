@@ -25,6 +25,8 @@ function compile(codebase) {
   const rootDir = rootDirOf(codebase, tsconfig)
   const codebaseInBuild = path.join(buildDir, path.relative(rootDir, codebase))
   const tsc = require.resolve('typescript/bin/tsc')
+  // 每次从空目录编：源文件挪了位置或删了，tsc 不会删产物里旧的那份，留着它，测试运行器会把旧位置的测试也跑一遍
+  fs.rmSync(buildDir, { recursive: true, force: true })
   const r = spawnSync(process.execPath, [tsc, '-p', tsconfig, '--noEmit', 'false', '--noEmitOnError', '--outDir', buildDir, '--rootDir', rootDir, '--module', 'commonjs', '--moduleResolution', 'node', '--esModuleInterop', '--declaration', 'false', '--sourceMap', 'false', '--skipLibCheck'], { encoding: 'utf8', cwd: codebase })
   // 编译不过就让构建目录里没有可跑的东西。tsc 默认即使报错也把能编的文件产出来，留着它，
   // 下一个起原型或跑探针的人跑的就是那份半新半旧的坏代码，还以为是真结果。
