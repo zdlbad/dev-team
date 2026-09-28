@@ -2,7 +2,8 @@
 /**
  * 新建项目：拷贝模板、填占位符、git init + 首次提交。
  * 用法：node tools/new-project.js <目标目录> <系统名> [--codebase <代码库目录>]
- * 加 --codebase 时，把基础构建块拷到 <代码库目录>/src/shared/building-block/。
+ * 加 --codebase 时，把样例代码库 example/order-code 里的基础构建块拷到 <代码库目录>/src/shared/building-block/；
+ * 拷过去以后构建块归那个代码库管，跟代码一起提交，不再指回 dev-team。
  */
 const fs = require('node:fs')
 const path = require('node:path')
@@ -74,11 +75,12 @@ try {
 }
 
 if (codebase) {
-  const bbSrc = path.join(devTeam, 'building-block')
+  const bbSrc = path.join(devTeam, 'example', 'order-code', 'src', 'shared', 'building-block')
   const bbDst = path.join(path.resolve(codebase), 'src', 'shared', 'building-block')
   fs.mkdirSync(bbDst, { recursive: true })
   for (const sub of ['domain', 'application', 'ports', 'proto']) {
     copyDir(path.join(bbSrc, sub), path.join(bbDst, sub))
   }
+  fs.copyFileSync(path.join(bbSrc, 'README.md'), path.join(bbDst, 'README.md'))
   console.log(`基础构建块已拷入：${bbDst}`)
 }

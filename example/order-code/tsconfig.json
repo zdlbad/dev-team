@@ -14,13 +14,12 @@
     "baseUrl": ".",
     "paths": {
       "@shared/building-block/*": [
-        "../../building-block/*"
+        "src/shared/building-block/*"
       ]
     }
   },
   "include": [
     "src/**/*.ts",
-    "tests/**/*.ts",
-    "../../building-block/**/*.ts"
+    "tests/**/*.ts"
   ]
 }

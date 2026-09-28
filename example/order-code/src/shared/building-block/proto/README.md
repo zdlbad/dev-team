@@ -1,15 +1,20 @@
-# proto/ — 原型宿主
+# proto/ — 原型宿主与进程内事件
 
-草稿原型的壳：领域代码不用数据库就能跑起来，产品页面通过它被人操作。生产环境不用它；领域层与应用层的代码在原型和生产之间**一行不变**，变的只是适配器。
+草稿原型要的两样东西。领域层与应用层的代码在原型和生产之间**一行不变**，变的只是外面那一圈。
 
 ```
-ProtoHost                原型宿主：登记命令 / 查询 / 内存仓储，开 HTTP 口；tools/proto.js 把产品页面里的 /api/… 转给它
-InMemoryEventPublisher   进程内事件总线，顺手把事件记进宿主的流水
+InMemoryEventPublisher   进程内事件总线；构造时给了记录者（任何带 recordEvents 的东西，如后端的事件流水、原型宿主）就顺手把事件记下，不给也能用
+ProtoHost                原型宿主：登记命令 / 查询 / 内存仓储，开一个传命令名的通用口；只给没有前端工程的项目用
 ```
 
-## 编码起草稿原型要写的三样东西
+## 草稿原型怎么跑，看有没有前端工程
 
-1. **内存仓储适配器**（`src/<module-folder>/adapters/adapter.InMemory<Aggregate>Repository.ts`）：实现仓储接口，另加一个 `all(): unknown[]`，返回全部行的纯数据（`{ id, version, ...props }`），原型页面用它显示聚合的状态。
+- **有前端工程**（代码库旁边的 `frontend/`，或 `project.json` 的 `"frontend"`）：后端照最终版写——契约、按业务分的 HTTP 路由、组合根，数据先存内存；前端工程调这些口。这时不用 `ProtoHost`，只用 `InMemoryEventPublisher`（把事件记进后端的事件流水，开发口 `/api/_dev/events` 读它）。放法见 dev-team 的 `agents/code/coding-standard.md` 第十三节，dev-team 的 `tools/proto.js` 起后端与前端开发服务。
+- **没有前端工程**（dev-team 的样例 `example/order-code`）：用下面的原型宿主，产品页面是 `src/proto/web/` 里的静态页面。
+
+## 原型宿主：编码要写的三样东西
+
+1. **内存仓储适配器**（`src/<module-folder>/adapters/adapter.InMemory<Aggregate>Repository.ts`）：实现仓储接口，另加一个 `all(): unknown[]`，返回全部行的纯数据（`{ id, version, ...props }`），原型页面用它显示聚合的状态。两种做法都要它。
 2. **组合根**（`src/<module-folder>/module.ts`）：`build<Module>Module(host, deps)`，实例化适配器 → 领域服务 → 处理器 → 事件订阅，并把每个处理器与仓储登记到宿主：
    - `host.command('<Module>.<CommandName>', (input) => new XxxCommand(…), handler)`
    - `host.query('<Module>.<QueryName>', (input) => new XxxQuery(…), handler)`

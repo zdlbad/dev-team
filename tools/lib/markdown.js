@@ -117,4 +117,4 @@ function render(text, { mark = true } = {}) {
   return { html: out.join('\n'), outline }
 }
 
-module.exports = { render, esc }
+module.exports = { render, esc, inline }

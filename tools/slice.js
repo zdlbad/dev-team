@@ -156,7 +156,7 @@ function next(s) {
   const ask = () => ({ who: '人', what: `答看板上的 ${open.length} 件：\n${open.map((q) => `    ${q.id}　${q.question}`).join('\n')}`, run: `node tools/scene.js ${R} answer <问题号> "<他怎么答的>"` })
 
   if (s.kind === 'formalize') {
-    if (st('code') !== 'done') return { who: '编码', what: `把 ${s.covers.join('、')} 的草稿原型正式化：补测试、钉契约、写生产外壳。交回后跑测试，全绿再推`, run: `node tools/slice.js advance ${R} ${s.id} code done` }
+    if (st('code') !== 'done') return { who: '编码', what: `把 ${s.covers.join('、')} 的草稿原型正式化：定契约、补测试、写生产外壳（数据库仓储与登录）。交回后跑测试，全绿再推`, run: `node tools/slice.js advance ${R} ${s.id} code done` }
     if (st('check') !== 'done') return { who: '审查', what: '解码代码、跑代码对模型的校验，判代码并做 pre-pr 审查；差异回编码改', run: `node tools/validate.js ${R} --code <代码库> --slice ${s.id}` }
     return { who: '人', what: '在原型上把这一批场景按一遍，对了就验收', run: `node tools/slice.js advance ${R} ${s.id} accept done` }
   }
