@@ -31,8 +31,9 @@ src/
       adapters/
         adapter.PrismaOrderRepository.ts
         adapter.StripePaymentGateway.ts
-  bootstrap/                整个后端的组合根、起服务、示例数据（第八节「HTTP 入口的文件位置与命名」）；没有谁 import 它
-  infras/                   技术件，不含业务：http/（Express 应用、路由、入参转换）、events/（进程内事件总线、事件流水），以后数据库连接、登录
+        http.OrderRoutes.ts   入站 HTTP 适配器：本模块的路由（第三节、第八节）
+  bootstrap/                整个后端的组合根、起服务、把各模块的路由收起来递给 HTTP 应用、示例数据（第八节「HTTP 入口的文件位置与命名」）；没有谁 import 它
+  infras/                   技术件，不含业务、不认模块：http/（Express 应用、挂口工具、入参转换）、events/（进程内事件总线、事件流水），以后数据库连接、登录
   shared/building-block/    基础构建块（第五节），只放抽象
   proto/                    原型宿主入口，没有前端工程的项目用（样例）
 ```
@@ -63,7 +64,7 @@ bootstrap/  组合根、起服务、示例数据              谁都不依赖它
 modules/<模块>/  ◄──────────────────  infras/  技术件，不含业务（HTTP、事件总线，以后数据库、登录）
   module.ts  装配本模块               ▲
   adapters/ → application/ → ports/   │
-    └─────────────────────────────────┘  模块里只有 adapters 可以用 infras（以后的数据库连接、登录）
+    └─────────────────────────────────┘  模块里只有 adapters 可以用 infras（路由用挂口工具，以后的数据库连接、登录）
                   ↓
                domain/  聚合、领域服务、仓储接口
    │                                  │
@@ -76,12 +77,12 @@ shared/building-block/   聚合根、实体、领域错误、事件、端口接�
 - **domain/** 只依赖本模块的 `domain/` 与 `shared/building-block/domain`（生成编号也从那里拿 `newId`），不 import 外部包。
 - **application/** 依赖本模块的 `domain/`、`ports/`（同一层的处理器之间可以互相引类型），与 `shared/building-block` 的 `application`、`ports`。
 - **ports/** 只用领域类型或标量：依赖本模块的 `domain/` 与 shared。
-- **adapters/** 实现本模块的仓储接口（`domain/` 里的）与端口（`ports/` 里的）。**模块里只有 adapters 可以 import `infras/`**：以后的数据库仓储要用 infras 里的数据库连接、登录这些技术件。
+- **adapters/** 实现本模块的仓储接口（`domain/` 里的）与端口（`ports/` 里的）；本模块的路由（入站 HTTP 适配器 `http.<Module>Routes.ts`）也在这里，引本模块 `application/` 里的命令、查询与处理器类型。**模块里只有 adapters 可以 import `infras/`**：路由用 `infras/http` 的挂口工具与入参转换，以后的数据库仓储要用 infras 里的数据库连接、登录这些技术件。
 - **module.ts** 装配本模块：new 本模块的适配器、处理器，订阅事件。外面给的东西（事件总线、别的模块的查询）只认 shared 里的端口接口或本模块 `ports/` 里的接口，具体实现由 bootstrap new 出来递进来：只发布事件的认 `EventPublisherInterface`，还要订阅的认 `EventBusInterface`（带 `subscribe`）。
 - **模块（包括 module.ts）不 import bootstrap，模块之间不互相 import**；domain、application、ports、module.ts 不 import infras。跨模块走端口：本模块在 `ports/` 里写接口，`adapters/` 里的直连适配器收一个形状对得上的函数或对象（不 import 对方的类），由 bootstrap 把对方的处理器递进来。
-- **infras/** 不含业务：可以 import 各模块 `application/` 里的处理器与命令、查询类型（路由要用）和 shared；不 import 各模块的 `domain/`、`adapters/`、`module.ts`，不 import bootstrap。HTTP 入口要的那一份应用（各模块的处理器）在 `infras/http` 里按处理器类写一份，组合根交来的东西照它对得上就行。
+- **infras/** 不含业务、不认模块：不 import 任何模块（`application/`、`adapters/` 里的路由、`module.ts` 都不），不 import bootstrap，只依赖 shared 与外部包。HTTP 应用有哪些口、每个口交给哪个处理器，由 bootstrap 递进来；碰得到路由的只有模块自己的 `adapters/` 和 bootstrap。
 - **shared/building-block/** 不含业务，不认模块、infras、bootstrap，外部包只用 node 自带的（`node:crypto`）；里面 `domain` ← `application` ← `ports`。
-- **bootstrap/** 依赖所有（各模块的 `module.ts`、infras、示例数据），没有谁 import 它。
+- **bootstrap/** 依赖所有（各模块的 `module.ts` 与 `adapters/` 里的路由、infras、示例数据），没有谁 import 它。`module.ts` 不 import 路由（路由要引 infras，`module.ts` 不许），路由由 bootstrap 直接 import。
 
 样例 `example/order-code` 没有前端工程，也就没有 bootstrap、infras：入口 `src/proto/main.ts` 装配，原型宿主与进程内事件总线在构建块的 `proto/` 里（第五节）。`src/proto/` 跟 bootstrap 一样是外壳，构建块的 `proto/` 只给外壳用。
 
@@ -107,10 +108,12 @@ shared/building-block/   聚合根、实体、领域错误、事件、端口接�
 | `event-handler.` | `EventHandler` | `event-handler.NotifySupplierOnOrderCreatedEventHandler.ts` | `NotifySupplierOnOrderCreatedEventHandler` | |
 | `port.` | `Interface` | `port.PaymentGatewayInterface.ts` | `PaymentGatewayInterface` | |
 | `adapter.` | 无；以技术名开头 | `adapter.PrismaOrderRepository.ts` | `PrismaOrderRepository` | |
+| `http.` | `Routes` | `http.OrderRoutes.ts` | `OrderRoutes` | |
 
 补充：
 - 事件处理的类名 = `<动作>On<事件类名>EventHandler`。解码器从类名读出触发事件，与代码中实际订阅的事件核对。
 - 适配器类名 = `<技术><被实现的接口名去掉 Interface>`。解码器从类名推出它实现哪个接口，与 `implements` 子句核对。适配器不进模型，但命名规则同样适用。
+- 入站 HTTP 适配器 = 一个模块一个 `adapters/http.<Module>Routes.ts`，主导出 `<Module>Routes`：本模块全部对外的口（`Endpoint<本模块的处理器>` 的数组，第八节），不是类。它要的处理器在文件里按本模块 `application/` 的处理器类写一份类型（不导出），不跨模块。在 `adapters/` 里，不进模型。
 - 伴随导出只允许表中列出的；其它导出即违规。
 
 ## 四、编解码对应
@@ -124,7 +127,7 @@ shared/building-block/   聚合根、实体、领域错误、事件、端口接�
 | `domain/service.*` | `service.*.json` 一对一 |
 | `application/*` | 一对一 |
 | `ports/*` | 一对一 |
-| `adapters/*` | 不解码 |
+| `adapters/*`（仓储与端口的适配器、入站 HTTP 适配器） | 不解码 |
 | `src/bootstrap/`、`src/infras/`、`src/shared/`、`src/proto/`（在 `src/modules/` 之外） | 不解码，不是模块 |
 
 路径本身就是对应关系；解码器按文件前缀判定种类，不做推断。
@@ -316,19 +319,20 @@ export class CreateOrderCommandHandler {
 ## 八、端口与适配器
 
 - **端口** = 接口，方法只用领域类型或标量。
-- **适配器** = 类，`implements` 一个仓储接口或端口接口；内部只做线格式转换；**不含分支业务逻辑**。
+- **适配器** = 类，`implements` 一个仓储接口或端口接口；内部只做线格式转换；**不含分支业务逻辑**。入站 HTTP 适配器（路由）不是类，是一份口的清单，同样只转格式、不做判断。
 - 仓储适配器的 `save`：持久化 + 乐观锁（`where version = ?`，成功后 `+1`，不符抛 `ConcurrencyError`）。不分发事件。
 - **组合根**：每模块一个 `src/modules/<module-folder>/module.ts`，实例化顺序：适配器 → 领域服务 → 处理器 → 事件订阅。是唯一允许 `new` 本模块适配器的地方。模块外的具体实现（事件总线等 infras 里的技术件）由 `src/bootstrap/` new 出来递进来，`module.ts` 只认端口接口（第二节）。
 
 ### HTTP 入口的文件位置与命名（Express）
 
-整个后端的组合根放 `src/bootstrap/`，HTTP 入口、事件总线这些技术件放 `src/infras/`；两样都是外壳、不是模块，解码器跳过（与 `shared`、`proto` 同）。谁能 import 谁见第二节。
+整个后端的组合根放 `src/bootstrap/`，HTTP 应用、事件总线这些通用技术件放 `src/infras/`；两样都是外壳、不是模块，解码器跳过（与 `shared`、`proto` 同）。每个模块的路由是它的入站适配器，放在模块自己的 `adapters/` 里；`infras/http` 不认任何模块，由 bootstrap 把各模块的口收起来递给它。谁能 import 谁见第二节。
 
 - `src/bootstrap/composition-root.ts`：`composeApplication()` new 出 infras 里的具体实现（事件总线 `InMemoryEventPublisher`），调各模块的 `build<Module>Module(deps)` 递进去，交出各模块的处理器与按「模块.聚合」起名的仓储；示例数据放旁边的 `src/bootstrap/sample-data.ts` 等文件。各模块的 `module.ts` 不收宿主、不认 HTTP、不认具体实现，只装配、交出 `{ handlers, repositories }`。
-- `src/bootstrap/server.ts`：读 `PORT`、`HOST` 起服务，把 `compose`（调组合根装一套应用）递给 HTTP 应用。
-- `src/infras/http/app.ts`：Express 应用 `createHttpApp({ compose, devRoutes, frontendOrigins })`，按路由表挂口、错误对状态码（领域错误 422、找不到 404、版本冲突 409、格式不对 400），开发口 `/api/_dev/…` 只在非生产挂。它不 import 组合根，开发口重置时再调一次递进来的 `compose`。
-- `src/infras/http/application.ts`：HTTP 入口要的那一份应用 `HttpApplication`——各模块的处理器（按处理器类写）与仓储；组合根交出的东西照它对得上就行。
-- `src/infras/http/routes/<module-folder>.ts`：每个模块一个路由文件，一个口一行：`command('<Module>.<Name>', <路径>, 入参 → 命令对象, 应用 → 处理器)` / `query(…)`（两个都在 `src/infras/http/endpoint.ts`），名字照模型的限定名，路径与字段照 `contracts/<Module>.md`；`routes/index.ts` 合在一起；入参转换用 `src/infras/http/wire.ts`，只转格式、不做判断。
+- `src/modules/<module-folder>/adapters/http.<Module>Routes.ts`：本模块的路由，一个口一行：`command('<Module>.<Name>', <路径>, 入参 → 命令对象, 本模块的处理器 → 处理器)` / `query(…)`，名字照模型的限定名，路径与字段照 `contracts/<Module>.md`；入参转换用 `src/infras/http/wire.ts`，只转格式、不做判断。要的处理器按本模块的处理器类写一份类型，`module.ts` 交出的 `handlers` 照它对得上就行。
+- `src/bootstrap/http-routes.ts`：把各模块的路由收在一起，`mount(<Module>Routes, (app) => app.handlers.<module>)` 说清每个模块的处理器在组合根装好的那一套应用的哪里。
+- `src/bootstrap/server.ts`：读 `PORT`、`HOST` 起服务，把 `compose`（调组合根装一套应用）和收好的口递给 HTTP 应用。
+- `src/infras/http/endpoint.ts`：挂口工具 `command`、`query`（一个口：名字、方法、路径、入参 → 命令 / 查询对象、从一份处理器里取哪个）与 `mount`（把按一份处理器写的口改成从整套应用里取）。处理器每次请求才取，开发口重置之后取到的就是新装的那一套。
+- `src/infras/http/app.ts`：Express 应用 `createHttpApp({ compose, endpoints, devRoutes, frontendOrigins })`，把递进来的口挂上、错误对状态码（领域错误 422、找不到 404、版本冲突 409、格式不对 400），开发口 `/api/_dev/…` 只在非生产挂。对装好的应用只认按名字交出的仓储（开发口看状态用）；不 import 组合根、不 import 任何模块，开发口重置时再调一次递进来的 `compose`。
 - `src/infras/events/in-memory-event-publisher.ts`：进程内事件总线，实现 shared 的 `EventBusInterface`，构造时给了记录者就先把事件交给它记下；`src/infras/events/event-log.ts` 是开发口看的事件流水（那个记录者），`/api/_dev/events` 读它。
 - 开发用的口 `/api/_dev/manifest`（登记了哪些命令、查询、仓储，名字照模型的 `模块.名字`；`proto.js check` 拿它对模型）、`state`（各内存仓储的全部行）、`events`（事件流水）、`reset`（回到示例数据）。
 - 代码库的 `package.json` 脚本：`dev`（入口 `src/bootstrap/server.ts`，改了代码自己重启，口读 `PORT`；`proto.js` 起后端就是在代码库里 `npm run dev`）、`build`（同一个入口打包）、`start`、`typecheck`（`proto.js check` 先跑它）。
