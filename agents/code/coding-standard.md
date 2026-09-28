@@ -2,7 +2,7 @@
 
 *编码读全文，审查判代码时读「解码规则汇总」、审代码时读全文。模型文件的形状在 [model/shapes.md](../model/shapes.md)。*
 
-本规范的每一条都必须能被反向解析。凡是解码器读不出来的约定，就不是规范，只是风格。语言：TypeScript。基础构建块以路径别名 `@shared/building-block/*` 引入（tsconfig `paths` 映射到 `src/shared/building-block/*`）。
+本规范的每一条都必须能被反向解析。凡是解码器读不出来的约定，就不是规范，只是风格。语言：TypeScript。基础构建块以路径别名 `@shared/building-block/*` 引入（tsconfig `paths` 映射到代码库自己的 `src/shared/building-block/*`，不指到 dev-team）。
 
 ---
 
@@ -77,13 +77,14 @@ src/<module-folder>/
 
 ## 四、基础构建块 `src/shared/building-block/`
 
-所有模块共用的技术基座：聚合根、事件、错误等抽象的基类与技术守卫。**不含任何业务概念**——它不是 DDD 战略意义上的「共享内核」（Shared Kernel，两个上下文共享的一块业务模型）；模块之间不共享任何业务模型，跨模块只经端口与事件。
+所有模块共用的技术基座：聚合根、事件、错误等抽象的基类与技术守卫。它是代码库的一部分，跟代码一起提交、在代码库里改；dev-team 只在样例 `example/order-code/src/shared/building-block/` 里留一份，新项目由 `tools/new-project.js --codebase` 从那里拷一份起步。**不含任何业务概念**——它不是 DDD 战略意义上的「共享内核」（Shared Kernel，两个上下文共享的一块业务模型）；模块之间不共享任何业务模型，跨模块只经端口与事件。
 
 ```
 src/shared/building-block/
   domain/        AggregateRoot · Entity · ValueObject · DomainEvent · DomainError · ConcurrencyError · newId（领域层生成 id 只从这里拿，不直接 import node:crypto）
   application/   NotFoundError · assertFound · 其它技术守卫的断言
   ports/         EventPublisherInterface · 其它技术端口（如 AccessInterface）
+  proto/         InMemoryEventPublisher（进程内事件，草稿原型用）· ProtoHost（原型宿主，只给没有前端工程的项目用）
 ```
 
 ```ts
@@ -385,4 +386,16 @@ tests/<module-folder>/adapters/adapter.PrismaOrderRepository.test.ts
 ## 十三、未定
 
 - 目标架构是否只支持六边形（v4 曾支持传统 MVC 作为第二目标；本规范只写六边形）
-- HTTP 入口的文件位置与命名：契约管形状，不管文件放哪；等第一个实现切片按技术选型定下来再写进这里
+- HTTP 入口的文件位置与命名（2026-09-28 定，Express）：整个后端的组合根与 HTTP 入口放 `src/app/`，它是外壳、不是模块，解码器跳过它（与 `shared`、`proto` 同）。
+  - `src/app/composition-root.ts`：`composeApplication()` 调各模块的 `build<Module>Module(deps)`，交出各模块的处理器与按「模块.聚合」起名的仓储；示例数据放旁边的 `src/app/sample-data.ts` 等文件。各模块的 `module.ts` 不收宿主、不认 HTTP，只装配、交出 `{ handlers, repositories }`。
+  - `src/app/http/app.ts`：Express 应用，按路由表挂口、错误对状态码（领域错误 422、找不到 404、版本冲突 409、格式不对 400），开发口 `/api/_dev/…` 只在非生产挂；`src/app/http/server.ts` 读 `PORT` 起服务。
+  - `src/app/http/routes/<module-folder>.ts`：每个模块一个路由文件，一个口一行：`command('<Module>.<Name>', <路径>, 入参 → 命令对象, 组合根 → 处理器)` / `query(…)`，名字照模型的限定名，路径与字段照 `contracts/<Module>.md`；入参转换用 `src/app/http/wire.ts`，只转格式、不做判断。
+  - 开发用的口 `/api/_dev/manifest`（登记了哪些命令、查询、仓储，名字照模型的 `模块.名字`；`proto.js check` 拿它对模型）、`state`（各内存仓储的全部行）、`events`（事件流水）、`reset`（回到示例数据）。
+  - 代码库的 `package.json` 脚本：`dev`（改了代码自己重启，口读 `PORT`；`proto.js` 起后端就是在代码库里 `npm run dev`）、`build`、`start`、`typecheck`（`proto.js check` 先跑它）。
+- 前端工程的放法（React + TypeScript + Vite，界面用 Ant Design）：放在代码库旁边的 `frontend/`（或 `project.json` 的 `"frontend"` 指的目录，见 `common/project-layout.md`），自成一个工程、有自己的 `package.json`。解码器不读它；校验只读它上面的 `@trace`，只认应用行为那一层的编号。
+  - `src/api/<module-folder>.ts`：一个模块一份接口客户端，一个口一个函数，请求与返回的类型照 `contracts/<Module>.md` 写。发请求与错误的样子放 `src/api/http.ts` 一处：后端地址读 `VITE_API_BASE`（开发时空着，`/api` 由开发服务转给 `BACKEND_URL`；前后端两个网址时出站点前写上后端网址），后端回的 `{ error: { name, message } }` 变成带错误类名的异常。
+  - `src/pages/<业务>/`：按左栏的业务分文件夹（如 `onboarding`、`quarter`），一个细业务一个组件。只管页面怎么排的应用行为挂在组件上：组件前的 `/** … */` 注释里写一行 `@trace R-105 R-106`，跟后端同一种写法。
+  - `src/session/`：切身份只在这一处——现在是谁、他看得见哪些业务。页面只问这里，以后换成登录只改这一处。
+  - `src/lib/errors.ts`：错误类名 → 人话，一张表，照模型里那个错误的说明写；同一个错误在不同按钮上该说的不一样，按按钮另给一张。
+  - `src/dev/`：开发角落（重置、看状态、看事件、看登记，调后端的 `/api/_dev/…`），只在开发服务里（`import.meta.env.DEV`）或出站点时设了 `VITE_DEV_TOOLS=true` 才出现，不混进产品页面。
+  - `package.json` 脚本：`dev` 就是 `vite`（口读 `PORT`，`/api` 转给 `BACKEND_URL`，都在 `vite.config.ts` 里读）；`proto.js` 起它时在后面加 `--port <口> --strictPort`；人从工作台点「草稿原型」在新标签页直接打开这个口，页面挂在根路径上。另有 `build`（出静态站点）、`typecheck`。

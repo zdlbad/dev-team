@@ -8,7 +8,7 @@
  * 存在 <项目>/reports/_business-comments.json：
  *   { "comments": [{ id, doc, block, heading, snippet, thread: [{ who, text, at }] }] }
  * doc 是相对项目根的文件；block 是那一段原文的指纹（lib/markdown.js 的 data-b）；heading、snippet 在原文改掉、
- * 指纹对不上时帮人认出原来是哪一段。
+ * 指纹对不上时帮人认出原来是哪一段。三层表上的留言 doc 是 layers/<模块>，block 是那一行打头的语句编号。
  */
 const fs = require('node:fs')
 const path = require('node:path')

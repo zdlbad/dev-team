@@ -2,7 +2,7 @@
   "name": "dev-team",
   "private": true,
   "version": "0.1.0",
-  "description": "模型驱动开发团队：schema、构建块、工具",
+  "description": "模型驱动开发团队：提示词、schema、工具与样例",
   "type": "commonjs",
   "scripts": {
     "check-schema": "node tools/check-schema.js",

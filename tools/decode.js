@@ -74,7 +74,8 @@ function moduleNameOfFolder(folder, modDir) {
   }
   return moduleOfFolder(folder)
 }
-for (const folder of fs.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== 'shared' && e.name !== 'proto').map((e) => e.name)) {
+// 不是模块的文件夹：shared 是构建块，proto 是原型宿主入口，app 是整个后端的组合根与 HTTP 入口（外壳，不解码）
+for (const folder of fs.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== 'shared' && e.name !== 'proto' && e.name !== 'app').map((e) => e.name)) {
   const modDir = path.join(srcDir, folder)
   const modName = moduleNameOfFolder(folder, modDir)
   if (folder !== folder.toLowerCase()) issue(modDir, `模块文件夹应全小写、多词连字符：${folder} → ${folder.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`)
@@ -130,20 +131,23 @@ if (configPath) {
   options = { ...parsed.options, noEmit: true }
   rootNames = parsed.fileNames.length ? parsed.fileNames : rootNames
 }
-// 基础构建块的别名：项目未配置或配置指向不存在的目录时，回退到 dev-team 自带的构建块
+// 基础构建块的别名：构建块是代码库自己的（src/shared/building-block）。tsconfig 配了且目录在就用配的；
+// 没配或指到不存在的目录，就指到代码库里的那一份；两处都没有就不补，别名解析不出来由编译错误报出
 {
   const alias = '@shared/building-block/*'
   const baseUrl = options.baseUrl ?? codebase
   const mapped = options.paths?.[alias]?.[0]
   const mappedDir = mapped ? path.resolve(baseUrl, mapped.replace(/\*$/, '')) : null
   const projectBB = path.join(srcDir, 'shared', 'building-block')
-  const fallback = fs.existsSync(projectBB) ? projectBB : path.join(__dirname, '..', 'building-block')
-  if (!mappedDir || !fs.existsSync(mappedDir)) {
+  let bbDir = null
+  if (mappedDir && fs.existsSync(mappedDir)) bbDir = mappedDir
+  else if (fs.existsSync(projectBB)) {
+    bbDir = projectBB
     options.baseUrl = baseUrl
-    options.paths = { ...(options.paths ?? {}), [alias]: [path.join(fallback, '*')] }
+    options.paths = { ...(options.paths ?? {}), [alias]: [path.join(projectBB, '*')] }
   }
   // 确保构建块源码进入程序，类型才能解析
-  for (const f of walk(fallback)) if (!rootNames.includes(f)) rootNames.push(f)
+  if (bbDir) for (const f of walk(bbDir)) if (!rootNames.includes(f)) rootNames.push(f)
 }
 const program = ts.createProgram(rootNames, options)
 const checker = program.getTypeChecker()

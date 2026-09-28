@@ -71,6 +71,12 @@ const GUIDES = {
     fail: '意思有出入——由人决定改模型还是改代码。',
     how: '两句并排读，找出多出来或少掉的条件。',
   },
+  '页面是否照这句话做了？': {
+    question: '这条应用行为只落在前端页面上：挂着这个编号的页面组件，是不是照这句话排、照这句话做的？',
+    pass: '在页面上按一遍就看得到这句话说的样子：该在的在、该成对的成对、该拦的拦住。',
+    fail: '页面做的跟这句话不一样，或者这句话其实管着业务规则（该落进模型、由领域守着），不该只靠页面。',
+    how: '打开组件旁边那段注释和组件本身，照语句里的例子在草稿原型上走一遍。',
+  },
   'writes.multiple': {
     question: '这个命令要在一个事务里写多个聚合，是有意为之吗？',
     options: ['合并：两者本该是一个聚合', '抽第三个聚合：让那条跨聚合的不变量有自己的家', '最终一致：先写一个、发事件、另一个跟进，失败补偿', '承认例外：保留并在 writesNote 写明理由'],
@@ -103,6 +109,7 @@ function judge(report, check, target, sides, importance, related, extra = {}) {
   if (related) item.related = related
   if (extra.context) item.context = extra.context // 这一条在哪个命令的第几步：给人读的，不参与判断键
   if (extra.ask) item.ask = extra.ask
+  if (extra.pageKey !== undefined) item.pageKey = extra.pageKey // 页面落点进判断的键，见 judgeKey
   report.judgments.push(item)
 }
 // ---------- 加载 ----------
@@ -156,6 +163,25 @@ const handlers = of('event-handler')
 const ports = of('port')
 const domainObjects = [...roots, ...entities, ...vos]
 
+// 前端页面上的 @trace（lib/frontend.js 找前端目录、读注释）：只管页面排法的应用行为——左栏列什么、「做」「看」成对——
+// 在模型里没有落点，落在前端的页面组件上。只有应用行为那一层的语句认它是落点；
+// 业务抽象、业务落地的语句挂在页面上不算（报警告）：那两层说的是业务本身，要落在模型里、由领域守着。
+const { frontendOf, frontendTraces } = require('./lib/frontend')
+const frontendDir = frontendOf(root, codebase)
+const commonAncestor = (a, b) => { const x = a.split(path.sep), y = b.split(path.sep); let i = 0; while (i < x.length && i < y.length && x[i] === y[i]) i++; return x.slice(0, i).join(path.sep) || path.sep }
+const pageTraces = frontendDir ? frontendTraces(frontendDir, commonAncestor(root, frontendDir)) : []
+const pageWhere = (p) => `${p.file}:${p.line}`
+/**
+ * 这条语句落在哪几个页面组件上：只对应用行为那一层算。
+ * key 进判断的键：文件、挂在哪个组件或函数上、注释那段话——注释加、删、改字、挪到别的组件，判断就重开；
+ * 不带行号，页面上别处加减几行代码不重开。
+ */
+function pageLandings(st) {
+  if (!st || st.layer !== LAYERS[2]) return []
+  return pageTraces.filter((p) => p.id === st.id).map((p) => ({ kind: 'page', el: { file: p.file }, label: `前端 ${p.owner ?? p.file}`, text: `前端页面 ${p.owner ?? '（没认出组件名）'}（${pageWhere(p)}）${p.note ? '：' + p.note : ''}`, key: [p.file, p.owner ?? '', p.note].join('\u0001') }))
+}
+const pageKeyOf = (pages) => pages.map((l) => l.key).sort().join('\n')
+
 function qname(el) {
   return `${el.module}.${el.data.name}`
 }
@@ -191,10 +217,26 @@ for (const s of business) {
   if (s.fileLayer && !s.labelLayer) add(r1, 'error', 'label.missing-layer', s.id, `${s.file} 是分层文件，每条语句都要标层：(${s.fileLayer}-种类)`)
 }
 
+// 上一层：业务页靠它把一件事排成一行，挂错了行就对不齐（agents/business/layers.md「上一层」）
+// 只许往上挂：业务落地挂业务抽象，应用行为挂业务落地或业务抽象；业务抽象是最上一层，不挂
+const layerRank = (l) => LAYERS.indexOf(l)
+for (const s of business) {
+  if (!inScope(s.id)) continue
+  const where = `${s.file}:${s.parentLine ?? s.line}`
+  if (s.badParents?.length) add(r1, 'error', 'parent.unreadable', s.id, `「上一层：」里认不得：${s.badParents.join('、')}——只写编号，如 R-021，几条用顿号分开（${where}）`)
+  if (!s.parents?.length) continue
+  if (s.layer === LAYERS[0]) { add(r1, 'error', 'parent.on-abstraction', s.id, `业务抽象是最上一层，不写「上一层：」（${where}）`); continue }
+  for (const pid of s.parents) {
+    const p = byId.get(pid)
+    if (!p) { add(r1, 'error', 'parent.unknown', s.id, `挂的上一层 ${pid} 不存在（${where}）`); continue }
+    if (pid === s.id || (layerRank(s.layer) >= 0 && layerRank(p.layer) >= layerRank(s.layer))) add(r1, 'error', 'parent.not-above', s.id, `挂到了 ${pid}（${p.layer ?? '没标层'}），上一层要比「${s.layer}」高一层或两层（${where}）`)
+  }
+}
+
 // 覆盖：能力 → 命令/查询
 for (const g of goals) {
-  const hit = [...commands, ...queries].some((e) => e.data.traces.includes(g.id))
-  if (!hit) add(r1, 'error', 'coverage.goal', g.id, `能力没有任何命令或查询追溯：${g.text}`)
+  const hit = [...commands, ...queries].some((e) => e.data.traces.includes(g.id)) || pageLandings(g).length > 0
+  if (!hit) add(r1, 'error', 'coverage.goal', g.id, `能力没有任何命令或查询追溯${g.layer === LAYERS[2] ? '，前端页面上也没有' : ''}：${g.text}`)
 }
 // 覆盖：规则 → 按种类的落点
 const sig = (name, input, output) => `${name}(${(input ?? []).map((p) => `${p.name}: ${p.type}`).join(', ')})${output ? ` → ${output}` : ''}`
@@ -261,21 +303,31 @@ function ruleLandings(id) {
 // 跨实例、跨聚合才判得了的规则归领域服务，事实与约束落在那儿是对的，从前会被误报
 const EXPECTED = { 事实: ['field', 'invariant', 'behavior', 'port', 'service'], 约束: ['invariant', 'behavior-guard', 'error', 'field', 'service'], 公式: ['behavior', 'behavior-guard', 'service', 'field'], 触发: ['event-handler', 'port'], 流程: ['behavior-guard', 'behavior', 'invariant', 'error', 'command', 'port', 'service'], 情形: ['behavior', 'behavior-guard', 'invariant', 'error', 'field', 'command'] }
 for (const r of rules) {
-  const landings = ruleLandings(r.id)
+  const pages = pageLandings(r)
+  const modelLandings = ruleLandings(r.id)
+  const landings = [...modelLandings, ...pages]
   if (!landings.length) {
     add(r1, 'error', 'coverage.rule', r.id, `规则没有任何落点：${r.text}`)
     continue
   }
   // 创建是一个方法、也是建时的规则，落点种类表里认不变量、行为、带守卫的行为的，都认创建
   const kindOk = (l, want) => want.includes(l.kind) || (l.kind === 'create' && want.some((k) => ['invariant', 'behavior', 'behavior-guard'].includes(k)))
-  if (r.ruleKind && EXPECTED[r.ruleKind] && !landings.some((l) => kindOk(l, EXPECTED[r.ruleKind]))) {
-    add(r1, 'warning', 'coverage.rule-kind', r.id, `规则种类「${r.rawKind ?? r.ruleKind}」的落点应为 ${EXPECTED[r.ruleKind].join(' / ')}，实际只有 ${[...new Set(landings.map((l) => l.kind))].join(' / ')}`)
+  // 种类只对模型里的落点挑：只落在页面上的应用行为，页面就是它该在的地方，不按种类报
+  if (modelLandings.length && r.ruleKind && EXPECTED[r.ruleKind] && !modelLandings.some((l) => kindOk(l, EXPECTED[r.ruleKind]))) {
+    add(r1, 'warning', 'coverage.rule-kind', r.id, `规则种类「${r.rawKind ?? r.ruleKind}」的落点应为 ${EXPECTED[r.ruleKind].join(' / ')}，实际只有 ${[...new Set(modelLandings.map((l) => l.kind))].join(' / ')}`)
   }
   // 一条业务语句一条判断：模型侧列出全部落点及其完整上下文
+  if (!modelLandings.length) {
+    const where = [...new Set(pages.map((l) => l.label))]
+    judge(r1, '页面是否照这句话做了？', r.id, { business: `[${r.id}]${labelOf(r) ? ` (${labelOf(r)})` : ''} ${r.text}`, model: pages.map((l) => l.text).join('\n') }, 'medium', [...new Set(pages.map((l) => l.el.file))], { ask: `${r.id}「${r.text}」——这条只落在前端页面上（${where.join('、')}）。在草稿原型上按一遍，页面是照这句话做的吗？`, pageKey: pageKeyOf(pages) })
+    continue
+  }
   const importance = landings.some((l) => ['invariant', 'create', 'behavior-guard', 'behavior', 'service'].includes(l.kind)) ? 'high' : 'medium' // 错误不再挂语句；领域服务的操作与行为一样是方法，有规则、抛错误，同样算高
-  const where = [...new Set(landings.map((l) => l.label).filter(Boolean))]
+  const where = [...new Set(modelLandings.map((l) => l.label).filter(Boolean))]
   const ask = `${r.id}「${r.text}」——模型把它写在 ${where.join('、') || '这几处'}。这几处合起来是不是把这句话说全了？有没有多加限制、少了条件，或方向反了？`
-  judge(r1, '模型规则是否与业务一致？', r.id, { business: `[${r.id}]${labelOf(r) ? ` (${labelOf(r)})` : ''} ${r.text}`, model: landings.map((l) => l.text).join('\n') }, importance, [...new Set(landings.map((l) => l.el.file))], { ask })
+  const sides = { business: `[${r.id}]${labelOf(r) ? ` (${labelOf(r)})` : ''} ${r.text}`, model: modelLandings.map((l) => l.text).join('\n') }
+  if (pages.length) sides.page = pages.map((l) => l.text).join('\n') // 给审查对照看；进键的是 pageKey（不带行号）
+  judge(r1, '模型规则是否与业务一致？', r.id, sides, importance, [...new Set(landings.map((l) => l.el.file))], pages.length ? { ask, pageKey: pageKeyOf(pages) } : { ask })
 }
 // 追溯反向：每个元素 traces 非空且存在
 function checkTraces(target, traces, level = 'error') {
@@ -284,12 +336,22 @@ function checkTraces(target, traces, level = 'error') {
   for (const t of traces) if (!byId.has(t)) add(r1, 'error', 'traces.unknown', target, `追溯编号不存在：${t}`)
 }
 for (const el of [...domainObjects, ...events, ...ports, ...commands, ...queries, ...handlers]) checkTraces(el.file, el.data.traces) // 错误不挂语句，不查追溯
+for (const p of pageTraces) {
+  const st = byId.get(p.id)
+  if (!st) { add(r1, 'error', 'traces.unknown', pageWhere(p), `前端页面上的追溯编号不存在：${p.id}`); continue }
+  if (!inScope(st.id) || st.layer === LAYERS[2]) continue
+  add(r1, 'warning', 'trace.frontend-layer', pageWhere(p), `${p.id} 是${st.layer ?? '没标层'}的语句，挂在前端页面上不算落点——只有应用行为那一层的语句落在页面上算；这一条要落在模型里`)
+}
 for (const el of domainObjects) for (const b of el.data.behaviors) checkTraces(`${el.file}#behaviors.${b.name}`, b.traces)
 for (const s of services) for (const op of s.data.operations) checkTraces(`${s.file}#operations.${op.name}`, op.traces)
 for (const m of model.modules?.data.modules ?? []) { if (scopeMods && !scopeMods.has(m.name) && !(m.traces ?? []).length) defer('traces.empty', `${model.modules.file}#${m.name}`, `模块 ${m.name} 本段外未建，追溯待填`); else checkTraces(`${model.modules.file}#${m.name}`, m.traces, 'warning') }
 for (const g of goals) {
   const ucs = [...commands, ...queries].filter((x) => x.data.traces.includes(g.id))
-  if (!ucs.length) continue
+  if (!ucs.length) {
+    const pages = pageLandings(g)
+    if (pages.length) judge(r1, '页面是否照这句话做了？', g.id, { business: `[${g.id}]${labelOf(g) ? ` (${labelOf(g)})` : ''} ${g.text}`, model: pages.map((l) => l.text).join('\n') }, 'medium', [...new Set(pages.map((l) => l.el.file))], { ask: `${g.id}「${g.text}」——这件事只落在前端页面上（${[...new Set(pages.map((l) => l.label))].join('、')}）。在草稿原型上按一遍，做得成吗？`, pageKey: pageKeyOf(pages) })
+    continue
+  }
   const lines = ucs.map((e) => {
     const kind = e.kind === 'query-handler' ? '查询' : '命令'
     const steps = e.data.steps.map((s) => (s.when ? `[${s.when}] ${s.text}` : s.text)).join(' → ')
@@ -553,8 +615,16 @@ if (codebase) {
 
 // ---------- 结论与写出 ----------
 /** 同一条判断项的身份：目标 + 检查项 + 双方的原文。原文变了就是新的一条，旧判断不该跟过来。 */
+/**
+ * 判断的键：目标、检查项、业务、模型、代码几栏原文，挂着页面落点的再加 pageKey（文件、组件、注释那段话）。
+ * 没挂页面的判断不加这一栏，键跟从前一字不差。
+ * 只落在页面上的判断，模型一栏写的就是页面（带行号给人找），键里用 pageKey 顶替它，行号挪了不重开。
+ */
 function judgeKey(x) {
-  return [x.target, x.check, x.sides?.business ?? '', x.sides?.model ?? '', x.sides?.code ?? ''].join('\u0000')
+  const pageOnModel = x.pageKey !== undefined && x.sides?.page === undefined
+  const parts = [x.target, x.check, x.sides?.business ?? '', pageOnModel ? '' : x.sides?.model ?? '', x.sides?.code ?? '']
+  if (x.pageKey !== undefined) parts.push(x.pageKey)
+  return parts.join('\u0000')
 }
 /**
  * 重跑时把上一份报告里已经填好的判断与裁决接过来。
@@ -667,7 +737,7 @@ function renderMd(r) {
   section('错误', r.errors, (e) => `\`${e.target}\` [${e.check}] ${e.text}${e.model !== undefined || e.code !== undefined ? `（模型 ${show(e.model)} ｜ 代码 ${show(e.code)}）` : ''}`)
   section('警告', r.warnings, (e) => `\`${e.target}\` [${e.check}] ${e.text}`)
   section('需人确认', r.confirms, (e) => `\`${e.target}\` [${e.check}] ${e.text}${e.options ? `\n   - 选项：${e.options.join(' / ')}` : ''}${e.note ? `\n   - 备注：${e.note}` : ''}`)
-  section('待判断（按重要度降序）', r.judgments, (j) => `\`${j.target}\` **${j.importance}** ${j.ask || j.check}\n   - 业务：${show(j.sides.business)}\n   - 模型：${show(j.sides.model)}${j.sides.code !== undefined ? `\n   - 代码：${show(j.sides.code)}` : ''}`)
+  section('待判断（按重要度降序）', r.judgments, (j) => `\`${j.target}\` **${j.importance}** ${j.ask || j.check}\n   - 业务：${show(j.sides.business)}\n   - 模型：${show(j.sides.model)}${j.sides.page !== undefined ? `\n   - 页面：${show(j.sides.page)}` : ''}${j.sides.code !== undefined ? `\n   - 代码：${show(j.sides.code)}` : ''}`)
   L.push('', '## 盲区', '')
   for (const b of r.blindSpots) L.push(`- ${b}`)
   L.push('')

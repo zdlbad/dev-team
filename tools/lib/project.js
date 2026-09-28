@@ -20,14 +20,25 @@ function readJson(p) {
   return JSON.parse(fs.readFileSync(p, 'utf8'))
 }
 
-/** 业务语句的标签：层（业务抽象 / 业务落地）与种类（能力 / 事实 / 约束 / 公式 / 触发 / 流程 / 情形）。形状：- [R-001] (业务落地-约束) 文本 */
-const LAYERS = ['业务抽象', '业务落地']
+/** 业务语句的标签：层（业务抽象 / 业务落地 / 应用行为）与种类（能力 / 事实 / 约束 / 公式 / 触发 / 流程 / 情形）。形状：- [R-001] (业务落地-约束) 文本 */
+const LAYERS = ['业务抽象', '业务落地', '应用行为']
 const KINDS = { 能力: 'G', 事实: 'R', 约束: 'R', 公式: 'R', 触发: 'R', 流程: 'R', 情形: 'R' }
-const LAYER_FILES = { 'abstraction.md': '业务抽象', 'practice.md': '业务落地' }
+const LAYER_FILES = { 'abstraction.md': '业务抽象', 'practice.md': '业务落地', 'behavior.md': '应用行为' }
 /** 给人看的标签：层-种类，缺哪样省哪样 */
 const labelOf = (s) => [s.layer, s.ruleKind].filter(Boolean).join('-')
 
-/** 业务描述：- [G-001] (层-种类) 文本。层与种类都可省：层省了从文件位置推（business/<Module>/<层>.md） */
+/** 依据子项「上一层：R-021、R-022」里挂的编号：逗号、顿号、空格都能分；认不得的写法留给校验报 */
+const PARENT_LINE = /^(\s+)-\s*上一层\s*[：:]\s*(.*)$/
+function parseParents(text) {
+  const ids = [], bad = []
+  for (const tok of String(text).split(/[,，、;；\s]+/).filter(Boolean)) (/^[GR]-\d{3,}$/.test(tok) ? ids : bad).push(tok)
+  return { ids, bad }
+}
+
+/**
+ * 业务描述：- [G-001] (层-种类) 文本。层与种类都可省：层省了从文件位置推（business/<Module>/<层>.md）。
+ * 语句下面缩进的依据子项只读「上一层：」那一行，存进 parents（挂在哪几条上一层语句下）；别的子项不读。
+ */
 function loadBusiness(root) {
   const dir = path.join(root, 'business')
   const statements = []
@@ -38,12 +49,22 @@ function loadBusiness(root) {
     const fileLayer = rel.split('/').length === 3 ? (LAYER_FILES[base] ?? null) : null
     const lines = fs.readFileSync(f, 'utf8').split('\n')
     let inFence = false
+    let cur = null // 最近一条语句和它的缩进：比它缩进深的「上一层：」归它
     lines.forEach((line, i) => {
       if (/^\s*(```|~~~)/.test(line)) {
         inFence = !inFence
         return
       }
       if (inFence) return // 围栏代码块里的示例不是业务语句
+      const pm = PARENT_LINE.exec(line)
+      if (pm && cur && pm[1].length > cur.indent) {
+        const { ids, bad } = parseParents(pm[2])
+        cur.s.parents.push(...ids.filter((x) => !cur.s.parents.includes(x)))
+        cur.s.badParents.push(...bad)
+        cur.s.parentLine ??= i + 1
+        return
+      }
+      if (line.trim() && cur && line.length - line.trimStart().length <= cur.indent) cur = null
       const m = line.match(/^\s*-\s*\[([GR]-\d{3,})\]\s*(?:\(([^)]*)\))?\s*(.*)$/)
       if (!m) return
       // G = 能力（谁能做到什么）；R = 规则（事实 / 约束 / 公式 / 触发 / 流程 / 情形）
@@ -57,7 +78,9 @@ function loadBusiness(root) {
         else unknown.push(tok)
       }
       if (!kindWord && kind === 'goal' && labelLayer) kindWord = '能力'
-      statements.push({ id: m[1], kind, ruleKind: kindWord, rawKind, layer: labelLayer ?? fileLayer, labelLayer, fileLayer, unknownLabel: unknown.length ? unknown : null, text: m[3].trim(), file: rel, line: i + 1 })
+      const st = { id: m[1], kind, ruleKind: kindWord, rawKind, layer: labelLayer ?? fileLayer, labelLayer, fileLayer, unknownLabel: unknown.length ? unknown : null, text: m[3].trim(), file: rel, line: i + 1, parents: [], badParents: [], parentLine: null }
+      statements.push(st)
+      cur = { s: st, indent: line.length - line.trimStart().length }
     })
   }
   return statements

@@ -1,6 +1,6 @@
 ---
 name: dev-team
-description: 模型驱动的开发团队。一个场景一个场景往前滚：定场景 → 模型师照场景建模 → 编码起草稿原型（领域代码加内存仓储，按身份分的产品页面）→ 人和模型师一起按、问出来的答案回到业务与模型 → 他说够了进下一个场景；攒到一定量再正式化（测试、校验、审查、生产外壳）。模型可编码、代码可解码，校验互证。六个角色（业务分析、模型师、编码、审查、文职、分身）由开发指挥调度。用法：/dev-team <子命令> …
+description: 模型驱动的开发团队。一个场景一个场景往前滚：定场景 → 模型师照场景建模 → 编码起草稿原型（领域代码加内存仓储、契约、后端路由，按身份分的前端页面）→ 人和模型师一起按、问出来的答案回到业务与模型 → 他说够了进下一个场景；攒到一定量再正式化（测试、校验、审查、生产外壳：数据库仓储与登录）。模型可编码、代码可解码，校验互证。六个角色（业务分析、模型师、编码、审查、文职、分身）由开发指挥调度。用法：/dev-team <子命令> …
 ---
 
 # dev-team — 开发指挥
@@ -17,11 +17,11 @@ description: 模型驱动的开发团队。一个场景一个场景往前滚：�
 
 1. **定场景**：业务分析提一个，或人自己说一个。`slice new <项目> s-001 "<标题>" --场景 "<谁、按什么、然后发生什么>"`，人在工作台「切片」页按「场景定下」。
 2. **建模**：`slice advance … model in-progress`，派模型师「建模」；交回后你跑 `validate --slice`，有错退回模型师；有判断没填，派审查「判模型」；判不通过的退回模型师；干净了 `advance … model done`。
-3. **起草稿原型**：派编码「起草稿原型」；交回后跑 `proto.js check`，过了 `advance … draft done`。
+3. **起草稿原型**：派编码「起草稿原型」（契约、后端路由、前端页面，数据先存内存）；交回后跑 `proto.js check`，过了 `advance … draft done`。
 4. **一起按**：人在工作台「草稿原型」页，模型师陪着按。问出来的当场 `scene ask`。**一次按下来的答案攒成一批**：`advance … model pending "<这一批答了什么>"`，模型与草稿一起重开；派业务分析「答问题」立成语句（`slice lit` 登记），再派模型师改、编码改。模型图上他留的意见，派模型师处理。
 5. 他说「这一段够了」，在切片页按（或 `slice enough`），进下一个场景。
 
-**正式化**（他说攒够了）：`slice new <项目> f-001 "<标题>" --正式化 --covers s-001,s-002` → 编码「钉契约」，人过目 → 编码「正式化」（测试、外壳，测试全绿）→ `validate --code`，派审查「判代码」「审代码」，「必须改」的回编码 → 人在原型上按一遍，验收。
+**正式化**（他说攒够了）：`slice new <项目> f-001 "<标题>" --正式化 --covers s-001,s-002` → 编码「钉契约」（草稿里一路写着的契约定下来，补上表结构），人过目 → 编码「正式化」（测试、数据库仓储与登录，测试全绿）→ `validate --code`，派审查「判代码」「审代码」，「必须改」的回编码 → 人在原型上按一遍，验收。
 
 **人拍板的只有这几处**：场景定下、问题的答案、这一段够了、契约、验收。别的你照 `slice next` 推。
 
@@ -29,13 +29,13 @@ description: 模型驱动的开发团队。一个场景一个场景往前滚：�
 
 | 子命令 | 作用 | 执行 |
 |---|---|---|
-| `new <目录> <系统名> [--codebase <代码库>]` | 建项目（git init；可拷入构建块） | `node $DEV_TEAM/tools/new-project.js …` |
-| `workbench <项目>` | 工作台：给人看的页面全在一个地址（谁在干什么、业务、切片、模型图、草稿原型；「业务」给人翻业务分析写的全景、清单、导读与词汇表，每一段能留言、业务分析用 `tools/comments.js` 答在下面；等他答的问题与拍板的关卡列成「谁在干什么」页顶上的待办，日志从那一页进）。开工先起，pull 之后重起 | `node $DEV_TEAM/tools/workbench.js <项目> --code <代码库> --port 4870 --no-open` |
+| `new <目录> <系统名> [--codebase <代码库>]` | 建项目（git init；可从样例代码库拷入构建块） | `node $DEV_TEAM/tools/new-project.js …` |
+| `workbench <项目>` | 工作台：给人看的页面全在一个地址（谁在干什么、业务、切片、模型图、草稿原型；「业务」给人翻业务分析写的全景、清单、导读与词汇表，每个模块另有一张三层表（一件事一行：业务抽象 → 业务落地 → 应用行为，靠语句的「上一层」对齐），每一段、每一行都能留言、业务分析用 `tools/comments.js` 答在下面；等他答的问题与拍板的关卡列成「谁在干什么」页顶上的待办，日志从那一页进）。开工先起，pull 之后重起 | `node $DEV_TEAM/tools/workbench.js <项目> --code <代码库> --port 4870 --no-open` |
 | `slice new / next / advance / lit / enough / list` | 切片：场景与正式化；`next` 算下一步该谁做什么 | `node $DEV_TEAM/tools/slice.js …` |
 | `scene set / plan / progress / ask / answer / mode / questions / dispatch / back / handoff` | 现场看板、发问、派工日志、交接 | `node $DEV_TEAM/tools/scene.js <项目> …` |
 | `brief <角色> [--活 <…>] --写 <文件>` | 装一个角色这一趟的派工书 | `node $DEV_TEAM/tools/brief.js …` |
 | `validate <项目> [--slice <id>] [--code <代码库>] [--只看]` | 校验：业务对模型；带 `--code` 再解码代码、对模型 | `node $DEV_TEAM/tools/validate.js …` |
-| `proto check / serve` | 草稿原型：核登记、跑起来挂产品页面 | `node $DEV_TEAM/tools/proto.js …` |
+| `proto check / serve` | 草稿原型：核登记（读后端的 `/api/_dev/manifest` 对模型）、起后端与前端开发服务；没有前端工程的项目走原型宿主。工作台会自己起它 | `node $DEV_TEAM/tools/proto.js …` |
 | `test <代码库>` | 跑测试 | `node $DEV_TEAM/tools/test.js …` |
 | `check-schema <项目>` | 核项目里的 JSON 形状 | `node $DEV_TEAM/tools/check-schema.js …` |
 

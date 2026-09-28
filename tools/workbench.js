@@ -5,7 +5,9 @@
  *   node tools/workbench.js <项目> [--code <代码库>] [--port 4870] [--no-open]
  *
  * 四个页签：谁在干什么（scene，群聊的样子；等他答的问题、等他拍板的关卡列成待办；日志从这一页进）· 切片 · 模型图（model-page）· 草稿原型（proto）。
- * 子服务各挑一个空闲口、只听本机、不自己弹浏览器，全从这一个口代理出去（/p/<页面>/…）。退出时一并关掉。
+ * 子服务各挑一个空闲口、只听本机、不自己弹浏览器，全从这一个口代理出去（/p/<页面>/…，websocket 也转）。退出时一并关掉。
+ * 草稿原型不套进页签：点「草稿原型」在新标签页打开（/proto-open 转过去）。有前端工程时 proto.js 起后端与前端开发服务，
+ * 新标签页直接是前端开发服务（Vite）的地址，/api 由 Vite 自己转给后端；没有前端工程时是 /p/proto/ 代理出去的原型宿主页面。
  * 顶栏「N 件等你」数的是：看板上没答的问题，加上停在他手里的那一段（场景等他定下、草稿原型等他按）。
  */
 const fs = require('node:fs')
@@ -15,6 +17,7 @@ const net = require('node:net')
 const { spawn, spawnSync } = require('node:child_process')
 const clock = require('./lib/time')
 const business = require('./business-page')
+const { frontendOf } = require('./lib/frontend')
 
 const args = process.argv.slice(2)
 const root = args[0] && path.resolve(args[0])
@@ -68,13 +71,28 @@ async function ensure(name, argvOf, cwd, seconds) {
   return INNER[name] ?? null
 }
 
-// 原型要代码库里有 src/proto/main.ts 才起得来；工作台起得早，每 5 秒回头看一次
+/**
+ * 草稿原型起得来的条件（proto.js 两种做法）：
+ *   有前端工程（lib/frontend.js 的找法）且代码库里有 package.json——proto.js 起后端与前端开发服务，页面就是前端开发服务本身；
+ *   否则代码库里有 src/proto/main.ts——原型宿主那一套。
+ * 工作台起得早，编码还没写到那一步，每 5 秒回头看一次。
+ */
+function protoReady() {
+  if (!codebase) return null
+  if (frontendOf(root, codebase) && fs.existsSync(path.join(codebase, 'package.json'))) return 'frontend'
+  if (fs.existsSync(path.join(codebase, 'src', 'proto', 'main.ts'))) return 'host'
+  return null
+}
 let protoTried = false
+let protoHow = null
 async function startProto() {
-  if (protoTried || !codebase || !fs.existsSync(path.join(codebase, 'src', 'proto', 'main.ts'))) return
+  const how = protoReady()
+  if (protoTried || !how) return
   protoTried = true
+  protoHow = how
   const hostPort = await freePort()
-  await ensure('proto', (p) => [path.join(tools, 'proto.js'), 'serve', root, '--code', codebase, '--port', String(p), '--proto-port', String(hostPort), '--no-open'], undefined, 30)
+  // 前端开发服务起来要比宿主慢（后端先起、再起 Vite），多等一会儿；等不到 adoptLater 两分钟内接上
+  await ensure('proto', (p) => [path.join(tools, 'proto.js'), 'serve', root, '--code', codebase, '--port', String(p), '--proto-port', String(hostPort), '--no-open'], undefined, how === 'frontend' ? 60 : 30)
 }
 async function startAll() {
   await ensure('scene', (p) => [path.join(tools, 'scene.js'), root, 'serve', '--port', String(p)])
@@ -224,7 +242,7 @@ ${byRole.size ? `<table class="jsum"><tr><th>角色</th><th>派了几趟</th><th
   return back + sum + nav + `<div class="journal">${html}</div>`
 }
 
-const TABS = [['scene', '谁在干什么', '/p/scene/'], ['business', '业务', '/business'], ['slices', '切片', '/slices'], ['model', '模型图', '/p/model/'], ['proto', '草稿原型', '/p/proto/']]
+const TABS = [['scene', '谁在干什么', '/p/scene/'], ['business', '业务', '/business'], ['slices', '切片', '/slices'], ['model', '模型图', '/p/model/'], ['proto', '草稿原型 ↗', '/proto-open']]
 const shell = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>${esc(project.name ?? '工作台')}</title><style>
 html,body{margin:0;height:100%;font:14px system-ui,"Segoe UI","Microsoft YaHei",sans-serif}
 header{display:flex;align-items:center;gap:6px;padding:6px 12px;background:#24292f;color:#fff}
@@ -236,11 +254,12 @@ iframe{border:0;width:100%;height:calc(100% - 40px);display:block}
 const T = ${JSON.stringify(Object.fromEntries(TABS.map(([k, , u]) => [k, u])))}
 const f = document.getElementById('f')
 function show(t) { for (const b of document.querySelectorAll('header button')) b.classList.toggle('on', b.dataset.t === t); f.src = T[t]; try { localStorage.setItem('wb-tab', t) } catch (e) {} }
-document.querySelectorAll('header button').forEach((b) => b.addEventListener('click', () => show(b.dataset.t)))
+// 草稿原型在新标签页里开，当前页签不动
+document.querySelectorAll('header button').forEach((b) => b.addEventListener('click', () => b.dataset.t === 'proto' ? window.open(T.proto, '_blank') : show(b.dataset.t)))
 async function todo() { try { const d = await (await fetch('/todo')).json(); document.getElementById('todo').textContent = d.n ? d.n + ' 件待办 ›' : '' } catch (e) {} }
 let first = 'scene'; try { first = localStorage.getItem('wb-tab') || 'scene' } catch (e) {}
 document.getElementById('todo').addEventListener('click', () => show('scene'))
-show(T[first] ? first : 'scene'); todo(); setInterval(todo, 5000)
+show(T[first] && first !== 'proto' ? first : 'scene'); todo(); setInterval(todo, 5000)
 </script></body></html>`
 
 const shimOf = (base) => `<script>(function(){var B=${JSON.stringify(base)};
@@ -276,7 +295,7 @@ function proxy(name, req, res, rest) {
 }
 
 const MISSING = {
-  proto: '草稿原型要代码库里有 <code>src/proto/main.ts</code>——编码起过草稿原型之后才有，出现了几秒后这一页自己会起来。',
+  proto: '草稿原型要编码起过才有：代码库旁边的前端工程（<code>frontend/</code>，有 package.json）加上代码库自己的 package.json，或者没有前端工程时代码库里的 <code>src/proto/main.ts</code>。出现了几秒后这一页自己会起来。',
   model: '模型图还没起来，等几秒再点一次。',
   scene: '看板还没起来，等几秒再点一次。',
 }
@@ -299,6 +318,17 @@ const server = http.createServer((req, res) => {
     return proxy(m[1], req, res, (m[2] || '/') + (qs ? '?' + qs : ''))
   }
   if (url === '/') return html(shell)
+  if (url === '/proto-open') {
+    const rec = children.find((c) => c.name === 'proto')
+    const stopped = rec && rec.child.exitCode !== null
+    if (INNER.proto && !stopped) {
+      res.writeHead(302, { location: protoHow === 'frontend' ? `http://127.0.0.1:${INNER.proto}/` : '/p/proto/' })
+      return res.end()
+    }
+    const tail = () => { try { return fs.readFileSync(path.join(logDir, 'proto.log'), 'utf8').slice(-4000) } catch { return '' } }
+    if (stopped) return html(wrap('<p>草稿原型停了，重启工作台再来。最后几行输出：</p><pre style="white-space:pre-wrap">' + esc(tail()) + '</pre>'))
+    return html(wrap((rec ? '<meta http-equiv="refresh" content="2"><p>后端和前端开发服务还在起，几秒后这一页自己转过去。</p>' : '<meta http-equiv="refresh" content="5"><p>' + MISSING.proto + '</p>')))
+  }
   if (url === '/todo') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify(todo())) }
   if (url === '/slices') return html(wrap(slicesPage()))
   if (url === '/business') return html(business.page(root, q.doc))
@@ -309,6 +339,19 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url === '/slice/enough') return runSlice(res, ['enough', root, q.slice, '他在页面上按的'])
   if (req.method === 'POST' && url === '/slice/accept') return runSlice(res, ['advance', root, q.slice, 'accept', 'done', '他在页面上按的'])
   res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('没有这一页')
+})
+
+server.on('upgrade', (req, socket, head) => {
+  const [url, qs] = (req.url ?? '/').split('?')
+  const m = url.match(/^\/p\/([a-z]+)(\/.*)?$/)
+  if (!m || !INNER[m[1]]) return socket.destroy()
+  const up = net.connect(INNER[m[1]], '127.0.0.1', () => {
+    const headers = { ...req.headers, host: `127.0.0.1:${INNER[m[1]]}` }
+    up.write(`${req.method} ${(m[2] || '/') + (qs ? '?' + qs : '')} HTTP/1.1\r\n` + Object.entries(headers).map(([k, v]) => `${k}: ${v}`).join('\r\n') + '\r\n\r\n')
+    if (head?.length) up.write(head)
+    up.pipe(socket); socket.pipe(up)
+  })
+  up.on('error', () => socket.destroy()); socket.on('error', () => up.destroy())
 })
 
 ;(async () => {

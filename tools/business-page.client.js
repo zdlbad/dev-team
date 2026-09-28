@@ -1,6 +1,7 @@
 // 「业务」页的留言：浏览器里跑。business-page.js 把下面 DOC 的占位换成这一篇的文件名。
 // 每一块正文（lib/markdown.js 打的 data-b）右边浮一个 💬；留言、答复排在那一块下面。
 // 原文改了、指纹对不上的，退到原来那个标题底下；标题也没了的，排在这一篇最前面。
+// 三层表的一行（data-b 是打头那条语句的编号）：编号不再打头了，就挂到还含着这条编号的那一行（data-ids）。
 (function () {
   var DOC = __KEY__
   var md = document.querySelector('.md')
@@ -40,7 +41,7 @@
     var hs = Array.prototype.filter.call(md.children, function (el) { return /^H[1-6]$/.test(el.tagName) })
     var groups = [], orphans = []
     mine.forEach(function (c) {
-      var el = c.block ? md.querySelector(':scope > [data-b="' + c.block + '"]') : null, moved = false
+      var el = c.block ? md.querySelector(':scope > [data-b="' + c.block + '"]') || md.querySelector(':scope > [data-ids~="' + c.block + '"]') : null, moved = false
       if (!el) { moved = true; el = hs.filter(function (h) { return h.textContent.trim() === c.heading })[0] || null }
       if (!el) return orphans.push(c)
       var g = groups.filter(function (x) { return x.el === el })[0]
@@ -100,7 +101,7 @@
     if (!cur) return
     var el = cur, after = el.nextElementSibling && el.nextElementSibling.classList.contains('thread') ? el.nextElementSibling : el
     composer(after, function (text, st) {
-      return post('business/comments', { doc: DOC, block: el.getAttribute('data-b'), heading: headingOf(el), snippet: el.textContent, text: text }, st)
+      return post('business/comments', { doc: DOC, block: el.getAttribute('data-b'), heading: headingOf(el), snippet: el.getAttribute('data-snip') || el.textContent, text: text }, st)
     }, '对这一段有什么问题？业务分析会查原料，答在下面')
   })
 
