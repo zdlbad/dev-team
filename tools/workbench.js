@@ -6,7 +6,8 @@
  *
  * 四个页签：谁在干什么（scene，群聊的样子；等他答的问题、等他拍板的关卡列成待办；日志从这一页进）· 切片 · 模型图（model-page）· 草稿原型（proto）。
  * 子服务各挑一个空闲口、只听本机、不自己弹浏览器，全从这一个口代理出去（/p/<页面>/…，websocket 也转）。退出时一并关掉。
- * 草稿原型不套进页签：点「草稿原型」在新标签页打开（/proto-open 转过去）。有前端工程时 proto.js 起后端与前端开发服务，
+ * 草稿原型不套进页签：点「原型LOCAL」在新标签页打开（/proto-open 转过去）。project.json 写了 liveUrl（上线的前端网址）时，
+ * 再多一个「原型LIVE」，点了在新标签页打开那个网址。有前端工程时 proto.js 起后端与前端开发服务，
  * 新标签页直接是前端开发服务（Vite）的地址，/api 由 Vite 自己转给后端；没有前端工程时是 /p/proto/ 代理出去的原型宿主页面。
  * 顶栏「N 件等你」数的是：看板上没答的问题，加上停在他手里的那一段（场景等他定下、草稿原型等他按）。
  */
@@ -114,7 +115,7 @@ const st = (s, k) => s.stages?.[k]?.status ?? 'pending'
 function gateOf(s) {
   if (s.kind !== 'scene') return st(s, 'check') === 'done' && st(s, 'accept') !== 'done' ? { kind: 'accept', ask: '在原型上把这一批按一遍，对了就验收。', button: '验收' } : null
   if (st(s, 'scene') !== 'done' && s.scene) return { kind: 'scene-ok', ask: '场景是这样的：「' + s.scene + '」对吗？', button: '场景定下' }
-  if (st(s, 'draft') === 'done' && st(s, 'walk') !== 'done') return { kind: 'enough', ask: '在「草稿原型」页和模型师一起按过了？这一段够了就按。', button: '这一段够了' }
+  if (st(s, 'draft') === 'done' && st(s, 'walk') !== 'done') return { kind: 'enough', ask: '在「原型LOCAL」页和模型师一起按过了？这一段够了就按。', button: '这一段够了' }
   return null
 }
 function todo() {
@@ -242,7 +243,9 @@ ${byRole.size ? `<table class="jsum"><tr><th>角色</th><th>派了几趟</th><th
   return back + sum + nav + `<div class="journal">${html}</div>`
 }
 
-const TABS = [['scene', '谁在干什么', '/p/scene/'], ['business', '业务', '/business'], ['slices', '切片', '/slices'], ['model', '模型图', '/p/model/'], ['proto', '草稿原型 ↗', '/proto-open']]
+const TABS = [['scene', '谁在干什么', '/p/scene/'], ['business', '业务', '/business'], ['slices', '切片', '/slices'], ['model', '模型图', '/p/model/'], ['proto', '原型LOCAL ↗', '/proto-open'], ...(project.liveUrl ? [['live', '原型LIVE ↗', project.liveUrl]] : [])]
+/** 这几个页签不套进来，点了在新标签页打开 */
+const OUTSIDE = ['proto', 'live']
 const shell = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>${esc(project.name ?? '工作台')}</title><style>
 html,body{margin:0;height:100%;font:14px system-ui,"Segoe UI","Microsoft YaHei",sans-serif}
 header{display:flex;align-items:center;gap:6px;padding:6px 12px;background:#24292f;color:#fff}
@@ -254,12 +257,13 @@ iframe{border:0;width:100%;height:calc(100% - 40px);display:block}
 const T = ${JSON.stringify(Object.fromEntries(TABS.map(([k, , u]) => [k, u])))}
 const f = document.getElementById('f')
 function show(t) { for (const b of document.querySelectorAll('header button')) b.classList.toggle('on', b.dataset.t === t); f.src = T[t]; try { localStorage.setItem('wb-tab', t) } catch (e) {} }
-// 草稿原型在新标签页里开，当前页签不动
-document.querySelectorAll('header button').forEach((b) => b.addEventListener('click', () => b.dataset.t === 'proto' ? window.open(T.proto, '_blank') : show(b.dataset.t)))
+// 原型LOCAL、原型LIVE 在新标签页里开，当前页签不动
+const OUT = ${JSON.stringify(OUTSIDE)}
+document.querySelectorAll('header button').forEach((b) => b.addEventListener('click', () => OUT.includes(b.dataset.t) ? window.open(T[b.dataset.t], '_blank') : show(b.dataset.t)))
 async function todo() { try { const d = await (await fetch('/todo')).json(); document.getElementById('todo').textContent = d.n ? d.n + ' 件待办 ›' : '' } catch (e) {} }
 let first = 'scene'; try { first = localStorage.getItem('wb-tab') || 'scene' } catch (e) {}
 document.getElementById('todo').addEventListener('click', () => show('scene'))
-show(T[first] && first !== 'proto' ? first : 'scene'); todo(); setInterval(todo, 5000)
+show(T[first] && !OUT.includes(first) ? first : 'scene'); todo(); setInterval(todo, 5000)
 </script></body></html>`
 
 const shimOf = (base) => `<script>(function(){var B=${JSON.stringify(base)};

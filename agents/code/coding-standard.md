@@ -53,7 +53,7 @@ src/
 - `src/session/`：切身份只在这一处——现在是谁、他看得见哪些业务。页面只问这里，以后换成登录只改这一处。
 - `src/lib/errors.ts`：错误类名 → 人话，一张表，照模型里那个错误的说明写；同一个错误在不同按钮上该说的不一样，按按钮另给一张。
 - `src/dev/`：开发角落（重置、看状态、看事件、看登记，调后端的 `/api/_dev/…`），只在开发服务里（`import.meta.env.DEV`）或出站点时设了 `VITE_DEV_TOOLS=true` 才出现，不混进产品页面。
-- `package.json` 脚本：`dev` 就是 `vite`（口读 `PORT`，`/api` 转给 `BACKEND_URL`，都在 `vite.config.ts` 里读）；`proto.js` 起它时在后面加 `--port <口> --strictPort`；人从工作台点「草稿原型」在新标签页直接打开这个口，页面挂在根路径上。另有 `build`（出静态站点）、`typecheck`。
+- `package.json` 脚本：`dev` 就是 `vite`（口读 `PORT`，`/api` 转给 `BACKEND_URL`，都在 `vite.config.ts` 里读）；`proto.js` 起它时在后面加 `--port <口> --strictPort`；人从工作台点「原型LOCAL」在新标签页直接打开这个口，页面挂在根路径上。另有 `build`（出静态站点）、`typecheck`。
 
 ## 二、依赖方向
 
@@ -280,7 +280,7 @@ export class CreateOrderCommandHandler {
 ```
 
 - 命令处理器：唯一入口 `execute(command)`，返回 `void`
-- 查询处理器：`execute(query)` 返回 `Result` 类；只注入仓储接口；仓储只调 `find*`；要算的，调不写聚合、不发事件的领域服务操作
+- 查询处理器：`execute(query)` 返回 `Result` 类；注入仓储接口，和模型里标了只读（`readOnly`）操作的端口；仓储只调 `find*`，端口只调那几个只读操作；要算的，调不写聚合、不发事件的领域服务操作
 - 事件处理器：`implements DomainEventHandler<E>`，入口 `handle(event)`；`E` 必须与类名中的 `On<E>` 一致
 - 构造注入，参数全部是接口
 - 领域服务是纯函数式的，**不注入**：处理器以字段初始化持有它（`private readonly pricing = new PricingService()`）
@@ -356,6 +356,7 @@ export class CreateOrderCommandHandler {
 | `@external-system 名字` / `@module 名字` | 端口接口 | 端口的 `kind` 与 `target` |
 | `@module 名字` + `@responsibility 文本` | `module.ts` 的组合根函数 | `modules.json` |
 | `@note 文本` | `props` 字段、端口方法 | `note` |
+| `@readOnly`（单独一行） | 端口方法 | 端口操作的 `readOnly: true`：只交回结果、对外什么都不改，查询处理器只能调这种 |
 | `// 文本` | 处理器体内每步上方 | 步骤 `text` |
 | `// 文本` | `if` 语句上方（处理器体内，或行为体内包住 `raise` 的 `if`） | 分支内步骤的 `when`；条件 raise 的 `when`。无注释时用条件源码；`else` 分支为「否则」 |
 
@@ -413,7 +414,7 @@ export class CreateOrderCommandHandler {
 8. 应用层调用实体或值对象的行为（只能调聚合根）
 9. 抛出非 `DomainError` 的错误、`raise` 非 `DomainEvent` 的事件
 10. 一个文件的导出超出命名规则允许的范围
-11. 查询处理器调用仓储的非 `find*` / `exists*` / `count*` 方法，或调用会写聚合、会发事件的领域服务操作
+11. 查询处理器调用仓储的非 `find*` / `exists*` / `count*` 方法、端口上没标只读的操作，或调用会写聚合、会发事件的领域服务操作
 12. 写处理器最后一步不是 `publish`
 13. 仓储适配器分发事件
 14. 适配器中出现分支业务逻辑

@@ -891,7 +891,8 @@ for (const mod of modules.values()) {
         }
         if (kind === 'repository' && e.prefix === 'query-handler' && !READ_PREFIX.test(r.method)) issue(e.file, `查询调用了写方法 ${r.method}`)
         if (kind === 'service' && e.prefix === 'query-handler' && serviceWrites(te, r.method).length) issue(e.file, `查询不许引起改变，调用了会写的领域服务操作 ${te.modelName}.${r.method}`)
-        if (kind !== 'repository' && kind !== 'service' && e.prefix === 'query-handler') issue(e.file, `查询只能调用仓储的读方法与不写的领域服务：${kind} ${te.modelName}.${r.method}`)
+        if (kind === 'port' && e.prefix === 'query-handler' && !portOpReadOnly(te, r.method)) issue(e.file, `查询只能调端口上标了 @readOnly 的操作：${te.modelName}.${r.method}`)
+        if (kind !== 'repository' && kind !== 'service' && kind !== 'port' && e.prefix === 'query-handler') issue(e.file, `查询只能调用仓储的读方法、不写的领域服务与端口的只读操作：${kind} ${te.modelName}.${r.method}`)
       },
     })
     // 最后一步是否 publish
@@ -965,6 +966,7 @@ for (const mod of modules.values()) {
       if (ret) o.output = ret
       const note = tagValues(docTags(m), 'note')[0]
       if (note) o.note = note
+      if (docTags(m).some((t) => t.tag === 'readOnly')) o.readOnly = true
       return o
     })
     emit(`${M}/ports/${path.basename(e.file, '.ts')}.json`, { name: e.modelName, module: M, kind, target, operations, traces: traceTags(tags) })
@@ -990,6 +992,13 @@ function ctorParams(cls, M) {
   const ctor = cls.members.find(ts.isConstructorDeclaration)
   if (!ctor) return []
   return ctor.parameters.map((p) => ({ name: p.name.getText(), type: mapType(checker.getTypeAtLocation(p), M).type ?? 'unknown' }))
+}
+/** 端口上这个方法标了 @readOnly 没有（只交回结果、对外什么都不改；查询只能调这种） */
+function portOpReadOnly(entry, method) {
+  const sf = program.getSourceFile(entry.file)
+  const itf = sf && interfacesIn(sf).find((i) => i.name.text === entry.className)
+  const m = itf && itf.members.filter(ts.isMethodSignature).find((x) => x.name.getText() === method)
+  return !!m && docTags(m).some((t) => t.tag === 'readOnly')
 }
 function serviceWrites(entry, method) {
   const sf = program.getSourceFile(entry.file)

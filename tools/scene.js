@@ -424,7 +424,8 @@ if (cmd === 'dispatch') {
   // 场景没定、或还有问题没答，就不派模型师、编码、审查：照着没定的东西做，多半要重来
   const 不拦 = ['业务分析', '文职', '分身', '人', '开发指挥']
   const ss = s.slice ? sceneStatusOf(s.slice) : 'done'
-  const open = openQuestionsOf(s, s.slice)
+  // 问卷模式下问的、角色已照偏向先做下去的（wentAhead），不拦：他回来一次答，跟偏向不一样再返工
+  const open = openQuestionsOf(s, s.slice).filter((q) => !q.wentAhead)
   const 硬派 = args.indexOf('--带着问题派')
   if (!不拦.includes(who) && (ss !== 'done' || open.length) && 硬派 < 0) {
     die(`⛔ ${s.slice ?? '当前切片'} ${ss !== 'done' ? '的场景还没定下' : ''}${open.length ? `还有 ${open.length} 件等他答` : ''}，先不派${who}。\n` +

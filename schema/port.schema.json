@@ -18,7 +18,8 @@
           "name": { "$ref": "urn:dev-team:common#/$defs/methodName" },
           "input": { "$ref": "urn:dev-team:common#/$defs/params" },
           "output": { "$ref": "urn:dev-team:common#/$defs/typeRef" },
-          "note": { "type": "string" }
+          "note": { "type": "string" },
+          "readOnly": { "type": "boolean", "description": "只读：只交回结果、对外什么都不改。查询只能调标了它的操作" }
         }
       }
     },

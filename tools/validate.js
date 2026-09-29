@@ -417,7 +417,7 @@ function checkUseCase(el, { allowMembers, queryOnly, hasWrites }) {
     if (s.output) outputs.push(s.output)
     if (!s.call) return
     if (s.call.target.includes('.')) cross.push(s.call)
-    if (queryOnly && s.call.kind !== 'repository' && s.call.kind !== 'service') add(r1, 'error', 'query.read-only', `${el.file}#steps.${i}`, `查询只能调用仓储的读方法与不写的领域服务：${s.call.kind} ${s.call.target}.${s.call.method}`)
+    if (queryOnly && !['repository', 'service', 'port'].includes(s.call.kind)) add(r1, 'error', 'query.read-only', `${el.file}#steps.${i}`, `查询只能调用仓储的读方法、不写的领域服务与端口的只读操作：${s.call.kind} ${s.call.target}.${s.call.method}`)
     const r = resolveCall(s.call, el.module, allowMembers)
     if (!r.el) return add(r1, 'error', 'call.unresolved', `${el.file}#steps.${i}`, r.reason)
     if (r.reason) add(r1, 'error', 'call.unresolved', `${el.file}#steps.${i}`, r.reason)
@@ -433,6 +433,10 @@ function checkUseCase(el, { allowMembers, queryOnly, hasWrites }) {
       const op = r.el.data.operations.find((x) => x.name === s.call.method)
       for (const w of op?.writes ?? []) touched.add(w)
       if (queryOnly && op && ((op.writes ?? []).length || (op.raises ?? []).length)) add(r1, 'error', 'query.read-only', `${el.file}#steps.${i}`, `查询不许引起改变，所调领域服务操作会写或会发事件：${s.call.target}.${s.call.method}`)
+    }
+    if (s.call.kind === 'port' && queryOnly) {
+      const op = (r.el.data.operations ?? []).find((x) => x.name === s.call.method)
+      if (op && op.readOnly !== true) add(r1, 'error', 'query.read-only', `${el.file}#steps.${i}`, `查询只能调端口上标了 readOnly 的操作：${s.call.target}.${s.call.method}`)
     }
     const c = closureOf(s.call, el.module)
     for (const x of c.raises) union.raises.set(raiseKey(x), x)
