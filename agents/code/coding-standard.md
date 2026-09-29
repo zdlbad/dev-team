@@ -33,7 +33,8 @@ src/
         adapter.StripePaymentGateway.ts
         http.OrderRoutes.ts   入站 HTTP 适配器：本模块的路由（第三节、第八节）
   bootstrap/                整个后端的组合根、起服务、把各模块的路由收起来递给 HTTP 应用、示例数据（第八节「HTTP 入口的文件位置与命名」）；没有谁 import 它
-  infras/                   技术件，不含业务、不认模块：http/（Express 应用、挂口工具、入参转换）、events/（进程内事件总线、事件流水），以后数据库连接、登录
+  infras/                   技术件，不含业务、不认模块：http/（Express 应用、挂口工具、入参转换）、events/（进程内事件总线、事件流水）、auth/（口令散列、设口令记号）、ai/（把图片和要求交给大模型、拿回 JSON；密钥与模型名在这里），以后数据库连接
+                            要用它们的业务模块在 ports/ 写自己的接口（比如「读收据」），adapters/ 里的适配器调 infras 的技术件把两边接上；不为 AI 单开模块
   shared/building-block/    基础构建块（第五节），只放抽象
   proto/                    原型宿主入口，没有前端工程的项目用（样例）
 ```

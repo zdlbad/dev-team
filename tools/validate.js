@@ -606,7 +606,9 @@ if (codebase) {
       }
       // 模型上的说明文字（note）是给人读模型用的，代码不照抄（注释讲行为与原因、不抄上下文）——模型有、代码没有不算差异；代码写了才比是不是一个意思
       if (f.kind === 'missing' && /\/note$/.test(f.path ?? '')) continue
-      if (f.kind === 'changed' && TEXTUAL.test(f.path)) {
+      // 外部系统端口的 target 是给人看的名字（可能跟代码注释一样换了语言），不一致交给判断
+      const portName = f.kind === 'changed' && f.path === '/target' && /\/ports\/port\./.test(f.file)
+      if (f.kind === 'changed' && (TEXTUAL.test(f.path) || portName)) {
         judge(r2, '模型文字与代码注释是否同一个意思？', target, { model: f.model, code: f.code }, /aggregateNarrative|note|responsibility/.test(f.path) ? 'low' : /rules|condition/.test(f.path) ? 'high' : 'medium')
         continue
       }

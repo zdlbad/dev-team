@@ -57,6 +57,24 @@ function diff(a, b, file, p) {
   }
   if (Array.isArray(a) && Array.isArray(b)) {
     const key = p.split('/').pop()
+    if (key === 'raises') {
+      // 同一个事件先按 event|when 原文配；配不上的再按事件名配，when 的文字差异报成 changed（模型中文、代码英文时照样对得上）
+      const ka = a.map(raiseKey)
+      const kb = b.map(raiseKey)
+      const restA = a.filter((x, i) => !kb.includes(ka[i]))
+      const restB = b.filter((x, i) => !ka.includes(kb[i]))
+      const eventOf = (r) => (typeof r === 'string' ? r : r.event)
+      const usedB = new Set()
+      for (const x of restA) {
+        const j = restB.findIndex((y, idx) => !usedB.has(idx) && eventOf(y) === eventOf(x))
+        if (j < 0) { findings.push({ file, path: p, kind: 'missing', model: raiseKey(x), code: null }); continue }
+        usedB.add(j)
+        const y = restB[j]
+        if ((x.when ?? null) !== (y.when ?? null)) findings.push({ file, path: `${p}/${eventOf(x)}/when`, kind: 'changed', model: x.when ?? null, code: y.when ?? null })
+      }
+      restB.forEach((y, idx) => { if (!usedB.has(idx)) findings.push({ file, path: p, kind: 'extra', model: null, code: raiseKey(y) }) })
+      return
+    }
     if (SET_KEYS.has(key)) {
       const ka = a.map(raiseKey)
       const kb = b.map(raiseKey)
@@ -66,8 +84,18 @@ function diff(a, b, file, p) {
     }
     if (KEYED[key]) {
       const k = KEYED[key]
+      // 不变量用原文当键：代码注释换了语言（模型中文、代码英文），原文就配不上。
+      // 先按原文配；配不上的，两边按先后一一配对，把代码那一条的键改成模型那一条的，文字差异由下面比 text 时报出（交给判断）
+      if (k === 'text') {
+        const textsA = new Set(a.map((x) => x.text))
+        const textsB = new Set(b.map((x) => x.text))
+        const restA = a.filter((x) => !textsB.has(x.text))
+        const restB = b.filter((x) => !textsA.has(x.text))
+        const n = Math.min(restA.length, restB.length)
+        b = b.map((x) => { const i = restB.indexOf(x); return i >= 0 && i < n ? { ...x, text: restA[i].text, __codeText: x.text } : x })
+      }
       const mapA = new Map(a.map((x) => [x[k], x]))
-      const mapB = new Map(b.map((x) => [x[k], x]))
+      const mapB = new Map(b.map((x) => [x[k], x.__codeText !== undefined ? { ...x, text: x.__codeText, __codeText: undefined } : x]))
       for (const [id, x] of mapA) {
         if (!mapB.has(id)) findings.push({ file, path: `${p}/${id}`, kind: 'missing', model: x, code: null })
         else diff(x, mapB.get(id), file, `${p}/${id}`)
@@ -86,7 +114,7 @@ function diff(a, b, file, p) {
   }
   if (a && b && typeof a === 'object' && typeof b === 'object') {
     const inStep = /\/steps\/\d+$/.test(p)
-    const keys = new Set([...Object.keys(a), ...Object.keys(b)].filter((k) => !IGNORE.has(k) && !(inStep && DESIGN_ONLY_IN_STEPS.has(k))))
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)].filter((k) => !IGNORE.has(k) && k !== '__codeText' && !(inStep && DESIGN_ONLY_IN_STEPS.has(k))))
     for (const k of keys) {
       if (!(k in a)) findings.push({ file, path: `${p}/${k}`, kind: 'extra', model: null, code: b[k] })
       else if (!(k in b)) findings.push({ file, path: `${p}/${k}`, kind: 'missing', model: a[k], code: null })
