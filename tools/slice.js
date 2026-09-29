@@ -185,5 +185,5 @@ function next(s) {
   const notes = fs.existsSync(notesP) ? Object.values(readJson(notesP)).flat().filter((n) => !n.handled) : []
   if (notes.length) return { who: '模型师', what: `他在模型图上留了 ${notes.length} 条意见，逐条处理，处理完把 handled 置真；要改模型就一并攒进这一批` }
   if (open.length) return ask()
-  return { who: '人', what: '在工作台「草稿原型」页和模型师一起按。问出来的当场 scene ask；一次按下来的答案攒成一批再回流（advance model pending "<这一批>"）；这一段够了就说', run: `node tools/slice.js enough ${R} ${s.id}` }
+  return { who: '人', what: '在工作台「原型LOCAL」页和模型师一起按。问出来的当场 scene ask；一次按下来的答案攒成一批再回流（advance model pending "<这一批>"）；这一段够了就说', run: `node tools/slice.js enough ${R} ${s.id}` }
 }

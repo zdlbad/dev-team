@@ -7,7 +7,7 @@
  *       在代码库里 `npm run dev` 起后端（PORT 指好，开发口 /api/_dev/… 开着），
  *       再在前端目录里 `npm run dev -- --port <--port> --strictPort` 起前端开发服务（PORT、BACKEND_URL 指好）。
  *       页面就是 Vite 本身：人直接开 http://127.0.0.1:<--port>/，/api/… 由 Vite 自己转给后端（前端工程的 vite.config 里写着）。
- *       工作台不把它套进页签里，点「草稿原型」在新标签页打开这个地址。
+ *       工作台不把它套进页签里，点「原型LOCAL」在新标签页打开这个地址。
  *       没给后端口就挑一个空闲的。改了代码不用重起：后端的 dev 自己重启，前端自己热替换。
  *   node tools/proto.js check <项目> --code <代码库> [--slice <切片>]
  *       起后端，读 /api/_dev/manifest 对模型：模型里的命令、查询、聚合的仓储都登记了没有；再看前端目录在不在、装没装依赖。
@@ -167,7 +167,7 @@ async function serveWithFrontend() {
   await pickBackendPort()
   const stop = () => { stopRunning(); process.exit(0) }
   process.on('SIGINT', stop); process.on('SIGTERM', stop)
-  // 起不来就把那一段的输出打出来再退：工作台把这里的输出记进 reports/_workbench/proto.log，点「草稿原型」时照着说
+  // 起不来就把那一段的输出打出来再退：工作台把这里的输出记进 reports/_workbench/proto.log，点「原型LOCAL」时照着说
   const fail = (msg) => { console.error(msg); stopRunning(); process.exit(1) }
   const backend = startBackend()
   if (!(await waitFor(backend, backendUp, 60))) fail('后端起不来，或者 /api/_dev/manifest 读不到：\n' + backend.log)
