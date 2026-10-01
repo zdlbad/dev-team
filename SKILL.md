@@ -17,6 +17,7 @@ description: 模型驱动的开发团队。一个场景一个场景往前滚：�
 
 1. **定场景**：业务分析提一个，或人自己说一个。`slice new <项目> s-001 "<标题>" --场景 "<谁、按什么、然后发生什么>"`，人在工作台「切片」页按「场景定下」。
 2. **建模**：`slice advance … model in-progress`，派模型师「建模」；交回后你跑 `validate --slice`，有错退回模型师；有判断没填，派审查「判模型」；判不通过的退回模型师；干净了 `advance … model done`。
+   **几段一起要审**（一批答案回来、改动波及好几段）：不一段段派。先跑 `judge pending`，它把这几段都校验一遍、没判的去重成一张单子 `reports/待判-1.json`；派审查只判这张单子；交回后跑 `judge apply` 写回各段，看哪段还没干净。判过的同一条跨段自己接，不用审查再认一遍。
 3. **起草稿原型**：派编码「起草稿原型」（契约、后端路由、前端页面，数据先存内存）；交回后跑 `proto.js check`，过了 `advance … draft done`。
 4. **一起按**：人在工作台「原型LOCAL」页，模型师陪着按。问出来的当场 `scene ask`。**一次按下来的答案攒成一批**：`advance … model pending "<这一批答了什么>"`，模型与草稿一起重开；派业务分析「答问题」立成语句（`slice lit` 登记），再派模型师改、编码改。模型图上他留的意见，派模型师处理。
 5. 他说「这一段够了」，在切片页按（或 `slice enough`），进下一个场景。
@@ -35,7 +36,8 @@ description: 模型驱动的开发团队。一个场景一个场景往前滚：�
 | `scene set / plan / progress / ask / answer / mode / questions / dispatch / back / handoff` | 现场看板、发问、派工日志、交接 | `node $DEV_TEAM/tools/scene.js <项目> …` |
 | `brief <角色> [--活 <…>] --写 <文件>` | 装一个角色这一趟的派工书 | `node $DEV_TEAM/tools/brief.js …` |
 | `validate <项目> [--slice <id>] [--code <代码库>] [--只看]` | 校验：业务对模型；带 `--code` 再解码代码、对模型，并查 import 的依赖方向 | `node $DEV_TEAM/tools/validate.js …` |
-| `proto check / serve` | 草稿原型：核登记（读后端的 `/api/_dev/manifest` 对模型）、起后端与前端开发服务；没有前端工程的项目走原型宿主。工作台会自己起它 | `node $DEV_TEAM/tools/proto.js …` |
+| `judge <项目> pending [--code <代码库>] [--slices s-011,…] / apply` | 待判单子：几段一起审时，各段校验跑一遍、没判的去重成一张小单子给审查；审查填完，`apply` 写回各段并报干净没有 | `node $DEV_TEAM/tools/judge.js …` |
+| `proto check / serve` | 草稿原型：先跑代码库的类型检查与演示案例自查（`demo:check`），再核登记（读后端的 `/api/_dev/manifest` 对模型）、起后端与前端开发服务；没有前端工程的项目走原型宿主。工作台会自己起它 | `node $DEV_TEAM/tools/proto.js …` |
 | `test <代码库>` | 跑测试 | `node $DEV_TEAM/tools/test.js …` |
 | `check-schema <项目>` | 核项目里的 JSON 形状 | `node $DEV_TEAM/tools/check-schema.js …` |
 

@@ -11,7 +11,8 @@
  *       没给后端口就挑一个空闲的。改了代码不用重起：后端的 dev 自己重启，前端自己热替换。
  *   node tools/proto.js check <项目> --code <代码库> [--slice <切片>]
  *       起后端，读 /api/_dev/manifest 对模型：模型里的命令、查询、聚合的仓储都登记了没有；再看前端目录在不在、装没装依赖。
- *       代码库有 typecheck 脚本就先跑它。退出码非 0 表示缺。
+ *       之前先跑代码库自己的几道检查，有哪个脚本就跑哪个：后端 typecheck、前端 typecheck、后端 demo:check（把演示案例从头走一遍、每一步对案例里写的数）。
+ *       一条命令跑完，编码、审查核数用它，不自己起临时后端、写走查脚本去对数。退出码非 0 表示缺或没过。
  *
  * 二、没有前端工程（原型宿主那一套，样例 example/order-code 就是）
  *   node tools/proto.js serve <项目> --code <代码库> [--port 4872] [--proto-port 4875]
@@ -136,12 +137,26 @@ function startBackend() {
 }
 const backendUp = () => getJson('/api/_dev/manifest').then((m) => Array.isArray(m.commands))
 
+// 跑代码库自己的一道检查脚本（没有这个脚本就跳过）：没过把输出打出来退出；过了返回输出
+function runScript(label, dir, pkg, script) {
+  if (!pkg.scripts?.[script]) return null
+  const t = spawnSync(WIN ? 'npm.cmd' : 'npm', ['run', '-s', script], { cwd: dir, encoding: 'utf8', shell: WIN })
+  if (t.status !== 0) { console.error(`${label}没过：\n` + (t.stdout + t.stderr).trim()); process.exit(1) }
+  return t.stdout
+}
+
 async function checkWithFrontend() {
   const pkg = JSON.parse(fs.readFileSync(path.join(codebase, 'package.json'), 'utf8'))
-  if (pkg.scripts?.typecheck) {
-    const t = spawnSync(WIN ? 'npm.cmd' : 'npm', ['run', 'typecheck'], { cwd: codebase, encoding: 'utf8', shell: WIN })
-    if (t.status !== 0) { console.error('后端类型检查没过：\n' + (t.stdout + t.stderr).trim()); process.exit(1) }
-    console.log('后端类型检查：过')
+  const fpkgPath = path.join(frontendDir, 'package.json')
+  const fpkgEarly = fs.existsSync(fpkgPath) ? JSON.parse(fs.readFileSync(fpkgPath, 'utf8')) : {}
+  if (runScript('后端类型检查', codebase, pkg, 'typecheck') != null) console.log('后端类型检查：过')
+  if (fs.existsSync(path.join(frontendDir, 'node_modules')) && runScript('前端类型检查', frontendDir, fpkgEarly, 'typecheck') != null) console.log('前端类型检查：过')
+  // 演示案例：代码库自己走一遍、每一步对案例里写的数；过了把它最后报的几行（末尾的数）照抄出来，编码写细步、审查对数都照这几行
+  const demo = runScript('演示案例自查', codebase, pkg, 'demo:check')
+  if (demo != null) {
+    const lines = demo.trim().split('\n')
+    const tail = lines.slice(lines.findIndex((l) => !l.trim()) + 1)
+    console.log('演示案例自查：过\n  ' + (tail.length ? tail : lines.slice(-1)).map((l) => l.trim()).join('\n  '))
   }
   if (!pkg.scripts?.dev) { console.error(`后端的 package.json 里没有 dev 脚本（${codebase}）`); process.exit(1) }
   await pickBackendPort()

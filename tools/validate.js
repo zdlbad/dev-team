@@ -14,6 +14,7 @@ const path = require('node:path')
 const { execFileSync, spawnSync } = require('node:child_process')
 const { applyWordMap, loadProject, LAYERS, KINDS, labelOf } = require('./lib/project')
 const { checkDependencies } = require('./lib/deps')
+const { judgeKey, knownVerdicts } = require('./lib/judgments')
 
 const args = process.argv.slice(2)
 const root = args[0] && path.resolve(args[0])
@@ -629,17 +630,12 @@ if (codebase) {
  * 没挂页面的判断不加这一栏，键跟从前一字不差。
  * 只落在页面上的判断，模型一栏写的就是页面（带行号给人找），键里用 pageKey 顶替它，行号挪了不重开。
  */
-function judgeKey(x) {
-  const pageOnModel = x.pageKey !== undefined && x.sides?.page === undefined
-  const parts = [x.target, x.check, x.sides?.business ?? '', pageOnModel ? '' : x.sides?.model ?? '', x.sides?.code ?? '']
-  if (x.pageKey !== undefined) parts.push(x.pageKey)
-  return parts.join('\u0000')
-}
 /**
  * 重跑时把上一份报告里已经填好的判断与裁决接过来。
  * 校验角色填 verdict/confidence/reason 要花很久，人的裁决更是不可再生——
  * 从前这里无条件覆盖，跑一次全没了（角色文件的自检恰好又要求跑它）。
  * 只在「目标、检查项、双方原文」都一字不差时才接：任何一侧的文字变了就当作新的一条，重新判。
+ * 不分切片：别的段的报告、开发指挥给审查的待判单子里判过的同一条，也接过来（lib/judgments.js）。
  */
 /** 被顶掉的是另一条切片的报告就先存一份，别让它无声消失 */
 function archivePrevious(dir, name, slice) {
@@ -688,18 +684,16 @@ function previousReports(report, name) {
     .sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')))
 }
 function carryOver(report, name) {
-  const olds = previousReports(report, name)
-  if (!olds.length) return 0
-  const kept = new Set()
-  for (const old of olds) {
-    const by = new Map((old.judgments ?? []).map((x) => [judgeKey(x), x]))
-    report.judgments.forEach((j, i) => {
-      const o = by.get(judgeKey(j))
-      if (o?.verdict) { j.verdict = o.verdict; j.confidence = o.confidence; j.reason = o.reason; kept.add(i) }
-    })
+  for (const old of previousReports(report, name)) {
     if ((old.blindSpots ?? []).length > (report.blindSpots ?? []).length) report.blindSpots = old.blindSpots
   }
-  return kept.size
+  const known = knownVerdicts(path.join(root, 'reports'), report.direction)
+  let kept = 0
+  for (const j of report.judgments) {
+    const o = known.get(judgeKey(j))
+    if (o) { j.verdict = o.verdict; j.confidence = o.confidence; j.reason = o.reason; kept++ }
+  }
+  return kept
 }
 function finish(report, name) {
   report.judgments.sort((a, b) => rank(b.importance) - rank(a.importance))
