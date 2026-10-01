@@ -336,7 +336,7 @@ export class CreateOrderCommandHandler {
 - `src/infras/http/app.ts`：Express 应用 `createHttpApp({ compose, endpoints, devRoutes, frontendOrigins })`，把递进来的口挂上、错误对状态码（领域错误 422、找不到 404、版本冲突 409、格式不对 400），开发口 `/api/_dev/…` 只在非生产挂。对装好的应用只认按名字交出的仓储（开发口看状态用）；不 import 组合根、不 import 任何模块，开发口重置时再调一次递进来的 `compose`。
 - `src/infras/events/in-memory-event-publisher.ts`：进程内事件总线，实现 shared 的 `EventBusInterface`，构造时给了记录者就先把事件交给它记下；`src/infras/events/event-log.ts` 是开发口看的事件流水（那个记录者），`/api/_dev/events` 读它。
 - 开发用的口 `/api/_dev/manifest`（登记了哪些命令、查询、仓储，名字照模型的 `模块.名字`；`proto.js check` 拿它对模型）、`state`（各内存仓储的全部行）、`events`（事件流水）、`reset`（回到示例数据）。
-- 代码库的 `package.json` 脚本：`dev`（入口 `src/bootstrap/server.ts`，改了代码自己重启，口读 `PORT`；`proto.js` 起后端就是在代码库里 `npm run dev`）、`build`（同一个入口打包）、`start`、`typecheck`（`proto.js check` 先跑它）。
+- 代码库的 `package.json` 脚本：`dev`（入口 `src/bootstrap/server.ts`，改了代码自己重启，口读 `PORT`；`proto.js` 起后端就是在代码库里 `npm run dev`）、`build`（同一个入口打包）、`start`、`typecheck`（`proto.js check` 先跑它）、`demo:check`（有演示案例时：在进程里新装一套应用、照演示案例一步步调真的处理器，每一步对案例里写着的数，对不上就说第几步、哪个数、该是多少、算出来多少、差多少，以 1 退出；全过打出末尾的数。不起口、不走 HTTP，一秒以内跑完；起服务时摆演示数据走的是同一段，`proto.js check` 也跑它）。
 
 ---
 
