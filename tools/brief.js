@@ -68,11 +68,14 @@ function pick(ref) {
   const text = parseFrontmatter(fs.readFileSync(file, 'utf8')).body.trimEnd()
   if (!anchor) return { rel, text }
   const lines = text.split('\n')
-  const i = lines.findIndex((l) => /^#{2,6}\s/.test(l) && l.includes(anchor))
+  // 代码块里的「## 本质」是示例，不是小节标题
+  let fence = false
+  const heading = lines.map((l) => { if (/^\s*(```|~~~)/.test(l)) { fence = !fence; return 0 } return !fence && /^(#+)\s/.test(l) ? /^(#+)/.exec(l)[1].length : 0 })
+  const i = lines.findIndex((l, k) => heading[k] >= 2 && l.includes(anchor))
   if (i < 0) die(`${rel} 里没有标题含「${anchor}」的小节`)
-  const lv = /^(#+)/.exec(lines[i])[1].length
+  const lv = heading[i]
   let j = i + 1
-  while (j < lines.length && !(/^(#+)\s/.test(lines[j]) && /^(#+)/.exec(lines[j])[1].length <= lv)) j++
+  while (j < lines.length && !(heading[j] && heading[j] <= lv)) j++
   return { rel: `${rel}#${anchor}`, text: `> 摘自 ${rel}\n\n` + lines.slice(i, j).join('\n').trimEnd() }
 }
 
