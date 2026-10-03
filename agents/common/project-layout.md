@@ -7,13 +7,17 @@
   project.json                有它的目录才算项目目录；codebase 记着代码库在哪，frontend 记着前端工程在哪（可省）
   raw/                        原料，人放进来；只读
   raw/rulings.md              人拍板的事，按批累积（开发指挥写）
-  business/00-overview.md     全景：这门生意、钱怎么走、模块候选
+  business/00-framework.md    业务框架：为什么存在、各方各自要什么、核心流程（给人看全貌）
+  business/00-overview.md     全景：这门生意、钱怎么走、模块候选（细一层的参考）
+  business/聚焦/<n>-<一段业务>.md  聚焦：框架的三节下到一段业务（业务分析）
+  business/概念/<nn>-<概念>.md   概念卡的前半张：本质、类比、例子、样子（业务分析）
   business/<Module>/abstraction.md   业务抽象
   business/<Module>/practice.md      业务落地
   business/<Module>/behavior.md      应用行为
   glossary.json               词汇表
   导读/                       给人读的原文选读
   model/                      模型（形状见 model/shapes.md）
+  model/概念/<nn>-<概念>.md      概念卡的细节（模型师）；工具读模型只认 .json，这里的 .md 不进校验
   model-decoded/<版本>/       从代码解码出来的模型；永不手改、随时可删
   slices/<id>.json            切片记录：s-xxx 场景、f-xxx 正式化
   reports/                    校验与审查报告、现场看板（_scene.json）、模型图上的意见（_model-notes.json）、业务页上的留言（_business-comments.json）
