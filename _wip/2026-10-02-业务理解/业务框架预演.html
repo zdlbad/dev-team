@@ -1,0 +1,201 @@
+<title>居家养老业务框架</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap">
+<style>
+:root{
+  --ground:#F5F8F9; --paper:#FFFFFF; --ink:#16242C; --muted:#5A6B74;
+  --line:#D7E0E4; --accent:#1D5A72; --tint:#E6EFF2; --who:#3E7F96;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD;
+    --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34; --who:#8FC6D8;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD;
+  --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34; --who:#8FC6D8;
+}
+body{background:var(--ground);color:var(--ink);font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:15.5px;line-height:1.8}
+.wrap{max-width:860px;margin:0 auto;padding-inline:20px;padding-block:40px 80px}
+h1,h2,h3{font-family:"Noto Serif SC","Songti SC",serif;text-wrap:balance;line-height:1.35}
+h1{font-size:30px;margin:0 0 8px;color:var(--ink)}
+h2{font-size:22px;margin:56px 0 14px;padding-top:18px;border-top:1px solid var(--line)}
+h3{font-size:18px;margin:28px 0 8px}
+p{margin:0 0 14px;max-width:68ch}
+.lede{color:var(--muted);margin-bottom:26px}
+.note{font-size:13.5px;color:var(--muted);background:var(--tint);border-radius:6px;padding:10px 14px;margin:18px 0}
+blockquote{margin:18px 0;padding:14px 18px;background:var(--paper);border:1px solid var(--line);border-radius:6px;font-size:16.5px}
+blockquote b{color:var(--accent)}
+figure{margin:20px 0 26px;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:16px;overflow-x:auto}
+figcaption{font-size:13px;color:var(--muted);margin-top:8px}
+pre.mermaid{margin:0;text-align:center;background:transparent}
+.tbl{overflow-x:auto;margin:16px 0 22px}
+table{border-collapse:collapse;width:100%;background:var(--paper);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+td{vertical-align:top;padding:14px 16px;border-top:1px solid var(--line)}
+tr:first-child td{border-top:none}
+td.k{width:9.5em;font-weight:700;color:var(--accent)}
+td.k small{display:block;font-weight:400;color:var(--muted);font-size:13px}
+td p{margin:0 0 6px}
+td p:last-child{margin:0}
+.sarah{color:var(--muted);font-size:14px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:22px 24px;margin-top:18px}
+.card h3{margin-top:0}
+.part{margin-top:18px}
+.part .lab{display:flex;gap:10px;align-items:baseline;font-weight:700;color:var(--ink)}
+.part .lab span{font-weight:400;font-size:12.5px;color:var(--who);border:1px solid var(--line);border-radius:999px;padding:0 9px}
+ul{margin:6px 0 0;padding-left:1.2em}
+li{margin:6px 0;max-width:68ch}
+li b{color:var(--accent);font-weight:500}
+.stage{font-size:13.5px;color:var(--muted)}
+</style>
+
+<div class="wrap">
+  <h1>居家养老业务框架</h1>
+  <p class="lede">预演稿。框架由业务分析写，放在业务页最上面。后面的概念卡：本质和例子由业务分析写，细节由模型师填。</p>
+
+  <h2>一、这门业务为什么存在</h2>
+  <p>澳大利亚政府想让需要帮助的老人留在自己家里养老，而不是搬进养老院。这门业务里有三方：政府出钱，也把关，先评估这个人该不该得、该得多少；服务商出人，上门做清洁、洗澡、护理、园艺、接送；老人得到帮助。我们是其中一家服务商。</p>
+  <figure>
+<pre class="mermaid">
+flowchart LR
+  G["政府<br/>评估、出钱、把关"]
+  P(["老人<br/>Sarah"])
+  S["服务商<br/>我们"]
+  G -- "评估，批她能得多少" --> P
+  P -- "选了我们，签服务协议" --> S
+  S -- "上门服务" --> P
+  S -- "做完了要钱" --> G
+  G -- "核过付钱" --> S
+</pre>
+    <figcaption>图 1　三方各做什么</figcaption>
+  </figure>
+  <p>这门业务有两个跟平常生意不一样的地方，后面几乎每个概念都是从这两点来的。</p>
+  <blockquote><b>钱不在老人手里，也不先给我们。</b>政府把钱记在老人名下，替她保管。<br><b>先做后报。</b>我们先上门做，做完拿记录去要钱，政府核过才从她名下扣、付给我们。</blockquote>
+  <figure>
+<pre class="mermaid">
+sequenceDiagram
+  participant G as 政府
+  participant A as Sarah 名下的钱（政府保管）
+  participant S as 服务商（我们）
+  participant P as Sarah
+  G->>A: 评估后批了分类 6，每季放进这一季的钱
+  S->>P: 上门服务：5 月 19 日两小时清洁
+  S->>G: 要钱：这次清洁 $213.40
+  G->>A: 核过，从她名下扣
+  G-->>S: 付给我们
+  Note over A: 季末没花完的留在她名下，带进下一季（有上限）
+</pre>
+    <figcaption>图 2　钱怎么走</figcaption>
+  </figure>
+
+  <h2>二、三方，各自最想要什么</h2>
+  <div class="tbl"><table>
+    <tr><td class="k">政府</td><td><p>它要让钱给到真正需要的人，并且只花在真做了的服务上。所以它先评估老人、决定每人能得多少，再替老人保管这笔钱；服务商来要钱，它核过才付，付的不超过老人名下剩下的。</p><p class="sarah">政府里评估的是 My Aged Care，管钱的是 Services Australia。读业务时当成一方就够了。</p></td></tr>
+    <tr><td class="k">老人<small>Sarah</small></td><td><p>她想在自己家里过得好：需要的帮助有人按时来做，知道钱花在哪、还剩多少。选哪家服务商由她定；钱记在她名下，但不经她的手。有的服务她自己还要出一小部分，叫共付。</p></td></tr>
+    <tr><td class="k">服务商<small>我们</small></td><td><p>把服务做好，并且把做过的每一次的钱收回来。我们跟老人签协议、说定价钱，派人上门，做完向政府要钱；老人自己那一份由我们向她收。</p></td></tr>
+  </table></div>
+  <p class="note">服务商内部怎么分工（照护伙伴管老人、财务管钱）是更细的一层，放到概念卡和场景里讲。</p>
+
+  <h2>三、核心流程</h2>
+  <figure>
+<pre class="mermaid">
+flowchart LR
+  BR["◇ 服务网点"]
+  NOD["① 决定通知书"]
+  SP["① 支持计划"]
+  PF["② 老人档案"]
+  PT["◇ 价目表"]
+  AC["② 老人名下的账户"]
+  SA["② 服务协议"]
+  SN["② 开始服务通知"]
+  QB["② 季度预算"]
+  CMP["② 护理管理资金池"]
+  RB["③ 报销申请（收据）"]
+  SR["③ 服务记录"]
+  CMR["③ 护理管理记录"]
+  CN["③ 照护记录"]
+  CL["④ 申报"]
+  VR["④ 改单"]
+  CO["⑤ 结转"]
+
+  NOD -- "照它建档" --> PF
+  BR -- "老人挂在网点上" --> PF
+  BR -- "每个网点一张" --> PT
+  NOD -- "批了几样开几个" --> AC
+  PF -- "开在她名下" --> AC
+  SP -- "她需要哪些服务" --> SA
+  PT -- "照它定约定价" --> SA
+  NOD -. "批了新服务就改" .-> SA
+  SA -- "签了、开始服务" --> SN
+  SN -- "交了政府才入钱" --> QB
+  NOD -- "分类定多少" --> QB
+  AC -- "每季入一笔" --> QB
+  QB -- "一成进池子" --> CMP
+  SA -- "每次照它取价" --> SR
+  QB -- "钱从这里出" --> SR
+  RB -- "录成服务记录" --> SR
+  CMP -- "钱从这里出" --> CMR
+  CMR -- "写的做了什么" --> CN
+  SR -- "汇总去要钱" --> CL
+  CMR -- "汇总去要钱" --> CL
+  BR -- "按网点交" --> CL
+  CL -. "政府核过从她名下扣" .-> AC
+  CL -- "付过的一行报错了" --> VR
+  CL -- "这一季报完" --> CO
+  CO -. "带进下一季" .-> QB
+</pre>
+    <figcaption>图 3　概念图：从左到右是出场的先后。①～⑤ 是第几站出场，◇ 是系统一开始就有的底子；实线是往后递的，虚线是往回作用的（报上去的钱从她账户里扣、没花完的带进下一季、批了新服务回头改协议）</figcaption>
+  </figure>
+  <div class="tbl"><table>
+    <tr><td class="k">① 准入</td><td><p>老人去 My Aged Care 申请，政府派人评估。评完她手上有两份：决定通知书写政府批了她什么、第几级；支持计划写她需要哪些帮助。排上队、分到资金，她就可以去选服务商。从分到资金那天起 56 天内要开始服务，不然钱会被收回。</p><p class="sarah">Sarah 评为分类 6，2 月 23 日分到资金，先到的是六成。</p></td></tr>
+    <tr><td class="k">② 接收</td><td><p>她选了我们。我们给她建档，在她名下开好放钱的账户，跟她签服务协议，说定做哪些服务、各多少钱；再告诉政府她哪天开始。政府收到，才开始往她名下放钱。</p><p class="sarah">3 月 3 日建档；3 月 9 日签协议，当天开始服务。</p></td></tr>
+    <tr><td class="k">③ 服务</td><td><p>我们派人上门。每一次做了什么、做了多久、照协议值多少钱，都记下来，这是以后要钱的凭据。</p><p class="sarah">5 月 19 日两小时清洁，$213.40。</p></td></tr>
+    <tr><td class="k">④ 要钱</td><td><p>我们把一段时间里做过的服务汇总起来，向政府要钱。政府逐行核对，从老人名下扣钱、付给我们；不对的不付；付过的发现报错了，可以改，政府补付或追回。</p><p class="sarah">第 3 季的账 4 月 14 日交上去，4 月 21 日政府付了 $243.40，其中一次园艺没被认。</p></td></tr>
+    <tr><td class="k">⑤ 季末与变化</td><td><p>每季结束，没花完的钱带进下一季，带走的有上限。老人情况变了、政府批了新的服务，就改协议、多开一个放钱的账户。</p><p class="sarah">Sarah 第 3 季剩的钱带走 $1,000；Hiroshi 批了辅助技术，4 月 14 日我们跟他改了协议。</p></td></tr>
+    <tr><td class="k">⑥ 离开</td><td><p>老人进养老院或去世，我们在期限里把最后的账要完，替她保管的钱退回去，给她最后一张对账单。</p><p class="sarah">二期才做。</p></td></tr>
+  </table></div>
+  <p class="note">共付（老人自己出的那一份）和每月给老人的对账单也在这条线上，一期都还没做。</p>
+
+  <h2>四、接下来：概念卡（样例）</h2>
+  <p>框架之后，一站一站建概念。下面拿服务协议做样例，看分工怎么落在一张卡上。</p>
+  <div class="card">
+    <h3>服务协议</h3>
+    <div class="stage">在 ② 接收时签下，在 ③ 服务时每一次都从它取价，在 ⑤ 变化时改</div>
+
+    <div class="part"><div class="lab">本质 <span>业务分析写</span></div>
+      <p>老人和我们之间的服务合同，写着我们给她做哪几样服务、每样多少钱，双方签字。对老人，法律要求先签合同才能上门，她清楚自己会得到什么、要花多少；对我们，以后每一次上门收多少钱，都照这份合同上说定的价。</p>
+    </div>
+
+    <div class="part"><div class="lab">例子 <span>业务分析写</span></div>
+      <p>3 月 9 日，Noam 坐在 Sarah 家里，对着她的决定通知书、支持计划和西区网点的价目表，跟她过一遍要做的六项服务：一般清洁、自理与日常活动协助、个人社交支持、园艺、交通、注册护士临床护理。她当场签字，当天开始服务。</p>
+      <figure style="margin:12px 0 0">
+<pre class="mermaid">
+flowchart LR
+  N["决定通知书<br/>政府批了她什么"] --> A
+  PL["支持计划<br/>她需要哪些帮助"] --> A
+  PT["价目表<br/>我们的标价"] --> A
+  A["服务协议<br/>做哪些、各多少钱"] --> R["服务记录<br/>每次照协议价算钱"]
+</pre>
+      </figure>
+    </div>
+
+    <div class="part"><div class="lab">细节 <span>模型师填</span></div>
+      <ul>
+        <li>为了每次上门知道该收多少，所以协议上<b>每一项服务记着跟她说定的价</b>（属性）。</li>
+        <li>为了周末、夜里、假期上门的人工更贵也能算对，所以每项价<b>分五档</b>（属性）：平日白天、平日其他时间、周六、周日、公共假期。Sarah 的一般清洁平日白天每小时 $106.70，周六 $159.75，公共假期 $266.25。</li>
+        <li>为了让老人签完还能反悔，所以有<b>冷静期到哪天</b>（属性），由系统算出：从签订那天算起 14 天，或到开始服务为止，取先到的。Sarah 当天开始服务，冷静期 3 月 9 日就到头。</li>
+        <li>为了每年回头看服务还合不合适，所以有<b>复核日</b>（属性）。Sarah 的是 2027 年 3 月 9 日。</li>
+        <li>为了被查时拿得出她同意过的凭据，所以要<b>附上签好的协议文件</b>（行为）。</li>
+        <li>为了老人批了新服务后能加进合同，所以有<b>改协议</b>（行为），记在原来那一份上。4 月 14 日 Hiroshi 批了辅助技术，Noam 跟他改协议，他在改协议文件上签字。</li>
+      </ul>
+    </div>
+
+    <div class="part"><div class="lab">类比 <span>业务分析写</span></div>
+      <p>手机套餐合同：列着包含哪些服务、各自怎么收费，签了才开通，改套餐要再确认一次。</p>
+    </div>
+    <p class="stage" style="margin-top:14px">模型里：ServiceAgreement</p>
+  </div>
+</div>

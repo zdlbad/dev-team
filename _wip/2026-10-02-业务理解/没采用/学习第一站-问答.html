@@ -1,0 +1,184 @@
+<title>第一站：钱怎么来到 Sarah 名下</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap">
+<style>
+:root{
+  --ground:#F5F8F9; --paper:#FFFFFF; --ink:#16242C; --muted:#5A6B74; --faint:#8A99A1;
+  --line:#D7E0E4; --accent:#1D5A72; --tint:#E6EFF2;
+  --party:#dbe9f6; --party-line:#4a78a6; --doc:#fff3c4; --doc-line:#b58a00;
+  --money:#2a78d6; --moneybg:#e3eefb; --lost:#8A99A1;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD; --faint:#6E7F87;
+    --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34;
+    --party:#1E3446; --party-line:#6E9CC8; --doc:#3A3216; --doc-line:#C9A23A;
+    --money:#3987e5; --moneybg:#18293c; --lost:#6E7F87;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD; --faint:#6E7F87;
+  --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34;
+  --party:#1E3446; --party-line:#6E9CC8; --doc:#3A3216; --doc-line:#C9A23A;
+  --money:#3987e5; --moneybg:#18293c; --lost:#6E7F87;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.75}
+.wrap{max-width:680px;margin:0 auto;padding-inline:16px;padding-block:24px 64px}
+h1,h2{font-family:"Noto Serif SC","Songti SC",serif;text-wrap:balance;line-height:1.35}
+h1{font-size:24px;margin:0 0 4px}
+h2{font-size:19px;margin:36px 0 8px}
+p{margin:0 0 10px}
+.kicker{font-size:13px;letter-spacing:.06em;color:var(--accent);font-weight:700}
+.lede{color:var(--muted);font-size:15px}
+.take{background:var(--paper);border:2px solid var(--accent);border-radius:12px;padding:12px 14px;margin:16px 0 4px;font-size:16.5px}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px}
+.muted{color:var(--muted);font-size:14px}
+svg{display:block;width:100%;height:auto}
+svg text{font-family:"Noto Sans SC","PingFang SC",sans-serif}
+
+.steps{list-style:none;margin:0;padding:0}
+.steps li{display:grid;grid-template-columns:72px 1fr;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.steps li:first-child{border-top:0}
+.steps .d{font-weight:700;font-variant-numeric:tabular-nums;font-size:14.5px}
+.steps .who{display:inline-block;font-size:12.5px;border-radius:999px;padding:0 8px;border:1.5px solid var(--party-line);background:var(--party);margin-right:4px}
+.steps .doc{display:inline-block;font-size:12.5px;border-radius:5px;padding:0 7px;border:1.5px solid var(--doc-line);background:var(--doc);margin-left:2px}
+.steps .m{display:block;margin-top:3px;font-size:14px;color:var(--muted)}
+.steps .m b{color:var(--money)}
+
+.toggles{display:grid;gap:8px;margin:4px 0 12px}
+.tg{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--tint);border-radius:10px;padding:9px 12px}
+.tg label{font-size:15px}
+.tg input{width:44px;height:24px;appearance:none;-webkit-appearance:none;background:var(--line);border-radius:999px;position:relative;cursor:pointer;flex:none;transition:background .2s}
+.tg input::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--paper);transition:left .2s}
+.tg input:checked{background:var(--accent)}
+.tg input:checked::after{left:23px}
+.tg input:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.out{margin-top:10px;border-radius:10px;padding:10px 12px;background:var(--moneybg);font-size:15px;min-height:3em}
+.out.bad{background:var(--tint)}
+
+.q{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.q .n{display:inline-block;width:24px;height:24px;line-height:24px;text-align:center;border-radius:50%;background:var(--accent);color:var(--paper);font-size:13px;font-weight:700;margin-right:8px}
+.end{margin-top:16px;color:var(--muted);font-size:14.5px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <div class="kicker">学业务 · 第一站</div>
+  <h1>钱怎么来到 Sarah 名下</h1>
+  <p class="lede">从 Sarah 评估合格，到她名下第一次有钱。只讲这一段，别的先不管。</p>
+
+  <div class="take">钱不是评估批了就有，也不是分到资金就有。要等她选了服务方、签了协议、服务方告诉政府她哪天开始，钱才从那天起进她名下。</div>
+
+  <h2>一、她名下什么时候有钱（时间线）</h2>
+  <div class="panel">
+    <svg id="chart" role="img" aria-label="Sarah 名下累计进了多少钱，随日子变化"></svg>
+    <p class="muted" style="margin-top:6px">蓝线是她名下一共进了多少钱。前面一大段是平的：批了、分了，可她名下一分没有。</p>
+  </div>
+
+  <div class="panel" style="margin-top:12px">
+    <ul class="steps">
+      <li><span class="d">2025 年<br>12 月</span><span><span class="who">评估机构</span>评估合格，批了分类 6 <span class="doc">决定通知书</span><span class="doc">支持计划</span><span class="m">批了，可还要排队。她名下 <b>$0</b>。</span></span></li>
+      <li><span class="d">2 月 23 日</span><span><span class="who">卫生部</span>排到她了，分给她资金，先给六成 <span class="doc">资金分配通知书</span><span class="m">钱分给她了，可还没放进她名下。<b>$0</b>。从这天起，她有 56 天找服务方、签协议、开始服务，到 4 月 20 日。</span></span></li>
+      <li><span class="d">3 月 3 日</span><span><span class="who">Sarah</span>选了这家服务方，<span class="who">服务方</span>在门户上接了转介、建档<span class="m">还是 <b>$0</b>。</span></span></li>
+      <li><span class="d">3 月 9 日</span><span><span class="who">Sarah</span><span class="who">服务方</span>签协议、当天开始服务 <span class="doc">服务协议</span><br><span class="who">服务方</span>告诉政府她 3 月 9 日开始 <span class="doc">开始服务通知</span><span class="m">开关打开了。Services Australia 从 3 月 9 日按天算到 3 月 31 日，第 3 季 <b>$1,814.79</b> 进她名下。</span></span></li>
+      <li><span class="d">4 月 1 日</span><span><span class="who">Services Australia</span>第 4 季开头，整季放进来<span class="m"><b>$7,180.27</b>（还是六成）。</span></span></li>
+      <li><span class="d">5 月 12 日</span><span><span class="who">卫生部</span>余下四成也分到了<span class="m">从这天按天补到季末，<b>$2,630.14</b>。</span></span></li>
+    </ul>
+    <p class="muted">分类 6 一年 $48,000 是演示用的示例数；六成、按天算、整季放的算法是手册上的。</p>
+  </div>
+
+  <h2>二、拿掉一环试试</h2>
+  <p class="muted">关掉一个开关，看上面那条蓝线会变成什么样。</p>
+  <div class="panel">
+    <div class="toggles">
+      <div class="tg"><label for="t1">3 月 9 日签了服务协议</label><input type="checkbox" id="t1" checked></div>
+      <div class="tg"><label for="t2">服务方交了开始服务通知</label><input type="checkbox" id="t2" checked></div>
+      <div class="tg"><label for="t3">赶在 4 月 20 日之前</label><input type="checkbox" id="t3" checked></div>
+    </div>
+    <svg id="chart2" role="img" aria-label="拿掉一环以后她名下的钱"></svg>
+    <div class="out" id="out"></div>
+  </div>
+
+  <h2>三、你来答</h2>
+  <p class="muted">用自己的话，答在对话里就行，不用翻上面。答不上的地方，就是下一站从哪开始。</p>
+  <div class="q"><span class="n">1</span>2 月 23 日 Sarah 分到资金那天，她名下有多少钱？为什么？</div>
+  <div class="q"><span class="n">2</span>要是 3 月 9 日协议签了、服务也开始了，可服务方忘了交开始服务通知，4 月 25 日才想起来，会怎样？</div>
+  <div class="q"><span class="n">3</span>第 3 季她只进了 $1,814.79，比第 4 季的 $7,180.27 少得多。差在哪？说得出两个原因。</div>
+  <p class="end">下一站：钱在她名下以后，这一季她能花多少（守恒式）。</p>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id)
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim()
+  const ns = 'http://www.w3.org/2000/svg'
+  const day = (m, d) => (Date.UTC(2026, m - 1, d) - Date.UTC(2026, 1, 1)) / 864e5
+  const money = (n) => '$' + n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const T0 = day(2, 1), T1 = day(6, 30)
+  const steps = [
+    { t: day(3, 9), v: 1814.79, k: '3 月 9 日', s: '第 3 季' },
+    { t: day(4, 1), v: 7180.27, k: '4 月 1 日', s: '第 4 季' },
+    { t: day(5, 12), v: 2630.14, k: '5 月 12 日', s: '余下四成' },
+  ]
+  const MAX = 12000
+
+  function draw(svg, opts) {
+    const W = 340, H = 224, L = 46, R = 330, Tp = 14, B = 176
+    const x = (t) => L + (t - T0) / (T1 - T0) * (R - L)
+    const y = (v) => B - v / MAX * (B - Tp)
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H)
+    svg.innerHTML = ''
+    const el = (tag, a, txt) => { const e = document.createElementNS(ns, tag); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; svg.appendChild(e); return e }
+    ;[0, 4000, 8000, 12000].forEach((v) => {
+      el('line', { x1: L, x2: R, y1: y(v), y2: y(v), stroke: css('--line'), 'stroke-width': 1 })
+      el('text', { x: L - 6, y: y(v) + 4, 'font-size': 10.5, 'text-anchor': 'end', fill: css('--muted') }, v ? '$' + v / 1000 + 'k' : '$0')
+    })
+    ;[[2, 1, '2 月'], [3, 1, '3 月'], [4, 1, '4 月'], [5, 1, '5 月'], [6, 1, '6 月']].forEach(([m, d, s]) => {
+      el('text', { x: x(day(m, d)) + 2, y: B + 16, 'font-size': 10.5, fill: css('--muted') }, s)
+    })
+    // 2 月 23 日分到资金、4 月 20 日 56 天到期
+    const xa = x(day(2, 23)), xb = x(day(4, 20))
+    el('rect', { x: xa, y: B + 22, width: xb - xa, height: 6, rx: 3, fill: css('--doc-line'), opacity: 0.55 })
+    el('text', { x: xa, y: B + 40 - 2, 'font-size': 10, fill: css('--muted') }, '56 天：2 月 23 日到 4 月 20 日')
+    let pts = [[T0, 0]], cum = 0
+    if (opts.ok) steps.forEach((s) => { pts.push([s.t, cum]); cum += s.v; pts.push([s.t, cum]) })
+    pts.push([T1, cum])
+    el('path', { d: 'M' + pts.map(([t, v]) => x(t) + ' ' + y(v)).join(' L'), fill: 'none', stroke: css(opts.ok ? '--money' : '--lost'), 'stroke-width': 2.5, 'stroke-linejoin': 'round' })
+    if (opts.ok) {
+      let c = 0
+      steps.forEach((s) => {
+        c += s.v
+        el('circle', { cx: x(s.t), cy: y(c), r: 4, fill: css('--money'), stroke: css('--paper'), 'stroke-width': 2 })
+        el('text', { x: x(s.t) + 6, y: y(c) - 6, 'font-size': 10.5, fill: css('--ink') }, '+' + money(s.v))
+      })
+    } else {
+      el('line', { x1: xb, x2: xb, y1: Tp, y2: B, stroke: css('--faint'), 'stroke-width': 1.5, 'stroke-dasharray': '4 4' })
+      el('text', { x: xb - 4, y: Tp + 12, 'font-size': 11, 'text-anchor': 'end', fill: css('--ink') }, '4 月 20 日资金收回')
+    }
+  }
+
+  draw($('chart'), { ok: true })
+
+  const msgs = {
+    ok: '三环都在：3 月 9 日起钱进她名下，到 5 月 12 日一共进了 $11,625.20。',
+    noAgreement: '没签协议，服务方就不能开始服务，也不能交开始服务通知。她名下一直是 $0；到 4 月 20 日 56 天满了，资金收回，她被移出排队，要重新排（排的时候还按原来的批准日）。',
+    noNotice: '协议签了、服务也做了，可政府不知道她开始了：她名下一直是 $0，服务方做了的也报不上去，没有通知就报，那一段算服务方欠政府的。到 4 月 20 日还没交，资金收回。',
+    late: '拖过了 4 月 20 日：56 天满了，资金收回，她被移出排队。想再要，得重新排队（批准日照旧，一般不用重新评估）。她要是事先找 My Aged Care 要了 28 天延期，就能拖到 5 月 18 日。',
+  }
+  function update() {
+    const a = $('t1').checked, n = $('t2').checked, t = $('t3').checked
+    const ok = a && n && t
+    draw($('chart2'), { ok })
+    const out = $('out')
+    out.classList.toggle('bad', !ok)
+    out.textContent = ok ? msgs.ok : !a ? msgs.noAgreement : !n ? msgs.noNotice : msgs.late
+  }
+  ;['t1', 't2', 't3'].forEach((id) => $(id).addEventListener('change', update))
+  update()
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { draw($('chart'), { ok: true }); update() }) } catch (e) {}
+  new MutationObserver(() => { draw($('chart'), { ok: true }); update() }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+})()
+</script>

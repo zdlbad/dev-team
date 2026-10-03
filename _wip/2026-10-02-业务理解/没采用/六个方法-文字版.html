@@ -1,0 +1,154 @@
+<title>理解业务的六个方法</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap">
+<style>
+:root{
+  --ground:#F5F8F9; --paper:#FFFFFF; --ink:#16242C; --muted:#5A6B74;
+  --line:#D7E0E4; --accent:#1D5A72; --tint:#E6EFF2; --gold:#8a6a00; --goldbg:#FFF6D6;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD;
+    --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34; --gold:#E8C766; --goldbg:#2A2614;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD;
+  --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34; --gold:#E8C766; --goldbg:#2A2614;
+}
+body{background:var(--ground);color:var(--ink);font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.8}
+.wrap{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:28px 64px}
+h1,h2,h3{font-family:"Noto Serif SC","Songti SC",serif;text-wrap:balance;line-height:1.35}
+h1{font-size:26px;margin:0 0 6px}
+h2{font-size:20px;margin:44px 0 10px;padding-top:16px;border-top:1px solid var(--line)}
+p{margin:0 0 12px}
+.lede{color:var(--muted)}
+.how{background:var(--tint);border-radius:8px;padding:10px 14px;margin:10px 0 14px}
+.how b{color:var(--accent)}
+.why{font-size:14.5px;color:var(--muted);margin-top:10px}
+.eq{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0;font-variant-numeric:tabular-nums}
+.eq .row{display:flex;justify-content:space-between;gap:12px;padding:3px 0}
+.eq .row span:last-child{white-space:nowrap}
+.eq .sum{border-top:1px solid var(--line);margin-top:6px;padding-top:8px;font-weight:700;color:var(--accent)}
+.eq .cap{font-size:13.5px;color:var(--muted);margin-bottom:6px}
+figure{margin:12px 0 16px;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto}
+figcaption{font-size:13px;color:var(--muted);margin-top:6px}
+pre.mermaid{margin:0;text-align:center;background:transparent}
+.tbl{overflow-x:auto;margin:12px 0}
+table{border-collapse:collapse;width:100%;background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:15px}
+td,th{vertical-align:top;padding:10px 12px;border-top:1px solid var(--line);text-align:left}
+th{font-size:13.5px;color:var(--muted);font-weight:500;border-top:none;background:var(--tint)}
+td.k{width:34%;font-weight:700;color:var(--accent)}
+.tl{list-style:none;margin:12px 0;padding:0 0 0 18px;border-left:2px solid var(--line)}
+.tl li{position:relative;margin:0 0 14px;padding-left:6px}
+.tl li::before{content:"";position:absolute;left:-25px;top:9px;width:10px;height:10px;border-radius:50%;background:var(--accent)}
+.tl li.dl::before{background:var(--gold)}
+.tl .d{font-weight:700;font-variant-numeric:tabular-nums}
+.tl .dl .d{color:var(--gold)}
+.tl small{display:block;color:var(--muted);font-size:13.5px}
+.cards{display:grid;gap:10px;margin:12px 0}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card .n{font-weight:700}
+.card .grow{margin-top:6px;font-size:14.5px;background:var(--goldbg);color:var(--ink);border-radius:6px;padding:6px 10px}
+.pick{background:var(--paper);border:2px solid var(--accent);border-radius:10px;padding:14px 16px;margin-top:20px}
+</style>
+
+<div class="wrap">
+  <h1>理解业务的六个方法</h1>
+  <p class="lede">每个方法一句做法，一个本项目里的例子，一句它帮的是什么。例子都是 Sarah 和另外几位老人的真事和真数。</p>
+
+  <h2>1　守恒式</h2>
+  <div class="how"><b>做法：</b>把一笔钱的去向写成等式。钱不会凭空多出来，也不会凭空少掉，每一项都要说得出从哪来、到哪去。</div>
+  <div class="eq">
+    <div class="cap">Sarah 第 3 季（3 月 9 日开始服务，到 3 月 31 日）</div>
+    <div class="row"><span>政府这一季批下来的</span><span>$1,814.79</span></div>
+    <div class="row"><span>留一成给护理管理（进网点的池子）</span><span>− $181.48</span></div>
+    <div class="row sum"><span>能花在服务上的</span><span>$1,633.31</span></div>
+  </div>
+  <div class="eq">
+    <div class="cap">这 $1,633.31 去了哪</div>
+    <div class="row"><span>做了服务、用掉的</span><span>$513.40</span></div>
+    <div class="row"><span>带进第 4 季的（上限 $1,000）</span><span>$1,000.00</span></div>
+    <div class="row"><span>超出上限、没带走的</span><span>$119.91</span></div>
+    <div class="row sum"><span>合计</span><span>$1,633.31</span></div>
+  </div>
+  <p>式子一写出来，就会逼出问题：没带走的 $119.91 去哪了？要是第 3 季后来又改了一单，这三项哪一项变？答不出，就是还没弄懂。</p>
+  <p class="why">帮的是什么：这条式子就是模型里的规则。业务和建模之间最直接的那座桥，模型师式子不平就过不去。</p>
+
+  <h2>2　拿掉它会怎样</h2>
+  <div class="how"><b>做法：</b>对一个概念或一栏，问：业务里没有它，哪件事办不成、谁吃亏。答不出的，多半不该有。</div>
+  <div class="tbl"><table>
+    <tr><th>拿掉</th><th>会怎样</th></tr>
+    <tr><td class="k">决定通知书</td><td>没人说得出她该得多少，基金无从批下来。</td></tr>
+    <tr><td class="k">支持计划上批了哪些服务</td><td>签协议不知道能挑什么；做了没批的服务，政府核申报时不付。</td></tr>
+    <tr><td class="k">服务协议上的价</td><td>每一次收多少没有依据；政府只认跟她说定的价。</td></tr>
+    <tr><td class="k">开始服务通知</td><td>政府不往她名下放钱、不付补贴；分到资金 56 天内不交，资金收回。</td></tr>
+    <tr><td class="k">服务记录</td><td>做过的拿不出凭据，钱要不回来；部门来查，拿不出证据。</td></tr>
+  </table></div>
+  <p class="why">帮的是什么：比「为了……所以有……」更锋利，一个概念为什么存在，一问就清楚。</p>
+
+  <h2>3　时间线</h2>
+  <div class="how"><b>做法：</b>把一个人的事和所有期限摆在一根时间轴上。散着读没感觉，排在一起就看得出哪件事卡着哪件事。</div>
+  <ul class="tl">
+    <li><span class="d">2025 年 12 月</span>　评估合格，分类 6</li>
+    <li><span class="d">2 月 23 日</span>　分到资金，先拿六成<small>从这天起算 56 天</small></li>
+    <li><span class="d">3 月 3 日</span>　选了服务方，建档</li>
+    <li><span class="d">3 月 9 日</span>　签协议、当天开始服务、通知政府<small>冷静期本来有 14 天，可开始服务就到头了，所以当天就结束</small></li>
+    <li class="dl"><span class="d">3 月 31 日</span>　第 3 季结束<small>从这天起 60 天内要把第 3 季报完</small></li>
+    <li><span class="d">4 月 1 日</span>　第 4 季的钱进来</li>
+    <li><span class="d">4 月 14 日</span>　报第 3 季（三次服务）</li>
+    <li class="dl"><span class="d">4 月 20 日</span>　56 天到期（她 3 月 9 日已经开始，过关）</li>
+    <li><span class="d">4 月 21 日</span>　政府付了 $243.40，一次园艺没被认</li>
+    <li><span class="d">5 月 12 日</span>　余下四成到位，从这天起按天补</li>
+    <li class="dl"><span class="d">5 月 30 日</span>　第 3 季最晚报完的日子</li>
+    <li class="dl"><span class="d">6 月 30 日</span>　第 4 季结束<small>8 月 29 日以前要报完</small></li>
+  </ul>
+  <p class="why">帮的是什么：这门业务到处是期限。期限一排开，就看得出服务方为什么要赶：协议要在通知前签，通知要在 56 天内交，报要在季末后 60 天内报完。</p>
+
+  <h2>4　谁吃亏</h2>
+  <div class="how"><b>做法：</b>很多规矩是因为有人会亏钱才有的。问一句：这件事出错了，谁亏？规矩就有了动机。</div>
+  <div class="tbl"><table>
+    <tr><th>出了什么事</th><th>谁亏，所以有什么</th></tr>
+    <tr><td class="k">一季花超了</td><td>超出的政府不付；事先没跟老人谈好向她收的，服务方自己担。所以服务方要盯着她这一季的预算。</td></tr>
+    <tr><td class="k">报错了、报多了</td><td>政府拒付，付了的事后追回。所以要留证据，错了走改单。</td></tr>
+    <tr><td class="k">分到资金 56 天还没开始</td><td>老人的资金被收回，要重新排队。所以服务方接了人要尽快签协议、交通知。</td></tr>
+    <tr><td class="k">两家同时给她服务、同时申报</td><td>政府按多付追讨。所以一位老人只挂一家的一个网点，接人前要查她还挂没挂在别家。</td></tr>
+  </table></div>
+  <p class="why">帮的是什么：规矩不再是一条条要背的条文，每一条后面都看得见那个会吃亏的人。</p>
+
+  <h2>5　拿怪例子撞简单的故事</h2>
+  <div class="how"><b>做法：</b>先用最简单的人把概念立起来，再拿别的人一个一个去撞。每撞一次，概念就长出一块。</div>
+  <div class="cards">
+    <div class="card"><span class="n">Sarah</span>　只批了持续服务，基金只有一笔，按季来。<div class="grow">立起来：老人的基金就是政府批给她的一笔钱。</div></div>
+    <div class="card"><span class="n">Hiroshi</span>　另批了辅助技术，还有旧护理包没花完的钱。<div class="grow">长出：基金按用途分开，一种用途一笔，各花各的。</div></div>
+    <div class="card"><span class="n">Sanjeeta</span>　转去临终路径，原来的分类挂起，用的是一次性的一笔钱。<div class="grow">长出：基金会被冻结，冻结那段持续服务的钱不能动。</div></div>
+    <div class="card"><span class="n">Georgios</span>　只有恢复性照护，不用排队，一段一份钱，管十几周。<div class="grow">长出：不是每笔钱都按季来，季度预算只是持续服务那一笔的样子。</div></div>
+  </div>
+  <p class="why">帮的是什么：一开始就讲全面，什么都记不住；从最简单的人出发，一次只多一块。</p>
+
+  <h2>6　事件当骨架</h2>
+  <div class="how"><b>做法：</b>先列业务里发生的事，再看每份文件是哪件事留下的凭据。文件有几十种，事件只有十来件，先抓事件就不乱。</div>
+  <figure>
+<pre class="mermaid">
+flowchart TD
+  E1(["评估批了"]) --> E2(["分到资金"]) --> E3(["签了协议"]) --> E4(["通知开始"]) --> E5(["做了服务"]) --> E6(["报上去"]) --> E7(["政府付了"])
+  E1 -.- D1[["决定通知书<br/>支持计划"]]
+  E2 -.- D2[["资金分配通知书"]]
+  E3 -.- D3[["服务协议"]]
+  E4 -.- D4[["开始服务通知"]]
+  E5 -.- D5[["服务记录"]]
+  E6 -.- D6[["申报"]]
+  E7 -.- D7[["付款对账单"]]
+  classDef ev fill:#dbe9f6,stroke:#4a78a6,color:#16242c
+  classDef doc fill:#fff3c4,stroke:#b58a00,color:#16242c
+  class E1,E2,E3,E4,E5,E6,E7 ev
+  class D1,D2,D3,D4,D5,D6,D7 doc
+</pre>
+    <figcaption>蓝的是发生的事，黄的是它留下的凭据</figcaption>
+  </figure>
+  <p class="why">帮的是什么：读到一份新文件，先问它是哪件事的凭据，就知道它放在哪。</p>
+
+  <div class="pick"><b>我建议先试 1 和 2。</b>守恒式直接连到建模，就是你一开始想改进模型师的那一头；「拿掉它会怎样」可以换掉概念卡细节里偏软的「为了……所以有……」。</div>
+</div>

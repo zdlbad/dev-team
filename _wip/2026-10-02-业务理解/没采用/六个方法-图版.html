@@ -1,0 +1,321 @@
+<title>理解业务的六个方法：图版</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap">
+<style>
+:root{
+  --ground:#F5F8F9; --paper:#FFFFFF; --ink:#16242C; --muted:#5A6B74; --faint:#8A99A1;
+  --line:#D7E0E4; --accent:#1D5A72; --tint:#E6EFF2;
+  --party:#dbe9f6; --party-line:#4a78a6; --doc:#fff3c4; --doc-line:#b58a00;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+  --off:#C9D2D6;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD; --faint:#6E7F87;
+    --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34;
+    --party:#1E3446; --party-line:#6E9CC8; --doc:#3A3216; --doc-line:#C9A23A;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --off:#33434B;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD; --faint:#6E7F87;
+  --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34;
+  --party:#1E3446; --party-line:#6E9CC8; --doc:#3A3216; --doc-line:#C9A23A;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+  --off:#33434B;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.75}
+.wrap{max-width:720px;margin:0 auto;padding-inline:16px;padding-block:24px 64px}
+h1,h2{font-family:"Noto Serif SC","Songti SC",serif;text-wrap:balance;line-height:1.35}
+h1{font-size:25px;margin:0 0 4px}
+h2{font-size:19px;margin:40px 0 4px}
+h2 .no{display:inline-block;min-width:26px;height:26px;line-height:26px;text-align:center;border-radius:50%;background:var(--accent);color:var(--paper);font-family:"Noto Sans SC",sans-serif;font-size:14px;margin-right:8px;vertical-align:2px}
+p{margin:0 0 10px}
+.lede{color:var(--muted);font-size:15px}
+.how{color:var(--muted);font-size:14.5px;margin-bottom:12px}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px}
+.cap{font-size:13.5px;color:var(--muted);margin-top:8px;min-height:1.5em}
+.why{font-size:14px;color:var(--muted);margin-top:10px;padding-left:10px;border-left:3px solid var(--line)}
+svg{display:block;width:100%;height:auto}
+svg text{font-family:"Noto Sans SC","PingFang SC",sans-serif}
+
+/* 1 守恒 */
+.bar{display:flex;gap:2px;height:44px;border-radius:6px;overflow:hidden;margin:8px 0 10px}
+.bar button{border:0;padding:0;cursor:pointer;height:100%}
+.bar button:focus-visible{outline:3px solid var(--ink);outline-offset:-3px}
+.legend{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:14.5px;font-variant-numeric:tabular-nums}
+.legend .sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;vertical-align:-1px}
+.legend .tot{border-top:1px solid var(--line);padding-top:6px;font-weight:700}
+.legend .r{text-align:right}
+
+/* 2 拿掉 */
+.chain{display:flex;flex-direction:column;align-items:stretch;gap:0}
+.chain button{font:inherit;text-align:left;border:1.5px solid var(--doc-line);background:var(--doc);color:var(--ink);border-radius:10px;padding:9px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:opacity .2s}
+.chain button .x{font-size:12.5px;color:var(--muted)}
+.chain .link{width:2px;height:14px;background:var(--doc-line);margin-left:22px}
+.chain button.gone{background:transparent;border-style:dashed;border-color:var(--faint);color:var(--faint);text-decoration:line-through}
+.chain button.cut{background:transparent;border-color:var(--off);color:var(--faint)}
+.chain .link.cut{background:var(--off)}
+.msg{margin-top:12px;background:var(--tint);border-radius:8px;padding:10px 12px;font-size:15px;min-height:3.2em}
+.reset{font:inherit;font-size:13.5px;background:none;border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:3px 12px;margin-top:8px;cursor:pointer}
+
+/* 4 谁吃亏 */
+.loss{display:grid;gap:10px}
+.loss .row{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px}
+.loss .ev{font-weight:700}
+.loss .who{display:flex;align-items:center;gap:8px;margin:6px 0}
+.chip{display:inline-block;font-size:13px;border-radius:999px;padding:1px 10px;border:1.5px solid var(--party-line);background:var(--party)}
+.loss .arrow{color:var(--faint)}
+.loss .so{font-size:14.5px;color:var(--muted)}
+.loss .so b{color:var(--ink);font-weight:500}
+
+/* 5 怪例子 */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.tabs button{font:inherit;font-size:14.5px;border:1.5px solid var(--party-line);background:var(--paper);color:var(--ink);border-radius:999px;padding:3px 14px;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--party);font-weight:700}
+.grow{margin-top:10px;background:var(--doc);border:1px solid var(--doc-line);border-radius:8px;padding:8px 12px;font-size:15px}
+
+/* 6 事件 */
+.track{position:relative;padding-left:4px}
+.ev6{display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:start;position:relative;padding-bottom:14px}
+.ev6::before{content:"";position:absolute;left:12px;top:26px;bottom:0;width:2px;background:var(--party-line)}
+.ev6:last-child::before{display:none}
+.dot{width:26px;height:26px;border-radius:50%;background:var(--party);border:2px solid var(--party-line);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.ev6 .t{font-weight:700}
+.ev6 .docs{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.docchip{font-size:13.5px;border:1.5px solid var(--doc-line);background:var(--doc);border-radius:6px;padding:1px 9px}
+.docchip.none{border-style:dashed;background:transparent;color:var(--muted)}
+</style>
+
+<div class="wrap">
+  <h1>理解业务的六个方法</h1>
+  <p class="lede">图版。能点的地方点一下：钱条上的一段、链条上的一环、上面那排名字。</p>
+
+  <!-- 1 -->
+  <h2><span class="no">1</span>守恒式</h2>
+  <p class="how">一笔钱的去向写成一条，每一段都要说得出到哪去了，加起来一分不差。</p>
+  <div class="panel">
+    <div style="font-size:14px;color:var(--muted)">Sarah 第 3 季，政府批下来 $1,814.79，去了哪</div>
+    <div class="bar" id="bar"></div>
+    <div class="legend" id="legend"></div>
+    <div class="cap" id="barcap">点钱条上的一段，看它是什么。</div>
+  </div>
+  <p class="why">这条就是模型里的规则：哪一段对不上，式子就不平，模型师过不去。</p>
+
+  <!-- 2 -->
+  <h2><span class="no">2</span>拿掉它会怎样</h2>
+  <p class="how">点一环把它拿掉，看后面哪些接不上、谁吃亏。</p>
+  <div class="panel">
+    <div class="chain" id="chain"></div>
+    <div class="msg" id="chainmsg">点上面任意一环。</div>
+    <button class="reset" id="chainreset" type="button">全部放回去</button>
+  </div>
+  <p class="why">一个概念为什么存在，拿掉它一看就清楚；拿掉了什么都不断的，多半不该有。</p>
+
+  <!-- 3 -->
+  <h2><span class="no">3</span>时间线</h2>
+  <p class="how">Sarah 的事和所有期限摆在一根轴上。横条是一段期限，圆点是一件事。</p>
+  <div class="panel">
+    <svg id="gantt" role="img" aria-label="Sarah 从分到资金到第 4 季报完期限的时间线"></svg>
+    <div class="cap" id="ganttcap">点一根横条或一个圆点。</div>
+    <div class="legend" style="grid-template-columns:auto 1fr;margin-top:8px" id="ganttlegend"></div>
+  </div>
+  <p class="why">看得出服务方在赶什么：56 天里要签协议、交通知；每一季结束，60 天里要报完。</p>
+
+  <!-- 4 -->
+  <h2><span class="no">4</span>谁吃亏</h2>
+  <p class="how">出了错，亏在谁身上；规矩就是为了不让他亏才有的。</p>
+  <div class="loss">
+    <div class="row"><div class="ev">一季花超了</div><div class="who"><span class="arrow">亏的是</span><span class="chip">服务方</span></div><div class="so">超出的政府不付，事先没跟老人谈好就是服务方自己担。<br>所以有：<b>服务方要盯着她这一季的预算</b></div></div>
+    <div class="row"><div class="ev">报错了、报多了</div><div class="who"><span class="arrow">亏的是</span><span class="chip">服务方</span></div><div class="so">政府拒付，付了的事后追回。<br>所以有：<b>每一次留证据，错了走改单</b></div></div>
+    <div class="row"><div class="ev">分到资金 56 天还没开始</div><div class="who"><span class="arrow">亏的是</span><span class="chip">老人</span></div><div class="so">资金被收回，要重新排队。<br>所以有：<b>接了人尽快签协议、交通知</b></div></div>
+    <div class="row"><div class="ev">两家同时给她服务、同时报</div><div class="who"><span class="arrow">亏的是</span><span class="chip">政府</span><span class="arrow">→ 追回后</span><span class="chip">服务方</span></div><div class="so">政府按多付追讨。<br>所以有：<b>一位老人只挂一家的一个网点</b></div></div>
+  </div>
+
+  <!-- 5 -->
+  <h2><span class="no">5</span>拿怪例子撞简单的故事</h2>
+  <p class="how">先用 Sarah 把「老人的基金」立起来，再换人撞一下，看它长出了什么。</p>
+  <div class="panel">
+    <div class="tabs" id="tabs" role="group" aria-label="换一位老人"></div>
+    <svg id="fund" viewBox="0 0 340 200" role="img" aria-label="这位老人的基金由哪几笔构成"></svg>
+    <div class="grow" id="growmsg"></div>
+  </div>
+
+  <!-- 6 -->
+  <h2><span class="no">6</span>事件当骨架</h2>
+  <p class="how">蓝圈是发生的事，黄条是它留下的凭据。文件几十种，事件就这么几件。</p>
+  <div class="panel track" id="track"></div>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id)
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim()
+  const money = (n) => '$' + n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  // 1 守恒
+  const parts = [
+    { k: '用掉的', v: 513.40, c: '--s1', d: '三次服务，做了、记下了，报上去政府核过就从这里扣。' },
+    { k: '带进第 4 季', v: 1000, c: '--s3', d: '没花完的带进下一季，上限是 $1,000 和这一季能花的一成里大的那个。' },
+    { k: '没带走', v: 119.91, c: '--s4', d: '超过上限的那一截，不再归她。' },
+    { k: '留给护理管理', v: 181.48, c: '--s2', d: '每季先留一成，合进网点的护理管理池子，不归她花在服务上。' },
+  ]
+  const total = parts.reduce((s, p) => s + p.v, 0)
+  parts.forEach((p) => {
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.style.flex = String(p.v)
+    b.style.background = 'var(' + p.c + ')'
+    b.setAttribute('aria-label', p.k + ' ' + money(p.v))
+    b.onclick = () => { $('barcap').innerHTML = '<b style="color:var(--ink)">' + p.k + ' ' + money(p.v) + '</b>（' + Math.round(p.v / total * 100) + '%）：' + p.d }
+    $('bar').appendChild(b)
+    $('legend').insertAdjacentHTML('beforeend', '<div><span class="sw" style="background:var(' + p.c + ')"></span>' + p.k + '</div><div class="r">' + money(p.v) + '</div>')
+  })
+  $('legend').insertAdjacentHTML('beforeend', '<div class="tot">加起来</div><div class="tot r">' + money(total) + '</div>')
+
+  // 2 拿掉
+  const links = [
+    { k: '决定通知书', d: '没人说得出她该得多少，基金批不下来，后面一样也接不上。' },
+    { k: '支持计划', d: '不知道她能用哪些服务，协议没有东西可挑；做了没批的服务，政府不付。' },
+    { k: '服务协议', d: '每一次收多少没有依据，政府也只认跟她说定的价。' },
+    { k: '开始服务通知', d: '政府不往她名下放钱；分到资金 56 天内不交，资金收回，老人要重新排队。' },
+    { k: '服务记录', d: '做过的拿不出凭据，报不上去；部门来查，拿不出证据。' },
+    { k: '申报', d: '政府不会自己来问，做了的服务一分钱也要不回来。' },
+    { k: '政府付钱', d: '这是终点：前面每一环都接上了，钱才从她的基金里付到服务方手上。' },
+  ]
+  const chain = $('chain')
+  const btns = []
+  links.forEach((l, i) => {
+    if (i) { const s = document.createElement('div'); s.className = 'link'; chain.appendChild(s) }
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.innerHTML = '<span>' + l.k + '</span><span class="x">点一下拿掉</span>'
+    b.onclick = () => cut(i)
+    chain.appendChild(b); btns.push(b)
+  })
+  function cut(i) {
+    const kids = [...chain.children]
+    btns.forEach((b, j) => {
+      b.classList.toggle('gone', j === i)
+      b.classList.toggle('cut', j > i)
+      b.querySelector('.x').textContent = j === i ? '拿掉了' : j > i ? '接不上' : '点一下拿掉'
+    })
+    kids.forEach((el) => { if (el.classList.contains('link')) el.classList.toggle('cut', kids.indexOf(el) > kids.indexOf(btns[i]) - 1) })
+    $('chainmsg').innerHTML = '<b>拿掉「' + links[i].k + '」：</b>' + links[i].d + (i < links.length - 1 ? '<br><span style="color:var(--muted);font-size:14px">后面 ' + (links.length - 1 - i) + ' 环接不上。</span>' : '')
+  }
+  $('chainreset').onclick = () => {
+    btns.forEach((b) => { b.classList.remove('gone', 'cut'); b.querySelector('.x').textContent = '点一下拿掉' })
+    chain.querySelectorAll('.link').forEach((el) => el.classList.remove('cut'))
+    $('chainmsg').textContent = '点上面任意一环。'
+  }
+
+  // 3 时间线
+  const day = (m, d) => (Date.UTC(2026, m - 1, d) - Date.UTC(2026, 1, 23)) / 864e5
+  const D0 = 0, D1 = day(8, 29)
+  const W = 340, L = 8, R = 332, x = (t) => L + (t - D0) / (D1 - D0) * (R - L)
+  const lanes = [
+    { k: '找服务方、开始服务：分到资金起 56 天', a: day(2, 23), b: day(4, 20), c: '--s1', d: '2 月 23 日分到资金起 56 天，到 4 月 20 日。她 3 月 9 日就开始了，过关。' },
+    { k: '第 3 季（她从 3 月 9 日起）', a: day(3, 9), b: day(3, 31), c: '--s3', d: '第 3 季的钱从她开始服务那天按天算，3 月 9 日到 31 日，23 天。' },
+    { k: '报完第 3 季：季末后 60 天', a: day(4, 1), b: day(5, 30), c: '--s2', d: '第 3 季做的服务，最晚 5 月 30 日报完。她 4 月 14 日就报了。' },
+    { k: '第 4 季', a: day(4, 1), b: day(6, 30), c: '--s3', d: '4 月 1 日到 6 月 30 日，整季 91 天；5 月 12 日余下四成到位，从那天起按天补。' },
+    { k: '报完第 4 季：季末后 60 天', a: day(7, 1), b: day(8, 29), c: '--s2', d: '第 4 季做的服务，最晚 8 月 29 日报完。' },
+  ]
+  const events = [
+    { n: 1, t: day(2, 23), d: '2 月 23 日　分到资金，先拿六成' },
+    { n: 2, t: day(3, 9), d: '3 月 3 日建档；3 月 9 日签协议、当天开始服务、通知政府（冷静期当天到头）' },
+    { n: 3, t: day(4, 14), d: '4 月 14 日　报第 3 季（三次服务）' },
+    { n: 4, t: day(4, 21), d: '4 月 21 日　政府付了 $243.40，一次园艺没被认' },
+    { n: 5, t: day(5, 12), d: '5 月 12 日　余下四成到位' },
+  ]
+  const ns = 'http://www.w3.org/2000/svg'
+  const g = $('gantt')
+  const laneH = 40, top = 54, H = top + lanes.length * laneH + 22
+  g.setAttribute('viewBox', '0 0 ' + W + ' ' + H)
+  const el = (tag, attrs, txt) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (txt != null) e.textContent = txt; g.appendChild(e); return e }
+  // 月份网格
+  ;[[3, 1], [4, 1], [5, 1], [6, 1], [7, 1], [8, 1]].forEach(([m, d]) => {
+    const xx = x(day(m, d))
+    el('line', { x1: xx, x2: xx, y1: top - 8, y2: H - 18, stroke: css('--line'), 'stroke-width': 1 })
+    el('text', { x: xx + 3, y: H - 6, 'font-size': 10.5, fill: css('--muted') }, m + ' 月')
+  })
+  // 事件圆点
+  events.forEach((e, i) => {
+    const cy = i % 2 ? 34 : 14
+    el('line', { x1: x(e.t), x2: x(e.t), y1: cy, y2: top - 6, stroke: css('--line'), 'stroke-width': 1 })
+    const c = el('circle', { cx: x(e.t), cy, r: 9, fill: css('--party'), stroke: css('--party-line'), 'stroke-width': 1.5, style: 'cursor:pointer' })
+    const tx = el('text', { x: x(e.t), y: cy + 4, 'font-size': 11, 'text-anchor': 'middle', fill: css('--ink'), 'font-weight': 700, style: 'cursor:pointer' }, e.n)
+    ;[c, tx].forEach((n) => n.addEventListener('click', () => { $('ganttcap').textContent = '事 ' + e.n + '：' + e.d }))
+  })
+  // 横条
+  lanes.forEach((ln, i) => {
+    const y = top + i * laneH
+    el('text', { x: L, y: y + 10, 'font-size': 11.5, fill: css('--ink') }, ln.k)
+    const r = el('rect', { x: x(ln.a), y: y + 16, width: Math.max(4, x(ln.b) - x(ln.a)), height: 12, rx: 4, fill: css(ln.c), style: 'cursor:pointer' })
+    r.addEventListener('click', () => { $('ganttcap').textContent = ln.d })
+  })
+  // 3 月 9 日开始服务那一刻：落在 56 天里面
+  const xs = x(day(3, 9))
+  el('line', { x1: xs, x2: xs, y1: 43, y2: top + 28, stroke: css('--accent'), 'stroke-width': 1.5, 'stroke-dasharray': '3 3' })
+  $('ganttlegend').innerHTML = events.map((e) => '<div><span class="dot" style="width:20px;height:20px;font-size:11px;display:inline-flex">' + e.n + '</span></div><div style="font-size:13.5px">' + e.d + '</div>').join('')
+
+  // 5 怪例子
+  const people = {
+    Sarah: { parts: [{ k: '持续服务', s: '按季来', c: 'doc' }], grow: '立起来：老人的基金就是政府批给她的一笔钱，按季来。' },
+    Hiroshi: { parts: [{ k: '持续服务', s: '按季来', c: 'doc' }, { k: '辅助技术', s: '一次给，12 个月', c: 'doc' }, { k: '旧护理包', s: '没花完的', c: 'doc' }], grow: '长出：基金按用途分开，一种用途一笔，各花各的。' },
+    Sanjeeta: { parts: [{ k: '持续服务', s: '冻结', c: 'off' }, { k: '临终路径', s: '一次给，12 周', c: 'doc' }], grow: '长出：基金会被冻结。转去临终路径那段，持续服务那一笔不能动。' },
+    Georgios: { parts: [{ k: '恢复性照护', s: '一段一份，不按季', c: 'doc' }], grow: '长出：不是每笔钱都按季来。季度预算只是持续服务那一笔的样子。' },
+  }
+  const fund = $('fund')
+  function draw(name) {
+    const p = people[name]
+    fund.innerHTML = ''
+    const add = (tag, attrs, txt) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (txt != null) e.textContent = txt; fund.appendChild(e); return e }
+    add('rect', { x: 110, y: 8, width: 120, height: 40, rx: 20, fill: css('--party'), stroke: css('--party-line'), 'stroke-width': 1.5 })
+    add('text', { x: 170, y: 33, 'font-size': 14, 'text-anchor': 'middle', fill: css('--ink'), 'font-weight': 700 }, name + ' 的基金')
+    const n = p.parts.length, w = 96, gap = 12, tw = n * w + (n - 1) * gap, x0 = (340 - tw) / 2
+    p.parts.forEach((q, i) => {
+      const bx = x0 + i * (w + gap), off = q.c === 'off'
+      add('path', { d: 'M170 48 C170 80 ' + (bx + w / 2) + ' 80 ' + (bx + w / 2) + ' 112', fill: 'none', stroke: css(off ? '--faint' : '--doc-line'), 'stroke-width': 1.5, 'stroke-dasharray': off ? '4 4' : '' })
+      add('rect', { x: bx, y: 112, width: w, height: 62, rx: 8, fill: off ? 'none' : css('--doc'), stroke: css(off ? '--faint' : '--doc-line'), 'stroke-width': 1.5, 'stroke-dasharray': off ? '4 4' : '' })
+      add('text', { x: bx + w / 2, y: 138, 'font-size': 13.5, 'text-anchor': 'middle', fill: css(off ? '--muted' : '--ink'), 'font-weight': 700 }, q.k)
+      add('text', { x: bx + w / 2, y: 160, 'font-size': 11.5, 'text-anchor': 'middle', fill: css('--muted') }, q.s)
+      if (off) {
+        add('rect', { x: bx + w - 34, y: 100, width: 40, height: 20, rx: 10, fill: css('--paper'), stroke: css('--faint') })
+        add('text', { x: bx + w - 14, y: 114, 'font-size': 11, 'text-anchor': 'middle', fill: css('--muted') }, '冻结')
+      }
+    })
+    $('growmsg').textContent = p.grow
+    document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.n === name)))
+  }
+  Object.keys(people).forEach((name) => {
+    const b = document.createElement('button')
+    b.type = 'button'; b.dataset.n = name; b.textContent = name
+    b.onclick = () => draw(name)
+    $('tabs').appendChild(b)
+  })
+
+  // 6 事件
+  const evs = [
+    ['评估批了', ['决定通知书', '支持计划']],
+    ['分到资金', ['资金分配通知书']],
+    ['签了协议', ['服务协议']],
+    ['通知开始', ['开始服务通知']],
+    ['做了服务', ['服务记录']],
+    ['报上去', ['申报']],
+    ['政府付了', ['付款对账单']],
+    ['季末', [null]],
+  ]
+  $('track').innerHTML = evs.map(([t, ds], i) => '<div class="ev6"><div class="dot">' + (i + 1) + '</div><div><div class="t">' + t + '</div><div class="docs">'
+    + ds.map((d) => d ? '<span class="docchip">' + d + '</span>' : '<span class="docchip none">不留文件，只是没花完的带进下一季</span>').join('') + '</div></div></div>').join('')
+
+  function paint() { draw(document.querySelector('#tabs button[aria-pressed="true"]')?.dataset.n || 'Sarah') }
+  paint()
+  // 换主题时 SVG 里写死的颜色要重画
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => location.reload()) } catch (e) {}
+  new MutationObserver(() => location.reload()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+})()
+</script>

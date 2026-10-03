@@ -1,0 +1,179 @@
+<title>焦点：服务提供</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap">
+<style>
+:root{
+  --ground:#F5F8F9; --paper:#FFFFFF; --ink:#16242C; --muted:#5A6B74; --faint:#8A99A1;
+  --line:#D7E0E4; --accent:#1D5A72; --tint:#E6EFF2;
+  --party:#dbe9f6; --party-line:#4a78a6; --doc:#fff3c4; --doc-line:#b58a00;
+  --edge:#EEF1F3; --edge-line:#B8C4CA;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD; --faint:#6E7F87;
+    --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34;
+    --party:#1E3446; --party-line:#6E9CC8; --doc:#3A3216; --doc-line:#C9A23A;
+    --edge:#18232A; --edge-line:#3E4F58;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD; --faint:#6E7F87;
+  --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34;
+  --party:#1E3446; --party-line:#6E9CC8; --doc:#3A3216; --doc-line:#C9A23A;
+  --edge:#18232A; --edge-line:#3E4F58;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.75}
+.wrap{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:24px 64px}
+h1,h2{font-family:"Noto Serif SC","Songti SC",serif;text-wrap:balance;line-height:1.35}
+h1{font-size:24px;margin:0 0 6px}
+h2{font-size:18px;margin:34px 0 8px}
+p{margin:0 0 10px}
+.kicker{font-size:13px;letter-spacing:.06em;color:var(--accent);font-weight:700}
+.lede{color:var(--muted);font-size:15px}
+.one{background:var(--paper);border:2px solid var(--accent);border-radius:12px;padding:12px 14px;margin:14px 0 20px;font-size:16.5px}
+
+/* 边界 */
+.edges{display:grid;grid-template-columns:1fr;gap:10px}
+@media (min-width:640px){.edges{grid-template-columns:1fr 1fr 1fr}}
+.edge{background:var(--edge);border:1.5px dashed var(--edge-line);border-radius:12px;padding:10px 12px}
+.edge .t{font-size:13px;color:var(--muted);letter-spacing:.04em;margin-bottom:4px}
+.edge .t b{color:var(--ink)}
+.edge ul{margin:0;padding-left:0;list-style:none}
+.edge li{margin:4px 0;font-size:15px}
+.edge li .st{display:block;font-size:13.5px;color:var(--muted)}
+.chip{display:inline-block;font-size:13px;border-radius:5px;padding:0 8px;border:1.5px solid var(--doc-line);background:var(--doc);margin-right:4px;vertical-align:1px}
+.chip.p{border-radius:999px;border-color:var(--party-line);background:var(--party)}
+.chip.g{border-style:dashed;border-color:var(--edge-line);background:transparent;color:var(--muted)}
+
+/* 焦点图 */
+figure{margin:12px 0 6px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px;overflow-x:auto}
+figcaption{font-size:13.5px;color:var(--muted);margin-top:8px}
+pre.mermaid{margin:0;text-align:center;background:transparent;min-width:640px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13.5px;color:var(--muted);margin:6px 0 0}
+.legend span::before{content:"";display:inline-block;width:14px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1.5px solid}
+.legend .lp::before{background:var(--party);border-color:var(--party-line);border-radius:999px}
+.legend .ld::before{background:var(--doc);border-color:var(--doc-line)}
+
+/* 背景 */
+.bg{display:grid;gap:10px}
+.rule{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.rule .on{font-size:12.5px;color:var(--accent);font-weight:700;letter-spacing:.04em}
+.rule .r{margin:4px 0 2px}
+.rule .src{font-size:13px;color:var(--muted)}
+.rule.ours{border-left:4px solid var(--doc-line)}
+.rule.ours .on{color:var(--doc-line)}
+
+/* 术语 */
+table{border-collapse:collapse;width:100%;background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:14.5px}
+td{padding:8px 12px;border-top:1px solid var(--line);vertical-align:top}
+tr:first-child td{border-top:0}
+td.k{font-weight:700;white-space:nowrap}
+td .en{color:var(--muted);font-size:13px}
+</style>
+
+<div class="wrap">
+  <div class="kicker">焦点 · 第 ③ 站</div>
+  <h1>服务提供</h1>
+  <p class="lede">老人在家接受服务，每一次做了的记下来。钱在这一段里从「放在她名下」变成「被做过的服务占住、等着报」。</p>
+  <div class="one">政府只为真做了的服务付钱。所以一次服务做完，必须留下一条记录和证据；它往回是做过的凭据，往前就是账单上的一行。</div>
+
+  <h2>边界：从哪来，到哪去，旁边有什么</h2>
+  <div class="edges">
+    <div class="edge">
+      <div class="t">← 从上一站带进来的（<b>② 接收</b>）</div>
+      <ul>
+        <li><span class="chip">07 服务协议</span><span class="st">说定做哪几样、每样多少钱；每一次服务照它取价</span></li>
+        <li><span class="chip">09 季度预算</span><span class="st">她这一季最多能用多少；这一段里一笔一笔被占住</span></li>
+        <li><span class="chip">10 护理管理资金池</span><span class="st">每位老人留的一成合在网点上；护理管理从这里出</span></li>
+      </ul>
+    </div>
+    <div class="edge" style="border-color:var(--accent);border-style:solid">
+      <div class="t"><b>这一站</b></div>
+      <ul>
+        <li><span class="chip">11 服务记录</span><span class="chip">12 报销申请</span><span class="chip">13 护理管理记录</span><span class="st">三样都是「做了、记下来」；钱从前两样身上过老人的基金，第三样过网点的池子</span></li>
+      </ul>
+    </div>
+    <div class="edge">
+      <div class="t">交给下一站的（<b>④ 要钱</b>）→</div>
+      <ul>
+        <li><span class="chip">15 申报</span><span class="st">批了的服务记录、护理管理记录，一条一行攒成申报；政府核过才真的从她名下扣</span></li>
+      </ul>
+      <div class="t" style="margin-top:8px">旁边碰到、这里不展开</div>
+      <ul>
+        <li><span class="chip g">14 照护记录</span><span class="st">不动钱；护理管理写的做了什么就是一条</span></li>
+        <li><span class="chip g">照护计划</span><span class="st">服务方跟她定的每周做什么；一期还没做</span></li>
+        <li><span class="chip g">价目表</span><span class="st">协议上的价从它来，签协议那一站的事</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>焦点图：几方靠哪几样东西接起来</h2>
+  <figure>
+<pre class="mermaid">
+flowchart LR
+  P(["老人 Sarah<br/>女儿 Emma"])
+  N["照护伙伴 Noam<br/>（西区网点）"]
+  W["上门工作者<br/>（服务方自己的人）"]
+  T["关联服务方<br/>Westside Garden Care"]
+  S["供应商<br/>West Community Pharmacy"]
+  O["财务 Olivia<br/>（总部）"]
+  SA["Services Australia<br/>（保管她名下的钱、网点的护理管理账户）"]
+  D["卫生部"]
+  SR[["11 服务记录"]]
+  CMR[["13 护理管理记录"]]
+  RC[["12 报销申请（收据）"]]
+  INV[["发票、交付确认"]]
+
+  W -- "1 上门做事" --> P
+  T -- "1 上门做事" --> P
+  W -- "2 开发票、留上门记录" --> INV
+  T -- "2 开发票、完工照片" --> INV
+  N -- "3 录一条，照协议取价" --> SR
+  INV -- "3 附在上面" --> SR
+  SR -- "4 交给财务" --> O
+  O -. "5 对着发票批了算用了，对不上退回改" .-> SR
+  S -- "6 她自己买东西、付钱" --> P
+  P -- "7 交收据照片" --> RC
+  N -- "8 看过、挑定物品" --> RC
+  RC -- "8 录成她名下的一条" --> SR
+  N -- "9 每月至少一次直接联系" --> P
+  N -- "10 记一条" --> CMR
+  CMR -- "11 交给财务批，批了算从池子里用了" --> O
+  SR -. "12 下一站攒成申报，政府核过才从她名下扣" .-> SA
+  CMR -. "12 下一站攒成申报，政府核过才从池子扣" .-> SA
+  D -. "来查时拿得出" .-> INV
+
+  classDef party fill:#dbe9f6,stroke:#4a78a6,color:#16242c
+  classDef item fill:#fff3c4,stroke:#b58a00,color:#16242c
+  class P,N,W,T,S,O,SA,D party
+  class SR,CMR,RC,INV item
+</pre>
+    <figcaption>编号是先后：1–5 上门服务的一趟，6–8 她自己先买东西的一趟，9–11 护理管理的一趟，12 是下一站的事。虚线是往回的或不在这一站发生的。第 4、5、11 步的财务那一道是这家服务方的做法，手册里服务方记下就攒着去报。</figcaption>
+  </figure>
+  <div class="legend"><span class="lp">各方</span><span class="ld">东西</span></div>
+
+  <h2>背景：这张图背后的业务规矩</h2>
+  <p class="lede">每条对着图上的几条线。标「这家服务方的做法」的不是手册的规矩。</p>
+  <div class="bg">
+    <div class="rule"><div class="on">线 1 · 谁上门</div><div class="r">服务方可以自己做，也可以请第三方替它做。第三方分三种：替它做服务的机构叫关联服务方（转包、劳务派遣、中介）；由它直接或经关联服务方请来的个人叫第三方工作者；只卖东西、不做服务的叫供应商。不管谁做，服务的质量和合规责任都在服务方。用了关联服务方要报给养老质量与安全委员会。</div><div class="src">手册 §10.6、§10.6.1、§11.5</div></div>
+    <div class="rule"><div class="on">线 2 · 留什么证据</div><div class="r">每一次交付都要留得住两样证据：这一次确实做了（交付确认），价是跟老人约定过的。交付确认可以是照护记录、签到签退、老人家里的签到本或二维码、完工照片；护理、专职医疗、营养耗材、送餐这几样一张发票也算。证据不用交上去，但部门来查时要拿得出。</div><div class="src">手册 §10.5、§16.6</div></div>
+    <div class="rule"><div class="on">线 3 · 一条记录写什么、价怎么来</div><div class="r">报给政府的每一行只写一位老人、一项服务、一天：单位、单价、数量、从她哪一份钱里扣、是不是第三方做的；按小时的只能报 15 分钟的倍数。价由服务方自己定，但收的不能超过协议上跟老人说定的价；可以按星期几、时段议不同的价。</div><div class="src">手册 §16.3、§10.3、§10.3.3.1</div></div>
+    <div class="rule ours"><div class="on">线 4、5、11 · 这家服务方的做法</div><div class="r">报出去之前，公司自己加了一道财务复核：照护伙伴录的每一条，财务对着发票看日子、时长、价，对上了批、对不上退回去改；护理管理记录也批，但不看发票。手册没有这一道，政府那边只认报上去的。所以这家公司自己账上，占住的钱分成「在等批」和「用了」两截。</div><div class="src">裁定第七十一批、第八十批、第八十一批</div></div>
+    <div class="rule"><div class="on">线 6–8 · 老人自己先买</div><div class="r">有些东西由老人自己买更方便，手册点名护理耗材、处方营养品：事先跟她谈好这样东西由她自己买、服务方报销，谈过的安排要留档；她付了钱交上收据，服务方把它当一次服务报给政府，再把钱还她。卖东西的店家就是这一次「第三方做的」里的第三方。</div><div class="src">手册 §10.7.1</div></div>
+    <div class="rule"><div class="on">线 9–11 · 护理管理</div><div class="r">照护伙伴替老人做的那部分事（跟她本人谈、替她规划、盯着别超支）政府另给钱：每位持续服务的老人每季从自己的钱里留一成，同一网点的合在一起放在网点的护理管理账户里。每个月至少跟每位老人直接联系一次、不少于 15 分钟；按 15 分钟一档逐次报。排班、派人、报申报这些不算护理管理。</div><div class="src">手册 §8.4、§8.4.2、§8.9、§8.10、§16.4.1</div></div>
+    <div class="rule"><div class="on">线 12 · 钱什么时候真的扣</div><div class="r">政府是先做后付：服务方做了服务、记下了，钱还在她名下没动；要到报上去、政府逐行核过，才从她名下扣、付到服务方手上。所以这一站结束时，她名下的钱只是「被占住了」。</div><div class="src">手册 §16.1、§16.5</div></div>
+  </div>
+
+  <h2>术语</h2>
+  <table>
+    <tr><td class="k">交付确认</td><td>这一次确实做了的证据<div class="en">confirmation of service delivery</div></td></tr>
+    <tr><td class="k">关联服务方</td><td>替服务方做服务的机构<div class="en">associated provider</div></td></tr>
+    <tr><td class="k">第三方工作者</td><td>不是服务方雇员、请来做服务的人<div class="en">third-party worker</div></td></tr>
+    <tr><td class="k">供应商</td><td>只卖东西、不做服务的商家<div class="en">supplier</div></td></tr>
+    <tr><td class="k">护理管理</td><td>照护伙伴替老人做的规划、沟通、盯预算<div class="en">care management</div></td></tr>
+    <tr><td class="k">报销</td><td>老人先付、服务方还钱、再向政府报<div class="en">reimbursement</div></td></tr>
+  </table>
+</div>
