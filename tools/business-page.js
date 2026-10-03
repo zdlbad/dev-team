@@ -1,5 +1,6 @@
 /**
- * 工作台「业务」页：业务分析写下的东西给人自己翻——business/ 下的全景与清单、导读/ 下的通读笔记、词汇表。
+ * 工作台「业务」页：业务分析写下的东西给人自己翻——business/ 下的框架、全景与清单、概念卡、导读/ 下的通读笔记、词汇表。
+ * 概念卡一张拼两份：business/概念/<nn>-<概念>.md（业务分析写本质、类比、例子）接上 model/概念/ 里同名的那份（模型师写细节）。
  * 左栏列文件和当前这一篇的目录，右边是正文；文件一变（角色正在写），页面自己刷新、停在原来的位置。
  * 每一段右边有 💬：人留言，业务分析用 tools/comments.js 作答，答复留在问题下面，人可以接着追问。
  * 每个模块另有一页「<模块>：三层」：一件事一行，从左到右是业务抽象 → 业务落地 → 应用行为，靠语句的「上一层」对齐；
@@ -19,7 +20,17 @@ const comments = require('./comments')
 
 const LAYER_FILES = ['abstraction.md', 'practice.md', 'behavior.md']
 
-const DIRS = [['business', '业务分析写的'], ['导读', '导读']]
+const DIRS = [['business', '业务分析写的'], ['business/聚焦', '聚焦'], ['导读', '导读']]
+
+// 概念卡：一张卡两份同名文件，前半张（本质、类比、例子）业务分析写在 business/概念/，细节模型师写在 model/概念/；页面拼成一张
+const CARD_DIRS = [['business', '概念'], ['model', '概念']]
+const CARD_KEY = 'business/概念/'
+
+function cardFiles(root) {
+  const names = new Set()
+  for (const d of CARD_DIRS) { try { for (const f of fs.readdirSync(path.join(root, ...d))) if (f.endsWith('.md')) names.add(f) } catch { /* 还没有这个目录 */ } }
+  return [...names].sort()
+}
 
 function docs(root) {
   const groups = []
@@ -28,6 +39,8 @@ function docs(root) {
     try { files = fs.readdirSync(path.join(root, dir)).filter((f) => f.endsWith('.md')).sort() } catch { /* 还没有这个目录 */ }
     if (files.length) groups.push({ name, items: files.map((f) => ({ key: dir + '/' + f, title: titleOf(path.join(root, dir, f)) || f })) })
     if (dir === 'business') {
+      const cards = cardFiles(root)
+      if (cards.length) groups.push({ name: '概念', items: cards.map((f) => ({ key: CARD_KEY + f, title: titleOf(path.join(root, 'business', '概念', f)) || f.replace(/\.md$/, '').replace(/^\d+-/, '') })) })
       const mods = modules(root)
       if (mods.length) groups.push({ name: '按模块看三层', items: mods.map((m) => ({ key: 'layers/' + m, title: m + '：三层' })) })
     }
@@ -60,6 +73,10 @@ function stamp(root) {
   for (const [dir] of DIRS) {
     see(path.join(root, dir))
     try { for (const f of fs.readdirSync(path.join(root, dir))) see(path.join(root, dir, f)) } catch { /* 没有这个目录 */ }
+  }
+  for (const d of CARD_DIRS) {
+    see(path.join(root, ...d))
+    try { for (const f of fs.readdirSync(path.join(root, ...d))) see(path.join(root, ...d, f)) } catch { /* 没有这个目录 */ }
   }
   for (const m of modules(root)) {
     see(path.join(root, 'business', m))
@@ -191,6 +208,24 @@ function layersView(root, mod) {
   return { html, outline, wide: true }
 }
 
+/** 一张概念卡：前半张照业务分析写的，细节接在后面；哪一半还没写，就说一句等谁写 */
+function cardView(root, file) {
+  const half = (dir) => {
+    const p = path.join(root, dir, '概念', file)
+    try { return { rel: dir + '/概念/' + file, text: fs.readFileSync(p, 'utf8'), mt: fs.statSync(p).mtime } } catch { return null }
+  }
+  const front = half('business'), detail = half('model')
+  const a = front ? render(front.text) : { html: '<h1>' + esc(file.replace(/\.md$/, '').replace(/^\d+-/, '')) + '</h1><p class="meta">前半张（本质、类比、例子）业务分析还没写。</p>', outline: [] }
+  // 两份各自从 h-0 编目录号，细节那一份换个前缀，免得左栏目录跳错
+  const b = detail ? render(detail.text) : { html: '<p class="meta">细节还没写：模型师建模时补上。</p>', outline: [] }
+  b.html = b.html.replace(/ id="h-(\d+)"/g, ' id="h-m$1"')
+  b.outline = b.outline.map((o) => ({ ...o, id: o.id.replace(/^h-/, 'h-m') }))
+  const when = (h) => (h ? ' · 最后改动 ' + esc(clock.date(h.mt) + ' ' + clock.hm(h.mt)) : '')
+  const meta = '<p class="meta"><code>' + CARD_KEY + esc(file) + '</code> 业务分析写' + when(front)
+    + ' ｜ <code>model/概念/' + esc(file) + '</code> 模型师写细节' + when(detail) + '</p>'
+  return { html: meta + a.html + '<hr>' + b.html, outline: [...a.outline, ...b.outline] }
+}
+
 function page(root, doc) {
   const groups = docs(root)
   const all = groups.flatMap((g) => g.items)
@@ -199,6 +234,7 @@ function page(root, doc) {
   let body
   if (cur.key === 'glossary') body = glossary(root)
   else if (cur.key.startsWith('layers/')) body = layersView(root, cur.key.slice('layers/'.length))
+  else if (cur.key.startsWith(CARD_KEY)) body = cardView(root, cur.key.slice(CARD_KEY.length))
   else {
     const p = path.join(root, cur.key)
     const r = render(fs.readFileSync(p, 'utf8'))

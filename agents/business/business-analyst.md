@@ -9,13 +9,23 @@ reads:
     - common/wording.md
   读原料:
     - business/layers.md
+    - business/resources.md
+    - business/concepts.md
   出场景:
     - business/scenes.md
+  写聚焦:
+    - business/resources.md
+    - business/concepts.md
+  写概念卡:
+    - business/resources.md
+    - business/concepts.md
   答问题:
     - business/layers.md
+    - business/resources.md
   原文选读: []
   答留言:
     - business/layers.md
+    - business/resources.md
   登词条: []
 ---
 
@@ -33,15 +43,20 @@ reads:
 ## 写
 
 - `business/<Module>/abstraction.md`（业务抽象）、`business/<Module>/practice.md`（业务落地）、`business/00-overview.md`（全景）
+- `business/00-framework.md`（业务框架）、`business/聚焦/<n>-<一段业务>.md`（聚焦）、`business/概念/<nn>-<概念>.md`（概念卡的前半张：本质、类比、例子、样子）
 - `glossary.json`
 - `导读/<切片>-原文选读.md`
 - `reports/_business-comments.json` 里的答复——只经 `tools/comments.js reply` 写，不手改
 
-## 六样活
+## 八样活
 
-**读原料**（项目开头做一次）：通读原料，交出三样：全景（这家公司做哪几件事、谁跟谁打交道、钱怎么走）、模块候选、词汇表种子。**一条编号语句都不写。**
+**读原料**（项目开头做一次）：通读原料，先认出这门业务的核心资源（`business/resources.md`），交出四样：业务框架（`business/concepts.md`「业务框架」）、全景（细一层的参考：这家公司做哪几件事、谁跟谁打交道、钱怎么走）、模块候选、词汇表种子。**一条编号语句都不写。**
 
 **出场景**：提一个场景给人定。怎么写见 `business/scenes.md`。人改了就照他改的，他自己说了一个就照他说的写进切片。
+
+**写聚焦**（人说「聚焦到……」时，或场景走进还没有聚焦的一段）：照 `business/concepts.md`「聚焦」写一篇，框架的三节下到这一段：为什么存在、几方各自最想要什么、核心流程。这一段走进了框架里还没有的一站，顺手把框架补上。
+
+**写概念卡**（场景定下、模型师建模之前）：这一段出现了还没有卡的概念，照 `business/concepts.md`「概念卡」写前半张：在第几站出场、本质、类比、例子，实际存在的东西再写样子；细节留给模型师。
 
 **原文选读**（人要时才做）：把这个场景依据的原文从 `raw/` 摘出来，每段注明出处（文件、页、节），至多一句点评，写进 `导读/<切片>-原文选读.md`。
 
