@@ -1,0 +1,203 @@
+<title>居家养老全图</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap">
+<style>
+:root{
+  --ground:#F5F8F9; --paper:#FFFFFF; --ink:#16242C; --muted:#5A6B74; --faint:#9AA8AF;
+  --line:#D7E0E4; --accent:#1D5A72; --tint:#E6EFF2;
+  --party:#dbe9f6; --party-line:#4a78a6; --doc:#fff3c4; --doc-line:#b58a00;
+  --hull:#1D5A72; --key:#C0392B; --keybg:#FBE9E7; --vo:#E3F1E6; --vo-line:#4E8A5E;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD; --faint:#5E6E76;
+    --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34;
+    --party:#1E3446; --party-line:#6E9CC8; --doc:#3A3216; --doc-line:#C9A23A;
+    --hull:#7FC0D6; --key:#F08C84; --keybg:#3A1F1C; --vo:#1E3324; --vo-line:#7FBF8E;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD; --faint:#5E6E76;
+  --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34;
+  --party:#1E3446; --party-line:#6E9CC8; --doc:#3A3216; --doc-line:#C9A23A;
+  --hull:#7FC0D6; --key:#F08C84; --keybg:#3A1F1C; --vo:#1E3324; --vo-line:#7FBF8E;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.7}
+.wrap{max-width:900px;margin:0 auto;padding-inline:16px;padding-block:20px 60px}
+h1{font-family:"Noto Serif SC","Songti SC",serif;font-size:23px;margin:0 0 4px}
+.lede{color:var(--muted);font-size:14.5px;margin:0 0 12px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;position:sticky;top:env(safe-area-inset-top,0px);background:var(--ground);padding:6px 0;z-index:2}
+.tabs button{font:inherit;font-size:14px;border:1.5px solid var(--party-line);background:var(--paper);color:var(--ink);border-radius:999px;padding:4px 13px;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--paper);font-weight:700}
+.tabs.fine{position:static;padding-top:0;margin-top:-4px}
+.tabs.fine button{font-size:13px;border-color:var(--line);color:var(--muted);padding:2px 10px}
+.tabs.fine button[aria-pressed="true"]{color:var(--paper);border-color:var(--accent)}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:8px}
+svg{display:block;width:100%;height:auto}
+svg text{font-family:"Noto Sans SC","PingFang SC",sans-serif;pointer-events:none}
+.n{cursor:pointer}
+.info{margin-top:10px;background:var(--tint);border-radius:10px;padding:10px 12px;font-size:15px;min-height:3.4em}
+.info b{color:var(--accent)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13.5px;color:var(--muted);margin:8px 0 0}
+.legend span::before{content:"";display:inline-block;width:14px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1.5px solid}
+.legend .lp::before{background:var(--party);border-color:var(--party-line);border-radius:999px;width:12px;height:12px}
+.legend .ld::before{background:var(--doc);border-color:var(--doc-line)}
+.legend .lh::before{background:transparent;border-color:var(--hull);border-style:dashed}
+.note{font-size:13.5px;color:var(--muted);margin-top:10px}
+.ex{border-collapse:collapse;width:100%;margin-top:8px;font-size:14px;background:var(--paper);border-radius:8px;overflow:hidden}
+.ex caption{text-align:left;font-size:12.5px;color:var(--muted);padding:0 0 4px}
+.ex td{padding:5px 10px;border-top:1px solid var(--line);vertical-align:top}
+.ex td:first-child{color:var(--muted);white-space:nowrap;width:1%}
+.legend .lk::before{background:var(--keybg);border-color:var(--key)}
+.legend .lv::before{background:var(--vo);border-color:var(--vo-line);border-radius:999px;width:11px;height:11px}
+</style>
+
+<div class="wrap">
+  <h1>居家养老全图</h1>
+  <p class="lede">所有责任方和东西都在这一张上，从左上到右下是故事的先后。第一排是三大段，第二排再细分成九小段；点一个就框出来细看，框外的变淡。点图上任一个人或东西，看它一句话。</p>
+  <div class="tabs" id="tabs" role="group" aria-label="三段"></div>
+  <div class="tabs fine" id="tabs2" role="group" aria-label="细一层"></div>
+  <div class="panel">
+    <svg id="map" role="img" aria-label="居家养老业务全图"></svg>
+    <div class="info" id="info">全图只画主线。</div>
+    <div class="legend"><span class="lp">责任方</span><span class="ld">东西</span><span class="lk">关键的东西</span><span class="lv">值（服务类型、分类、约定价）：小圆圈，自己跟别人连</span><span class="lh">焦点</span></div>
+  </div>
+  <p class="note">价目表、照护计划这两样没画：价目表是签协议那一站的底子，照护计划一期还没做。</p>
+</div>
+
+<script type="application/json" id="data">
+{"NW":128,"NH":40,"N":{"old":{"t":"p","l":"老人","x":275,"y":228,"st":[1,2,3],"d":"评估合格、选了服务方的人。钱记在她名下，不经她的手。"},"mac":{"t":"p","l":"My Aged Care","x":275,"y":60,"st":[1],"d":"政府的入口：登记、筛查、转介；服务方在它的门户上看她的资料。"},"ao":{"t":"p","l":"评估机构","x":625,"y":60,"st":[1],"d":"评估员上门评估，评估裁定人批她能不能得、得几级。"},"nod":{"t":"d","l":"01 决定通知书","x":625,"y":228,"st":[1],"d":"政府批了她什么：合不合格、第几级、有没有短期的钱。","key":1,"ex":[["寄给谁","Sarah"],["合不合格","合格，持续服务"],["分类","6"],["辅助技术与家居改造档位","没有"],["短期路径","没有"],["什么时候","2025 年 12 月评估后"]]},"sp":{"t":"d","l":"02 支持计划","x":800,"y":228,"st":[1],"d":"她需要哪些帮助、能用服务清单上的哪些服务。"},"dh":{"t":"p","l":"卫生部","x":450,"y":228,"st":[1,3],"d":"排队、分资金；可以来查证据和定价依据。"},"prov":{"t":"p","l":"服务方（照护伙伴）","x":450,"y":732,"st":[1,2,3],"d":"接她进来、签协议、安排服务、录记录。照护伙伴是接她的那个人。"},"fa":{"t":"d","l":"资金分配通知书","x":450,"y":144,"st":[1],"d":"钱分给她了，先六成还是全额；从这天起 56 天内要开始服务。"},"sa":{"t":"d","l":"07 服务协议","x":450,"y":480,"st":[1,2],"d":"老人和服务方的合同：做哪几样、每样多少钱。","key":1,"ex":[["老人","Sarah"],["签订日 / 开始服务日","3 月 9 日 / 3 月 9 日"],["复核日","2027 年 3 月 9 日"],["冷静期到","3 月 9 日（当天开始服务就到头）"],["服务","一般清洁、自理与日常活动协助、个人社交支持、园艺、直接交通、注册护士临床护理"],["一般清洁的价","平日白天 $106.70 / 小时，周六 $159.75，公共假期 $266.25"],["签好的文件","Sarah 服务协议 2026-03-09.pdf"]]},"sn":{"t":"d","l":"开始服务通知","x":625,"y":816,"st":[1],"d":"服务方告诉政府她哪天开始；不交，钱不进她名下。"},"sau":{"t":"p","l":"Services Australia","x":800,"y":900,"st":[1,3],"d":"替她保管钱；收申报、逐行核、从她名下扣、付钱。"},"wk":{"t":"p","l":"上门工作者","x":100,"y":228,"st":[2],"d":"服务方自己的人，上门做事。"},"ap":{"t":"p","l":"关联服务方","x":100,"y":564,"st":[2],"d":"替服务方做服务的机构，责任仍在服务方。"},"fund":{"t":"d","l":"05 老人的基金","x":800,"y":732,"st":[1,2,3],"d":"政府批给她的钱，存在她名下的账户里；服务方记着用了多少、还剩多少。","key":1,"ex":[["老人","Sarah"],["哪几笔","只有持续服务一笔，放在居家支持账户"],["第 3 季","$1,814.79（3 月 9 日到 3 月 31 日，按天算）"],["第 4 季","$7,180.27，5 月 12 日全额到位再补 $2,630.14"],["登记的服务类型","护理、个人护理、社交支持、交通、家务协助、居家维修"],["到 5 月 28 日","第 4 季用了 $1,534.15，在等批 $890.60，还剩 $8,295.22"]]},"qb":{"t":"d","l":"09 季度预算","x":800,"y":480,"st":[1,2,3],"d":"她这一季最多能用多少钱的服务。","ex":[["哪一季","第 4 季，4 月 1 日到 6 月 30 日"],["政府批的","$7,180.27 + 5 月 12 日补 $2,630.14 = $9,810.41"],["留一成给护理管理","− $981.04"],["第 3 季带进来的","+ $1,000.00"],["这一季能花在服务上的","$9,829.37"]]},"sup":{"t":"p","l":"供应商","x":100,"y":144,"st":[2],"d":"只卖东西、不做服务的商家。"},"inv":{"t":"d","l":"发票 · 交付确认","x":100,"y":396,"st":[2,3],"d":"这一次确实做了、价是约定的两样证据。"},"sr":{"t":"d","l":"11 服务记录","x":275,"y":648,"st":[2,3],"d":"一次服务做了的记录；往回是凭据，往前是账单上的一行。","key":1,"ex":[["老人","Sarah"],["哪天几点","5 月 19 日（周二）9:00"],["哪项服务","一般清洁 SERV-0001"],["做了多少 × 单价","2 小时 × $106.70 = $213.40"],["谁做的","服务方自己的上门工作者"],["从哪个账户出","居家支持账户"],["凭据","发票 JL-0519"],["谁录的、哪天","Noam，5 月 22 日"],["走到哪一步","已批（Olivia，5 月 25 日）；还没报"]]},"pool":{"t":"d","l":"10 护理管理资金池","x":625,"y":648,"st":[2,3],"d":"每位老人留的一成合在网点上；护理管理从这里出。"},"rc":{"t":"d","l":"12 报销申请","x":275,"y":480,"st":[2],"d":"她自己先买、交上来的收据；录成她名下的一条服务记录。","ex":[["老人","Sarah"],["在哪买的、哪天","West Community Pharmacy，5 月 25 日"],["买了什么、付了多少","处方润肤剂，$66.00"],["报在哪一项","护理耗材 · 处方润肤剂"],["报销安排","5 月 25 日 Noam 跟她本人谈好，口头同意"],["走到哪一步","已批（5 月 27 日）"]]},"cmr":{"t":"d","l":"13 护理管理记录","x":100,"y":816,"st":[2,3],"d":"照护伙伴替她做的一次护理管理；钱从网点的池子出。","ex":[["老人","Sarah"],["哪天、多久","5 月 12 日，30 分钟"],["直接还是间接","直接（电话）"],["做了什么","告诉她全额资金到位了；约好 6 月初上门看要不要加服务"],["谁做的","Noam"],["钱","0.5 小时 × $150 = $75，从西区资金池出"],["走到哪一步","已批（Olivia，5 月 21 日）"]]},"cn":{"t":"d","l":"14 照护记录","x":100,"y":732,"st":[2],"d":"她的要紧事；不动钱。"},"fin":{"t":"p","l":"财务","x":275,"y":900,"st":[2,3],"d":"对着证据批记录、攒成申报交上去、对政府的回复。"},"br":{"t":"d","l":"03 服务网点","x":100,"y":900,"st":[1,3],"d":"她挂在服务方的一个网点上；申报按网点交。"},"cl":{"t":"d","l":"15 申报","x":450,"y":1068,"st":[3],"d":"向政府要钱的请款单，批了的记录一条一行。","key":1,"ex":[["哪个网点","西区网点，NAPS 服务编号 18352"],["哪一季","第 3 季（服务日到 3 月 31 日）"],["几行、多少钱","3 行，合计 $513.40"],["谁交的、哪天","Olivia，4 月 14 日"],["政府付了","4 月 21 日，$243.40"],["被拒的","3 月 24 日园艺那一行，$270"]]},"co":{"t":"d","l":"17 结转","x":800,"y":396,"st":[3],"d":"季末没花完的带进下一季，有上限。"},"ps":{"t":"d","l":"付款对账单","x":625,"y":1068,"st":[3],"d":"政府付了多少、拒了哪行、共付多少，一行对一行。"},"va":{"t":"d","l":"16 改单","x":275,"y":1068,"st":[3],"d":"付过的一行报错了，按差额补付或追回。"},"st":{"t":"v","l":"服务类型","x":625,"y":480,"st":[1,2,3],"d":"服务清单上的一类服务。支持计划批了她能用哪几类，协议只能从这里挑，每一次服务、申报的每一行都写着是哪一类。"},"cls":{"t":"v","l":"分类","x":450,"y":312,"st":[1],"d":"持续服务分 1 到 8 级，决定通知书上写着；级别定了她一年多少钱。"},"price":{"t":"v","l":"约定价","x":100,"y":648,"st":[1,2],"d":"协议上跟她说定的价，一项服务分五档；每一次服务照服务日和钟点落进的那一档算钱。"}},"E":[["old","mac","申请",0,1],["mac","ao","转去评估",0,1],["ao","nod","",0,1],["ao","sp","",0,1],["nod","dh","排队",0,1],["dh","fa","分资金",0,1],["fa","old","",0,1],["old","prov","选了",0,1],["prov","br","挂在",0,0],["nod","fund","批了几样",0,0],["old","sa","签",0,1],["prov","sa","签",0,1],["sa","sn","",0,1],["sn","sau","",0,1],["sau","fund","每季放钱",0,1],["fund","qb","",0,1],["qb","pool","留一成",0,0],["sa","sr","取价",0,1],["wk","old","上门",0,1],["ap","old","上门",0,1],["wk","inv","",0,1],["ap","inv","",0,1],["inv","sr","附上",0,1],["prov","sr","录",0,0],["sup","old","买东西",0,1],["old","rc","交收据",0,1],["rc","sr","录成",0,1],["prov","cmr","记",0,1],["cmr","cn","",0,0],["sr","fin","批",0,1],["cmr","fin","批",0,1],["fin","cl","攒成",0,1],["br","cl","按网点",0,0],["cl","sau","交",0,1],["sau","fund","核过扣",1,1],["sau","ps","",1,1],["ps","fin","对账",0,0],["cl","va","错了",0,1],["qb","co","季末",0,1],["co","qb","",1,0],["dh","inv","来查",1,0],["fund","sr","从哪一笔出",0,0],["sp","sa","只能从这里挑",0,1],["sp","st","",0,0,1],["sa","st","",0,0,1],["fund","st","",0,0,1],["sr","st","",0,0,1],["cl","st","",0,0,1],["nod","cls","",0,0,1],["qb","cls","",0,0,1],["sa","price","",0,0,1],["sr","price","",0,0,1]]}
+</script>
+<script>
+(function () {
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim()
+  const ns = 'http://www.w3.org/2000/svg'
+  const svg = document.getElementById('map')
+  const info = document.getElementById('info')
+  const { N, E, NW, NH } = JSON.parse(document.getElementById('data').textContent)
+  const FOCI = [
+    { k: 0, l: '全图', ids: null, d: '全图只画主线。人形是责任方（一个人是个人，两个人是机构），黄方框是东西；三条底色带是三段。点一个焦点，那一段框起来、支线也亮出来。' },
+    { k: 1, l: '① 老人的注册', ids: Object.keys(N).filter((k) => N[k].st.includes(1)), d: '<b>① 老人的注册</b>：政府认定她该得、分到资金；她和服务方签了合同、通知政府她开始；钱才进她名下。' },
+    { k: 2, l: '② 服务提供', ids: Object.keys(N).filter((k) => N[k].st.includes(2)), d: '<b>② 服务提供</b>：上门做了、记下来、留证据；她名下的钱被做过的服务占住、等着报。' },
+    { k: 3, l: '③ 服务申报', ids: Object.keys(N).filter((k) => N[k].st.includes(3)), d: '<b>③ 服务申报</b>：批了的记录攒成申报交给政府；政府逐行核、从她名下扣、付给服务方；错了改单，季末结转。' },
+    // 细一层：一段里再分
+    { k: 11, fine: 1, l: '评估与决定', ids: ['old', 'mac', 'ao', 'nod', 'sp', 'cls', 'st'], d: '<b>评估与决定</b>：她去 My Aged Care 申请，评估机构上门评估、裁定人批，寄给她决定通知书和支持计划。' },
+    { k: 12, fine: 1, l: '排队与分资金', ids: ['nod', 'dh', 'fa', 'old'], d: '<b>排队与分资金</b>：批了持续服务的进优先级系统排队，轮到她卫生部分资金、寄资金分配通知书；从这天起 56 天内要开始服务。' },
+    { k: 13, fine: 1, l: '签协议与开始', ids: ['old', 'prov', 'sp', 'sa', 'sn', 'sau', 'fund', 'qb', 'st', 'price'], d: '<b>签协议与开始</b>：她选了服务方，两边签服务协议（只能从支持计划批的里挑），服务方交开始服务通知，Services Australia 才往她名下放钱。' },
+    { k: 14, fine: 1, l: '上门与证据', ids: ['old', 'wk', 'ap', 'inv', 'sa', 'sr', 'prov', 'st', 'price'], d: '<b>上门与证据</b>：服务方自己的人或关联服务方上门做事，留下发票和交付确认；照护伙伴照协议上的价录一条服务记录。' },
+    { k: 15, fine: 1, l: '她自己买东西', ids: ['sup', 'old', 'rc', 'sr', 'prov'], d: '<b>她自己买东西</b>：护理耗材这类东西她自己在店里买、交上收据，照护伙伴录成她名下的一条服务记录，报了以后把钱还她。' },
+    { k: 16, fine: 1, l: '护理管理', ids: ['prov', 'old', 'cmr', 'cn', 'pool', 'qb', 'fin'], d: '<b>护理管理</b>：照护伙伴每月至少跟她直接联系一次，每次记一条护理管理记录，写的做了什么就是她的照护记录；钱从网点的资金池出，池子是每位老人季度预算留的一成。' },
+    { k: 17, fine: 1, l: '财务批', ids: ['sr', 'cmr', 'inv', 'fin'], d: '<b>财务批</b>（这家服务方的做法）：财务对着发票批服务记录，对不上退回改；护理管理记录也批，不看发票。批了才攒进申报。' },
+    { k: 18, fine: 1, l: '申报与付款', ids: ['fin', 'cl', 'br', 'sau', 'fund', 'pool', 'ps', 'va', 'st'], d: '<b>申报与付款</b>：财务把批了的记录按网点攒成申报交给 Services Australia，它逐行核、从她的基金里扣、付给服务方、出付款对账单；错了改单。' },
+    { k: 19, fine: 1, l: '季末', ids: ['qb', 'co', 'fund', 'sau'], d: '<b>季末</b>：这一季没花完的带进下一季，有上限；Services Australia 在季末后第 61 天或申报收口后算。' },
+  ]
+  const W = 900, H = 1110
+  const hh = (n) => (n.t === 'p' ? 36 : n.t === 'v' ? 30 : NH / 2)
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H)
+  const el = (tag, a, txt, parent) => { const e = document.createElementNS(ns, tag); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; (parent || svg).appendChild(e); return e }
+  const defs = el('defs', {})
+  const m = el('marker', { id: 'ah', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, null, defs)
+  el('path', { d: 'M0 0 L10 5 L0 10 z', fill: css('--muted') }, null, m)
+  const gBand = el('g', {}), gHull = el('g', {}), gE = el('g', {}), gN = el('g', {})
+  ;[1, 2, 3].forEach((s) => {
+    const ys = Object.values(N).filter((n) => n.st[0] === s).map((n) => n.y - hh(n))
+    const ye = Object.values(N).filter((n) => n.st[n.st.length - 1] === s).map((n) => n.y + hh(n))
+    const y0 = Math.min(...ys) - 14, y1 = Math.max(...ye) + 14
+    el('rect', { x: 6, y: y0, width: W - 12, height: y1 - y0, rx: 10, fill: css('--tint'), opacity: s % 2 ? 0.55 : 0.3 }, null, gBand)
+    el('text', { x: 14, y: y0 + 16, 'font-size': 12, fill: css('--muted') }, ['① 老人的注册', '② 服务提供', '③ 服务申报'][s - 1], null, gBand)
+  })
+
+  function anchor(a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y
+    const s = Math.min(NW / 2 / (Math.abs(dx) || 1e-9), hh(a) / (Math.abs(dy) || 1e-9))
+    return [a.x + dx * s, a.y + dy * s]
+  }
+  const edges = E.map(([f, t, l, dash, s, v]) => {
+    const a = N[f], b = N[t]
+    const [x1, y1] = anchor(a, b), [x2, y2] = anchor(b, a)
+    const g = el('g', {}, null, gE)
+    if (v) { el('line', { x1, y1, x2, y2, stroke: css('--vo-line'), 'stroke-width': 1, opacity: 0.7, 'stroke-dasharray': '2 3' }, null, g); return { f, t, g, s: 0, v: 1 } }
+    el('line', { x1, y1, x2, y2, stroke: css('--muted'), 'stroke-width': 1.3, 'marker-end': 'url(#ah)', 'stroke-dasharray': dash ? '4 4' : '' }, null, g)
+    if (l) {
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2
+      el('rect', { x: mx - l.length * 5.6 - 3, y: my - 8, width: l.length * 11.2 + 6, height: 15, rx: 3, fill: css('--paper'), opacity: 0.92 }, null, g)
+      el('text', { x: mx, y: my + 4, 'font-size': 10.5, 'text-anchor': 'middle', fill: css('--muted') }, l, g)
+    }
+    return { f, t, g, s }
+  })
+  const nodes = {}
+  for (const k in N) {
+    const n = N[k]
+    const party = n.t === 'p'
+    const g = el('g', { class: 'n', transform: 'translate(' + (n.x - NW / 2) + ',' + (n.y - hh(n)) + ')' }, null, gN)
+    if (n.t === 'v') {
+      el('circle', { cx: NW / 2, cy: 16, r: 15, fill: css('--vo'), stroke: css('--vo-line'), 'stroke-width': 1.2 }, null, g)
+      el('text', { x: NW / 2, y: 50, 'font-size': 11.5, 'text-anchor': 'middle', fill: css('--muted') }, n.l, g)
+    } else if (party) {
+      // 人的图标：一个人是个人，两个人是机构
+      const org = ['mac', 'ao', 'dh', 'sau', 'ap', 'sup'].includes(k)
+      el('rect', { width: NW, height: 72, fill: css('--paper'), opacity: 0.001 }, null, g)
+      el('circle', { cx: NW / 2, cy: 24, r: 21, fill: css('--party'), stroke: css('--party-line'), 'stroke-width': 1.5 }, null, g)
+      const person = (cx, cy, r) => {
+        el('circle', { cx, cy: cy - r * 1.1, r: r * 0.55, fill: css('--party-line') }, null, g)
+        el('path', { d: 'M' + (cx - r) + ' ' + (cy + r * 0.9) + ' a' + r + ' ' + r + ' 0 0 1 ' + (2 * r) + ' 0 z', fill: css('--party-line') }, null, g)
+      }
+      if (org) { person(NW / 2 - 7, 24, 6.5); person(NW / 2 + 7, 24, 6.5) } else person(NW / 2, 24, 8.5)
+      el('text', { x: NW / 2, y: 62, 'font-size': 12.5, 'text-anchor': 'middle', fill: css('--ink'), 'font-weight': 500 }, n.l, g)
+    } else {
+      const kc = n.key ? '--key' : '--doc-line'
+      el('rect', { width: NW, height: NH, rx: 6, fill: css(n.key ? '--keybg' : '--doc'), stroke: css(kc), 'stroke-width': n.key ? 2 : 1.5 }, null, g)
+      el('rect', { x: 3, y: 3, width: NW - 6, height: NH - 6, rx: 4, fill: 'none', stroke: css(kc), 'stroke-width': 0.8, opacity: 0.6 }, null, g)
+      el('text', { x: NW / 2, y: NH / 2 + 4.5, 'font-size': 12.5, 'text-anchor': 'middle', fill: css('--ink'), 'font-weight': 600 }, n.l, g)
+      // 值对象：小标签挂在框的下沿
+      if (n.vo) {
+        let x = 6
+        n.vo.forEach((v) => {
+          const w = v.length * 10.5 + 10
+          el('rect', { x, y: NH - 2, width: w, height: 15, rx: 7.5, fill: css('--vo'), stroke: css('--vo-line'), 'stroke-width': 1 }, null, g)
+          el('text', { x: x + w / 2, y: NH + 9, 'font-size': 9.5, 'text-anchor': 'middle', fill: css('--ink') }, v, g)
+          x += w + 4
+        })
+      }
+    }
+    g.addEventListener('click', () => {
+      let h = '<b>' + n.l + '</b>　' + n.d + '　<span style="color:var(--muted);font-size:13px">出场：' + n.st.map((s) => '①②③'[s - 1]).join('') + '</span>'
+      info.innerHTML = h
+      info.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    })
+    nodes[k] = g
+  }
+  function hull(pts) {
+    pts = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1])
+    const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    const lo = [], up = []
+    for (const p of pts) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p) }
+    for (const p of pts.reverse()) { while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p) }
+    return lo.slice(0, -1).concat(up.slice(0, -1))
+  }
+  function focus(fo) {
+    gHull.innerHTML = ''
+    const ids = fo.ids
+    const inF = (k) => !ids || ids.includes(k)
+    for (const k in nodes) nodes[k].setAttribute('opacity', inF(k) ? 1 : 0.25)
+    edges.forEach((e) => { const on = inF(e.f) && inF(e.t); e.g.setAttribute('opacity', e.v ? (!ids ? 0.6 : on ? 0.9 : 0.08) : !ids ? (e.s ? 1 : 0) : on ? (e.s ? 1 : 0.55) : 0.08) })
+    if (ids) {
+      const P = 14, pts = []
+      ids.forEach((k) => { const n = N[k], h = hh(n); pts.push([n.x - NW / 2 - P, n.y - h - P], [n.x + NW / 2 + P, n.y - h - P], [n.x - NW / 2 - P, n.y + h + P], [n.x + NW / 2 + P, n.y + h + P]) })
+      const h = hull(pts)
+      el('path', { d: 'M' + h.map((p) => p.join(' ')).join(' L') + ' Z', fill: css('--hull'), 'fill-opacity': 0.06, stroke: css('--hull'), 'stroke-width': 2, 'stroke-dasharray': '7 5', 'stroke-linejoin': 'round' }, null, gHull)
+    }
+    info.innerHTML = fo.d
+    document.querySelectorAll('#tabs button, #tabs2 button').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.k === fo.k)))
+  }
+  const tabs = document.getElementById('tabs')
+  const tabs2 = document.getElementById('tabs2')
+  FOCI.forEach((fo) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.k = fo.k; b.textContent = fo.l; b.onclick = () => focus(fo); (fo.fine ? tabs2 : tabs).appendChild(b) })
+  focus(FOCI[0])
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => location.reload()) } catch (e) {}
+  new MutationObserver(() => location.reload()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+})()
+</script>

@@ -1,0 +1,170 @@
+<title>聚焦：服务记录</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap">
+<style>
+:root{
+  --ground:#F5F8F9; --paper:#FFFFFF; --ink:#16242C; --muted:#5A6B74; --faint:#9AA8AF;
+  --line:#D7E0E4; --accent:#1D5A72; --tint:#E6EFF2;
+  --party:#dbe9f6; --party-line:#4a78a6; --doc:#fff3c4; --doc-line:#b58a00;
+  --key:#C0392B; --keybg:#FBE9E7; --vo:#E3F1E6; --vo-line:#4E8A5E;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD; --faint:#5E6E76;
+    --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34;
+    --party:#1E3446; --party-line:#6E9CC8; --doc:#3A3216; --doc-line:#C9A23A;
+    --key:#F08C84; --keybg:#3A1F1C; --vo:#1E3324; --vo-line:#7FBF8E;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD; --faint:#5E6E76;
+  --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34;
+  --party:#1E3446; --party-line:#6E9CC8; --doc:#3A3216; --doc-line:#C9A23A;
+  --key:#F08C84; --keybg:#3A1F1C; --vo:#1E3324; --vo-line:#7FBF8E;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.7}
+.wrap{max-width:900px;margin:0 auto;padding-inline:16px;padding-block:20px 60px}
+h1{font-family:"Noto Serif SC","Songti SC",serif;font-size:23px;margin:0 0 4px}
+h2{font-family:"Noto Serif SC","Songti SC",serif;font-size:18px;margin:28px 0 8px}
+.lede{color:var(--muted);font-size:14.5px;margin:0 0 12px}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:8px}
+svg{display:block;width:100%;height:auto}
+svg text{font-family:"Noto Sans SC","PingFang SC",sans-serif;pointer-events:none}
+.n{cursor:pointer}
+.info{margin-top:8px;background:var(--tint);border-radius:10px;padding:10px 12px;font-size:15px;min-height:3em}
+.info b{color:var(--accent)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13.5px;color:var(--muted);margin:8px 4px 0}
+.legend span::before{content:"";display:inline-block;width:14px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1.5px solid}
+.legend .lp::before{background:var(--party);border-color:var(--party-line);border-radius:999px;width:12px}
+.legend .ld::before{background:var(--doc);border-color:var(--doc-line)}
+.legend .lv::before{background:var(--vo);border-color:var(--vo-line);border-radius:999px;width:11px;height:11px}
+.legend .lf::before{background:transparent;border-color:var(--faint);border-style:dashed}
+.life{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.st{background:var(--paper);border:1.5px solid var(--doc-line);border-radius:999px;padding:3px 12px;font-size:14.5px}
+.st.ours{border-style:dashed}
+.st.end{border-color:var(--key);background:var(--keybg)}
+.ar{color:var(--faint)}
+.face{display:grid;grid-template-columns:1fr;gap:10px}
+@media (min-width:640px){.face{grid-template-columns:1fr 1fr}}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.card .w{font-size:13px;color:var(--muted)}
+.card .t{font-weight:700;margin:2px 0 4px}
+.card p{margin:0;font-size:15px}
+.muted{color:var(--muted);font-size:14px}
+</style>
+
+<div class="wrap">
+  <h1>聚焦：服务记录</h1>
+  <p class="lede">以一样东西为中心，看它四周：它从哪来（左）、它凭什么算钱（上）、它往哪去（右）、谁动它（下）。离它两步远的画成虚框，只给个方向。点任一个看一句话。</p>
+
+  <div class="panel">
+    <svg id="map" viewBox="0 0 900 640" role="img" aria-label="以服务记录为中心的关系图"></svg>
+    <div class="info" id="info"><b>11 服务记录</b>　一次服务做了的记录：给谁、哪天、做的哪一项、做了多少、照协议值多少钱、谁做的、钱从她哪一笔出。往回是做过的凭据，往前是申报上的一行。</div>
+    <div class="legend"><span class="lp">责任方</span><span class="ld">东西</span><span class="lv">它带着的值</span><span class="lf">离它两步远</span></div>
+  </div>
+
+  <h2>它的一生</h2>
+  <div class="life">
+    <span class="st">上门做了</span><span class="ar">→</span>
+    <span class="st">记下来</span><span class="ar">→</span>
+    <span class="st ours">财务批</span><span class="ar">→</span>
+    <span class="st">攒进申报</span><span class="ar">→</span>
+    <span class="st end">政府核过，从她的基金里扣</span>
+  </div>
+  <p class="muted" style="margin-top:8px">虚线那一步是这家服务方的做法，手册里服务方记下就攒着去报。</p>
+
+  <h2>一物多面</h2>
+  <div class="face">
+    <div class="card"><div class="w">站在服务方这边</div><div class="t">服务记录</div><p>做过的一次服务，钱从她的基金里占住了一笔，等着去要。</p></div>
+    <div class="card"><div class="w">站在 Services Australia 那边</div><div class="t">申报上的一行</div><p>一位老人、一项服务、一天；它核过这一行，才从她名下扣、付钱。</p></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim()
+  const ns = 'http://www.w3.org/2000/svg'
+  const svg = document.getElementById('map')
+  const info = document.getElementById('info')
+  const el = (tag, a, txt, parent) => { const e = document.createElementNS(ns, tag); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; (parent || svg).appendChild(e); return e }
+  const NW = 136, NH = 42
+  // t: p 责任方 / d 东西；far: 离它两步远
+  const N = {
+    sr:   { t: 'd', key: 1, l: '11 服务记录', x: 450, y: 300, vo: ['服务类型', '约定价', '做了多少', '凭据'], d: '一次服务做了的记录：给谁、哪天、做的哪一项、做了多少、照协议值多少钱、谁做的、钱从她哪一笔出。往回是做过的凭据，往前是申报上的一行。' },
+    sa:   { t: 'd', key: 1, l: '07 服务协议', x: 450, y: 96, d: '它定了这一次能做哪一项、每单位多少钱；服务记录上的价就是照它带出来的。' },
+    fund: { t: 'd', key: 1, l: '05 老人的基金', x: 720, y: 140, d: '这一次的钱从她哪一笔出（持续服务的季度预算，或者别的用途的那一笔）；记下以后那笔钱就被占住了。' },
+    sp:   { t: 'd', far: 1, l: '02 支持计划', x: 220, y: 60, d: '两步远：它批了她能用哪几类服务，协议只能从里面挑，所以服务记录上的那一类最终要落在它里面。' },
+    inv:  { t: 'd', l: '发票 · 交付确认', x: 150, y: 220, d: '这一次确实做了、价是约定的两样证据，附在服务记录上；部门来查时拿得出。' },
+    wk:   { t: 'p', l: '上门工作者', x: 90, y: 330, d: '服务方自己的人，上门做事，留下上门记录或发票。' },
+    ap:   { t: 'p', l: '关联服务方', x: 230, y: 330, d: '替服务方做服务的机构，开来发票、完工照片；做了的照样记成一条服务记录，标「第三方做的」。' },
+    rc:   { t: 'd', l: '12 报销申请', x: 150, y: 470, d: '另一条来路：她自己先买、交上来的收据，录成她名下的一条服务记录，照收据上她付的价。' },
+    prov: { t: 'p', l: '照护伙伴', x: 450, y: 520, d: '把每一次录成一条服务记录；退回来的改了再交。' },
+    fin:  { t: 'p', l: '财务', x: 690, y: 370, d: '这家服务方的做法：对着发票批，对不上写明原因退回。批了才攒进申报。' },
+    cl:   { t: 'd', key: 1, l: '15 申报', x: 640, y: 470, d: '批了的服务记录一条一行攒成申报，一字不改报给政府。' },
+    sau:  { t: 'p', far: 1, l: 'Services Australia', x: 820, y: 590, d: '两步远：它核过申报上的这一行，才从她的基金里扣、付给服务方。' },
+    old:  { t: 'p', far: 1, l: '老人', x: 230, y: 580, d: '两步远：服务是做给她的，收据是她交的；钱从她名下出，可不经她的手。' },
+  }
+  const E = [
+    ['sa', 'sr', '照它取价、只能做它上面的'],
+    ['fund', 'sr', '钱从哪一笔出'],
+    ['sp', 'sa', '只能从这里挑', 1],
+    ['wk', 'inv', ''], ['ap', 'inv', ''],
+    ['inv', 'sr', '附上'],
+    ['rc', 'sr', '录成'],
+    ['prov', 'sr', '录'],
+    ['sr', 'fin', '财务批'],
+    ['sr', 'cl', '攒成一行'],
+    ['cl', 'sau', '交', 1],
+    ['sau', 'fund', '核过扣', 1],
+    ['old', 'rc', '交收据', 1],
+  ]
+  const hh = (n) => (n.t === 'p' ? 34 : NH / 2)
+  function anchor(a, b) { const dx = b.x - a.x, dy = b.y - a.y; const s = Math.min(NW / 2 / (Math.abs(dx) || 1e-9), hh(a) / (Math.abs(dy) || 1e-9)); return [a.x + dx * s, a.y + dy * s] }
+  const defs = el('defs', {})
+  const mk = el('marker', { id: 'ah', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, null, defs)
+  el('path', { d: 'M0 0 L10 5 L0 10 z', fill: css('--muted') }, null, mk)
+  // 四个方位的淡字
+  ;[['从哪来', 60, 160], ['凭什么算钱', 560, 40], ['往哪去', 790, 250], ['谁动它', 520, 470]].forEach(([s, x, y]) => el('text', { x, y, 'font-size': 12, fill: css('--faint') }, s))
+  const gE = el('g', {}), gN = el('g', {})
+  E.forEach(([f, t, l, far]) => {
+    const a = N[f], b = N[t]; const [x1, y1] = anchor(a, b), [x2, y2] = anchor(b, a)
+    const g = el('g', { opacity: far ? 0.45 : 1 }, null, gE)
+    el('line', { x1, y1, x2, y2, stroke: css('--muted'), 'stroke-width': t === 'sr' || f === 'sr' ? 1.8 : 1.2, 'marker-end': 'url(#ah)', 'stroke-dasharray': far ? '4 4' : '' }, null, g)
+    if (l) {
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2
+      el('rect', { x: mx - l.length * 5.8 - 3, y: my - 8, width: l.length * 11.6 + 6, height: 16, rx: 3, fill: css('--paper'), opacity: 0.92 }, null, g)
+      el('text', { x: mx, y: my + 4, 'font-size': 11, 'text-anchor': 'middle', fill: css('--muted') }, l, g)
+    }
+  })
+  for (const k in N) {
+    const n = N[k]
+    const g = el('g', { class: 'n', transform: 'translate(' + (n.x - NW / 2) + ',' + (n.y - hh(n)) + ')', opacity: n.far ? 0.5 : 1 }, null, gN)
+    if (n.t === 'p') {
+      const org = ['ap', 'sau'].includes(k)
+      el('rect', { width: NW, height: 68, fill: css('--paper'), opacity: 0.001 }, null, g)
+      el('circle', { cx: NW / 2, cy: 22, r: 20, fill: css('--party'), stroke: css('--party-line'), 'stroke-width': 1.5, 'stroke-dasharray': n.far ? '4 3' : '' }, null, g)
+      const person = (cx, cy, r) => { el('circle', { cx, cy: cy - r * 1.1, r: r * 0.55, fill: css('--party-line') }, null, g); el('path', { d: 'M' + (cx - r) + ' ' + (cy + r * 0.9) + ' a' + r + ' ' + r + ' 0 0 1 ' + (2 * r) + ' 0 z', fill: css('--party-line') }, null, g) }
+      if (org) { person(NW / 2 - 7, 22, 6.5); person(NW / 2 + 7, 22, 6.5) } else person(NW / 2, 22, 8.5)
+      el('text', { x: NW / 2, y: 60, 'font-size': 13, 'text-anchor': 'middle', fill: css('--ink'), 'font-weight': 500 }, n.l, g)
+    } else {
+      const center = k === 'sr'
+      const kc = n.key ? '--key' : '--doc-line'
+      const w = center ? NW + 40 : NW, h = center ? NH + 12 : NH, ox = center ? -20 : 0, oy = center ? -6 : 0
+      el('rect', { x: ox, y: oy, width: w, height: h, rx: 7, fill: css(n.key ? '--keybg' : '--doc'), stroke: css(n.far ? '--faint' : kc), 'stroke-width': center ? 3 : n.key ? 2 : 1.5, 'stroke-dasharray': n.far ? '4 3' : '' }, null, g)
+      el('text', { x: NW / 2, y: NH / 2 + 5, 'font-size': center ? 16 : 13, 'text-anchor': 'middle', fill: css('--ink'), 'font-weight': 700 }, n.l, g)
+      if (n.vo) n.vo.forEach((v, i) => {
+        const x = NW / 2 + (i - (n.vo.length - 1) / 2) * 52
+        el('line', { x1: x, y1: NH + 6, x2: x, y2: NH + 18, stroke: css('--vo-line'), 'stroke-width': 1, 'stroke-dasharray': '2 2' }, null, g)
+        el('circle', { cx: x, cy: NH + 28, r: 10, fill: css('--vo'), stroke: css('--vo-line'), 'stroke-width': 1 }, null, g)
+        el('text', { x, y: NH + 52, 'font-size': 11, 'text-anchor': 'middle', fill: css('--muted') }, v, g)
+      })
+    }
+    g.addEventListener('click', () => { info.innerHTML = '<b>' + n.l + '</b>　' + n.d })
+  }
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => location.reload()) } catch (e) {}
+  new MutationObserver(() => location.reload()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+})()
+</script>

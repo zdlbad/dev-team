@@ -1,0 +1,155 @@
+<title>聚焦：老人的审批与接收</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap">
+<style>
+:root{
+  --ground:#F5F8F9; --paper:#FFFFFF; --ink:#16242C; --muted:#5A6B74;
+  --line:#D7E0E4; --accent:#1D5A72; --tint:#E6EFF2; --who:#3E7F96;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD;
+    --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34; --who:#8FC6D8;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD;
+  --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34; --who:#8FC6D8;
+}
+body{background:var(--ground);color:var(--ink);font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:15.5px;line-height:1.8}
+.wrap{max-width:860px;margin:0 auto;padding-inline:20px;padding-block:40px 80px}
+h1,h2,h3{font-family:"Noto Serif SC","Songti SC",serif;text-wrap:balance;line-height:1.35}
+h1{font-size:30px;margin:0 0 8px}
+h2{font-size:22px;margin:56px 0 14px;padding-top:18px;border-top:1px solid var(--line)}
+h3{font-size:17px;margin:26px 0 8px}
+p{margin:0 0 14px;max-width:68ch}
+.lede{color:var(--muted);margin-bottom:26px}
+.note{font-size:13.5px;color:var(--muted);background:var(--tint);border-radius:6px;padding:10px 14px;margin:18px 0}
+blockquote{margin:18px 0;padding:14px 18px;background:var(--paper);border:1px solid var(--line);border-radius:6px;font-size:16.5px}
+blockquote b{color:var(--accent)}
+figure{margin:20px 0 26px;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:16px;overflow-x:auto}
+figcaption{font-size:13px;color:var(--muted);margin-top:8px}
+pre.mermaid{margin:0;text-align:center;background:transparent}
+.tbl{overflow-x:auto;margin:16px 0 22px}
+table{border-collapse:collapse;width:100%;background:var(--paper);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+td{vertical-align:top;padding:14px 16px;border-top:1px solid var(--line)}
+tr:first-child td{border-top:none}
+td.k{width:10.5em;font-weight:700;color:var(--accent)}
+td.k small{display:block;font-weight:400;color:var(--muted);font-size:13px}
+td p{margin:0 0 6px}
+td p:last-child{margin:0}
+.sarah{color:var(--muted);font-size:14px}
+.side{font-size:13px;color:var(--who);font-weight:500;letter-spacing:.04em;margin:22px 0 4px}
+</style>
+
+<div class="wrap">
+  <h1>聚焦：老人的审批与接收</h1>
+  <p class="lede">预演稿。聚焦是框架的同一套写法往下走一层：为什么存在、几方各自最想要什么、核心流程。框架停在政府、老人、服务商三方；聚焦到一段业务，把这一段里真正出场的那几家、那几个人展开。这一段是框架第 ① 站准入和第 ② 站接收。</p>
+
+  <h2>一、这一段为什么存在</h2>
+  <p>政府的钱不能谁要就给。先要有人认定这位老人确实需要帮助、该得多少；认定了，钱也不发到她手上，而是记在她名下，等她选定了服务商、两边签了合同、服务商向政府报了她哪天开始，钱才真的放进去。这一段做的就是这两件事：<b>政府认定她该得</b>，<b>她和我们之间把关系立起来</b>。</p>
+  <blockquote><b>两道关口。</b>第一道在政府：评估她该不该得、得几级，排上队才分到钱。第二道在她和我们之间：签了服务协议、我们报了她哪天开始，钱才放进她名下。两道都过了，后面的服务才报得了钱。</blockquote>
+  <p>钱在这一段里从「没有」变成「有了，放在她名下」。框架图 2 里「政府每季放钱进她名下」那一个箭头，在这一段里是这样走出来的：</p>
+  <figure>
+<pre class="mermaid">
+sequenceDiagram
+  participant AO as 评估机构
+  participant DEPT as 卫生部
+  participant P as Sarah
+  participant US as 我们（Noam）
+  participant SA as Services Australia
+  AO->>P: 2025 年 12 月：决定通知书（分类 6）、支持计划
+  AO->>DEPT: 合格，排进优先级系统
+  DEPT->>P: 2 月 23 日：资金分配通知书，先分六成（临时资金）
+  Note over P: 56 天内要找到服务商、签协议、开始服务（到 4 月 20 日）
+  P->>US: 3 月 3 日：选了我们，转介到门户
+  US->>P: 3 月 9 日：上门签服务协议，当天开始服务
+  US->>SA: 3 月 9 日：开始服务通知（入日 3 月 9 日）
+  SA->>P: 从 3 月 9 日起按比例放第 3 季的钱进她名下
+  SA->>P: 4 月 1 日：第 4 季整季的钱
+  DEPT->>P: 5 月 12 日：余下四成到位，从这天起按比例加
+</pre>
+    <figcaption>图 1　Sarah 的钱怎么走到她名下</figcaption>
+  </figure>
+
+  <h2>二、几方，各自最想要什么</h2>
+  <p>框架里的三方，到这一段展开成下面这些。政府那边是四家各管一截，服务商这边是一家公司里的三层，老人身边还有两种人。第三方（关联服务方、第三方工作者、供应商）这一段不出场，到「服务」那一段再展开。</p>
+  <figure>
+<pre class="mermaid">
+flowchart LR
+  subgraph US["服务商（我们）"]
+    RP["注册服务方<br/>至少注册第 4 类"]
+    BR["服务网点<br/>她挂在这上面"]
+    CP["照护伙伴 Noam<br/>接转介、建档、上门签协议、交通知"]
+  end
+  subgraph OLD["老人"]
+    P(["老人本人<br/>Sarah"])
+    RS["注册支持人<br/>帮她弄懂、替她收信，不替她定"]
+    DM["指定决定人<br/>能替她签字"]
+  end
+  subgraph GOV["政府"]
+    MAC["My Aged Care<br/>入口：登记、筛查、转介"]
+    AO["评估机构<br/>评估员评估，评估裁定人批"]
+    DEPT["卫生部<br/>排队、分资金"]
+    SA["Services Australia<br/>收开始服务通知、替她保管钱"]
+  end
+  P -- "① 申请" --> MAC
+  MAC -- "② 转去评估" --> AO
+  AO -- "③ 决定通知书、支持计划" --> P
+  AO -- "④ 合格的排进去" --> DEPT
+  DEPT -- "⑤ 资金分配通知书" --> P
+  P -- "⑦ 选了我们、签协议" --> CP
+  CP -- "⑧ 接受转介" --> MAC
+  CP -- "⑨ 开始服务通知" --> SA
+  DEPT -. "⑥ 批了多少" .-> SA
+  SA -- "⑩ 每季放钱进她名下" --> P
+  RS -. 陪着 .- P
+  DM -. 代签 .- P
+  RP --- BR --- CP
+</pre>
+    <figcaption>图 2　这一段的各方，线上的编号是先后。政府四家各管一截：入口、评估、排队分钱、管钱</figcaption>
+  </figure>
+  <div class="tbl"><table>
+    <tr><td class="k">My Aged Care<small>政府的入口</small></td><td><p>它要让每个想申请的人都从同一个门进来、走同一套筛查。老人打电话或在网上登记，答一组筛查问题，联络中心把她转给评估机构。它也是我们看她资料的地方：决定通知书、支持计划、转介都在 My Aged Care 服务与支持门户上。</p></td></tr>
+    <tr><td class="k">评估机构<small>评估员、评估裁定人</small></td><td><p>它要把「该不该得、该得多少」判准。评估员上门，用统一的评估工具看她哪里需要帮助，跟她一起写出支持计划；评估裁定人照评估员的建议批她能不能得、得几级，批完把决定通知书和支持计划寄给她。</p><p class="sarah">Sarah 2025 年 12 月评估合格，分类 6。</p></td></tr>
+    <tr><td class="k">卫生部<small>排队、分资金</small></td><td><p>它要把有限的钱先给最急的人。批了的老人进优先级系统排队，按紧急程度和批准日排；轮到她就分资金、寄资金分配通知书。钱紧时先分六成，余下四成有了再分。分到了不用也不行：56 天内要开始服务，不然收回去给别人。</p><p class="sarah">Sarah 2 月 23 日分到资金，先六成；最晚 4 月 20 日要开始服务。</p></td></tr>
+    <tr><td class="k">Services Australia<small>管钱</small></td><td><p>它要让钱只放进真的在接受服务的人名下。我们报了她哪天开始，它才从那天起按比例把这一季的钱放进她的账户，以后每季第一天放一季。</p><p class="sarah">3 月 9 日起到 3 月 31 日按比例入第 3 季；4 月 1 日第 4 季整季入账。</p></td></tr>
+    <tr><td class="k">老人本人<small>注册支持人、指定决定人</small></td><td><p>她要尽快有人来帮忙，又要弄清楚自己签的是什么。选哪家、签不签，由她本人定；注册支持人是她登记过的家人或朋友，帮她弄懂、替她收信，不替她做决定；她自己签不了字的，由指定决定人（监护人、持持久授权书的人）代签。</p></td></tr>
+    <tr><td class="k">注册服务方<small>服务网点、照护伙伴</small></td><td><p>我们要把她接进来，接得合规：做得了她要的服务、她没挂在别家、协议签在前、通知交在期限内，钱才放得进来、以后才报得了。我们是注册服务方，做居家支持至少注册第 4 类；她挂在我们的一个网点上，以后她的服务和申报都在这个网点名下；照护伙伴是接她的那个人：接受转介、建档、上门签协议、交开始服务通知。</p><p class="sarah">Sarah 挂在西区网点，照护伙伴是 Noam。</p></td></tr>
+  </table></div>
+
+  <h2>三、核心流程</h2>
+  <div class="tbl"><table>
+    <tr><td class="k">1 申请与评估</td><td><p>老人向 My Aged Care 登记，答筛查问题，转给评估机构。评估员上门评估，和她一起写支持计划：她需要哪些帮助、能用服务清单上的哪些服务。评估裁定人批她能不能得、得几级。</p><p class="sarah">Sarah 2025 年 12 月评估合格。</p></td></tr>
+    <tr><td class="k">2 拿到决定</td><td><p>评估机构寄给她两份：决定通知书写政府批了她什么（分类、有没有辅助技术与家居改造的档位、有没有短期路径）；支持计划写她需要什么、批了哪些服务。我们以后在门户上看的就是这两份。</p><p class="sarah">分类 6，没有档位，没有短期路径。</p></td></tr>
+    <tr><td class="k">3 排队、分到资金</td><td><p>批了持续服务的进优先级系统排队；恢复性照护路径和临终路径不排队，立刻给钱。轮到她，卫生部寄资金分配通知书。先给六成还是全额，看当时钱紧不紧。从这天起 56 天内要开始服务，可以向 My Aged Care 要 28 天延期。</p><p class="sarah">2 月 23 日分到临时资金（六成）。</p></td></tr>
+    <tr><td class="k">4 选服务商、转介</td><td><p>她拿着资金分配通知书找服务商。选定了，我们在 My Aged Care 服务与支持门户上收到转介，看她的记录：有没有别家还在给她服务（一位老人只能挂一家的一个网点），我们做不做得了她要的服务。接受转介，给她建档，照决定通知书在她名下开好放钱的账户。</p><p class="sarah">3 月 3 日 Noam 接转介、建档，开了居家支持账户。</p></td></tr>
+    <tr><td class="k">5 签服务协议</td><td><p>照护伙伴上门，对着她的决定通知书、支持计划和网点的价目表，跟她说定做哪些服务、各多少钱；给她时间考虑，讲清权利、投诉、共付这些事；她签字。签后 14 天内、开始服务之前，她可以反悔退出。</p><p class="sarah">3 月 9 日签，当天开始服务。</p></td></tr>
+    <tr><td class="k">6 通知政府她开始了</td><td><p>签了协议，我们在养老服务提供方门户向 Services Australia 交开始服务通知，写明入日。这是钱放进她名下的开关：没交，政府不付补贴；交晚了超过 56 天，资金收回。</p><p class="sarah">3 月 9 日交，入日 3 月 9 日。</p></td></tr>
+    <tr><td class="k">7 钱放进她名下</td><td><p>Services Australia 从入日起按比例把这一季的钱放进她名下，以后每季第一天放一季。先拿临时资金的，余下四成有了再分，从那天起按比例加进去。</p><p class="sarah">第 3 季按 3 月 9 日到 31 日算；4 月 1 日第 4 季整季；5 月 12 日余下四成到位。</p></td></tr>
+  </table></div>
+  <p>这一段出场的文件，照先后排：</p>
+  <figure>
+<pre class="mermaid">
+flowchart LR
+  SP["支持计划<br/>她需要什么、批了哪些服务"]
+  NOD["决定通知书<br/>批了她什么、第几级"]
+  FA["资金分配通知书<br/>钱分给她了、是不是先六成"]
+  REF["转介<br/>她选了我们"]
+  SA["服务协议<br/>做哪些、各多少钱"]
+  SN["开始服务通知<br/>她哪天开始"]
+  AC["她名下的账户<br/>钱放这里"]
+  SP --> SA
+  NOD --> FA
+  NOD --> AC
+  FA --> REF
+  REF --> SA
+  SA --> SN
+  SN --> AC
+</pre>
+    <figcaption>图 3　从左到右是出场的先后。前三份是政府给她的，后三份是她和我们之间的</figcaption>
+  </figure>
+  <p class="note">主线六张概念卡里，这一段的有三张：决定通知书、老人名下的账户、服务协议。支持计划、资金分配通知书、转介、开始服务通知还没有卡。</p>
+</div>
