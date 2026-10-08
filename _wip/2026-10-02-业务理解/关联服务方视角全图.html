@@ -1,0 +1,215 @@
+<title>关联服务方视角全图</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap">
+<style>
+:root{
+  --ground:#F5F8F9; --paper:#FFFFFF; --ink:#16242C; --muted:#5A6B74; --faint:#9AA8AF;
+  --line:#D7E0E4; --accent:#1D5A72; --tint:#E6EFF2;
+  --party:#dbe9f6; --party-line:#4a78a6; --doc:#fff3c4; --doc-line:#b58a00;
+  --hull:#1D5A72; --key:#C0392B; --keybg:#FBE9E7; --vo:#E3F1E6; --vo-line:#4E8A5E;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD; --faint:#5E6E76;
+    --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34;
+    --party:#1E3446; --party-line:#6E9CC8; --doc:#3A3216; --doc-line:#C9A23A;
+    --hull:#7FC0D6; --key:#F08C84; --keybg:#3A1F1C; --vo:#1E3324; --vo-line:#7FBF8E;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0F171B; --paper:#152127; --ink:#E3ECEF; --muted:#93A5AD; --faint:#5E6E76;
+  --line:#2A3A42; --accent:#7FC0D6; --tint:#1A2C34;
+  --party:#1E3446; --party-line:#6E9CC8; --doc:#3A3216; --doc-line:#C9A23A;
+  --hull:#7FC0D6; --key:#F08C84; --keybg:#3A1F1C; --vo:#1E3324; --vo-line:#7FBF8E;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.7}
+.wrap{max-width:900px;margin:0 auto;padding-inline:16px;padding-block:20px 60px}
+h1{font-family:"Noto Serif SC","Songti SC",serif;font-size:23px;margin:0 0 4px}
+.lede{color:var(--muted);font-size:14.5px;margin:0 0 12px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;position:sticky;top:env(safe-area-inset-top,0px);background:var(--ground);padding:6px 0;z-index:2}
+.tabs button{font:inherit;font-size:14px;border:1.5px solid var(--party-line);background:var(--paper);color:var(--ink);border-radius:999px;padding:4px 13px;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--paper);font-weight:700}
+.tabs.fine{position:static;padding-top:0;margin-top:-4px}
+.tabs.fine button{font-size:13px;border-color:var(--line);color:var(--muted);padding:2px 10px}
+.tabs.fine button[aria-pressed="true"]{color:var(--paper);border-color:var(--accent)}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:8px}
+svg{display:block;width:100%;height:auto}
+svg text{font-family:"Noto Sans SC","PingFang SC",sans-serif;pointer-events:none}
+.n{cursor:pointer}
+.info{margin-top:10px;background:var(--tint);border-radius:10px;padding:10px 12px;font-size:15px;min-height:3.4em}
+.info b{color:var(--accent)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13.5px;color:var(--muted);margin:8px 0 0}
+.legend span::before{content:"";display:inline-block;width:14px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1.5px solid}
+.legend .lp::before{background:var(--party);border-color:var(--party-line);border-radius:999px;width:12px;height:12px}
+.legend .ld::before{background:var(--doc);border-color:var(--doc-line)}
+.legend .lh::before{background:transparent;border-color:var(--hull);border-style:dashed}
+.legend .lk::before{background:var(--keybg);border-color:var(--key)}
+.legend .lv::before{background:var(--vo);border-color:var(--vo-line);border-radius:999px;width:11px;height:11px}
+.legend .lo::before{background:var(--paper);border-color:var(--faint);border-style:dotted}
+.note{font-size:13.5px;color:var(--muted);margin-top:10px}
+.rel{margin-top:6px;font-size:14.5px}
+.rel .rl{display:inline-block;min-width:5.5em;color:var(--muted);font-size:13px}
+.ex{border-collapse:collapse;width:100%;margin-top:8px;font-size:14px;background:var(--paper);border-radius:8px;overflow:hidden}
+.ex td{padding:5px 10px;border-top:1px solid var(--line);vertical-align:top}
+.ex td:first-child{color:var(--muted);white-space:nowrap;width:1%}
+</style>
+
+<div class="wrap">
+  <h1>关联服务方视角全图</h1>
+  <p class="lede">站在 Joyful Love 这一边看：我们挂在注册服务方底下，替自我管理的老人做服务、做照护伙伴的活，开发票给注册服务方要钱。虚边的框是别人手里的东西，我们看得到、碰不到。点一段框出来看，点一样东西看它连着什么。</p>
+  <div class="tabs" id="tabs" role="group" aria-label="三段"></div>
+  <div class="tabs fine" id="tabs2" role="group" aria-label="细一层"></div>
+  <div class="panel">
+    <svg id="map" role="img" aria-label="关联服务方视角业务全图"></svg>
+    <div class="info" id="info">全图只画主线。</div>
+    <div class="legend"><span class="lp">责任方</span><span class="ld">东西</span><span class="lk">关键的东西</span><span class="lo">别人手里的东西</span><span class="lv">值：谁带着它，谁底下挂一个</span><span class="lh">焦点</span></div>
+  </div>
+  <p class="note">数取自 老人甲 的协议和 2026 年 7、8 月的三张发票。没画的：共付（注册服务方向她收，我们不经手）、价目表（在服务协议那一站的底子里）、委员会（注册服务方向它报备关联安排，我们不直接打交道）。</p>
+</div>
+
+<script type="application/json" id="data">
+{"NW":128,"NH":40,"N":{"gov":{"t":"p","org":1,"l":"政府（评估、分资金）","x":625,"y":60,"st":[1],"d":"My Aged Care、评估机构、卫生部合成一个：评估她、批级别、分钱。我们从头到尾不跟它打交道，只看它寄给她的两张纸。"},"nod":{"t":"d","l":"决定通知书","x":800,"y":144,"st":[1],"o":1,"d":"政府批了她什么：合不合格、第几级。她是 HCP-3，从居家护理包转来的。我们只能做批了范围里的服务。","vo":["分类"]},"sp":{"t":"d","l":"支持计划","x":625,"y":144,"st":[1],"o":1,"d":"评估员写的：她需要什么、能用清单上哪些服务类型。协议上的服务只能从这里挑。","vo":["服务类型"]},"old":{"t":"p","l":"老人（自我管理）","x":275,"y":312,"st":[1,2,3],"d":"老人甲。跟注册服务方签的是自我管理版协议：选工人、谈价、排班、核发票都算她的事——实际多半是我们替她做。"},"rp":{"t":"p","org":1,"l":"注册服务方","x":800,"y":564,"st":[2,3],"d":"在委员会注册的那一家：她的账户在它名下，它申报、它收钱、它付我们、它出月结单、它拿她预算里的一成护理管理费。超支的责任在它。"},"sa":{"t":"d","l":"注册服务方服务协议","x":800,"y":228,"st":[1],"o":1,"key":1,"d":"她和注册服务方的合同，自我管理版。第 5 页三类服务都勾了「打算由关联服务方做」，附加费 10%；B 部一张表把每件事分给她、注册服务方、两人一起、关联服务方——关联服务方那一栏只有三个勾。","ex":[["谁和谁","老人甲 和 The Trustee for 注册服务方 Wellness Services Trust"],["哪天起","2026 年 4 月 1 日"],["级别 / 季度预算","HCP-3 / $10,787.58"],["三类的价","Clinical $195、Independence $95、Everyday Living $95（含 GST）"],["关联服务方附加费","10%"],["替注册服务方签字的","职位写的是 Case manager"]],"vo":["类别价","附加费率"]},"aa":{"t":"d","l":"关联安排","x":625,"y":312,"st":[1],"key":1,"d":"注册服务方和我们之间的那份约定：替它做哪些服务、工人资质怎么保证、发票怎么开、记录怎么交。我们每一张发票都从它长出来。手册 §10.6.1 要它向委员会报备。","ex":[["谁和谁","注册服务方和 Joyful Love Pty Ltd"],["做哪几类","临床、独立生活、日常生活三类都做"],["工人","书面保证资质和清查，提供文件"],["发票","写明服务日、单价、数量；按类别价加一成附加费（临床不加）"],["原件","还没见到——该找出来读"]]},"assign":{"t":"d","l":"划归（AP assignment）","x":100,"y":228,"st":[1],"key":1,"d":"她选了我们、注册服务方认了，在它系统里把她从协议生效那天起划给 Joyful Love。从这一刻起她是我们的老人。","ex":[["老人","老人甲"],["划给","Joyful Love Pty Ltd"],["从哪天起","2026-04-01 onward"]]},"jl":{"t":"p","org":1,"l":"我们 Joyful Love","x":100,"y":396,"st":[1,2,3],"d":"关联服务方。纸上只有一栏：做服务、报事故、配合解纠纷。实际做的：上门、照护伙伴的活、替她管预算、开票、对回款。"},"cpn":{"t":"p","l":"我们的照护伙伴","x":275,"y":480,"st":[2],"d":"外包出来的照护伙伴（手册 §8.5，只在自我管理下允许）：跟她做照护计划和预算、每月至少一次直接联系、盯着别超支、看记录。"},"wk":{"t":"p","l":"我们的工人","x":100,"y":564,"st":[2],"d":"上门做个人照护、推拿、护士临床的人。手册叫第三方工作者，经由我们这家关联服务方来。"},"cp":{"t":"d","l":"照护计划","x":450,"y":396,"st":[2],"o":1,"d":"我们的照护伙伴跟她一起做，注册服务方的文件：具体哪几项、每周几次、谁来做；自我管理和第三方安排写在这里。开始服务前做好。","vo":["服务安排"]},"qb":{"t":"d","l":"季度预算","x":450,"y":480,"st":[2],"d":"跟照护计划同时做：这一季 $10,787.58 扣一成护理管理费，剩下的怎么分到各项服务上。","ex":[["哪一季","2026 年 7–9 月"],["政府批的","$10,787.58"],["留一成给注册服务方做护理管理","− $1,078.76"],["能花在服务上的","$9,708.82"]],"vo":["分类"]},"fund":{"t":"d","l":"老人的基金","x":800,"y":900,"st":[3],"o":1,"d":"政府批给她的钱，存在 Services Australia 她名下的账户里，注册服务方看得到。我们看不到，只能从注册服务方报来的数、或它的平台上推。"},"ledger":{"t":"d","l":"替她记的账","x":450,"y":648,"st":[2,3],"key":1,"d":"我们自己记的她这一季的账：预算多少、做了多少（含还没开票的）、开了票多少、注册服务方报了多少、还剩多少。注册服务方的余额要等我们录了发票它申报了才减，所以这本账才是排服务的依据。一物多面：Services Australia 眼里是她的账户，注册服务方眼里是老人的基金，我们眼里是这本账。","ex":[["老人","老人甲，2026 年 7–9 月"],["能花在服务上的","$9,708.82"],["7 月做了（个人照护 23 次）","$6,608.25（不含 GST）"],["8 月做了（护士 1 次、推拿 1 次……）","$308.00 + ……"],["注册服务方已申报的","到 9 月 21 日：7 月的 23 次"],["做了还没开票的","9 月的"]]},"ev":{"t":"d","l":"交付证据","x":275,"y":648,"st":[2],"d":"这一次确实做了：签到签退、完工照片、工人写的记录。手册 §10.5 说清洁、园艺这类发票不算证据；护士、专职医疗、耗材才可以只凭发票。注册服务方申报要拿得出来。","vo":["凭据"]},"sr":{"t":"d","l":"服务记录","x":275,"y":732,"st":[2,3],"key":1,"d":"一次上门做了的记录：哪天、哪项、几小时、我们的价。它的一行就是发票的一行，也就是注册服务方申报的一行。","ex":[["老人","老人甲"],["哪天","2026 年 7 月 6 日"],["哪项服务","SERV-0020 个人照护（Independence 类）"],["做了多少 × 单价","3 小时 × $99.00（$90 + 一成附加费）= $297.00，不含 GST"],["谁做的","我们的工人"],["证据","签到、照护记录"]],"vo":["服务类型","我们的价","附加费"]},"cmr":{"t":"d","l":"护理管理记录","x":275,"y":564,"st":[2],"d":"我们的照护伙伴替她做的一次护理管理：谈需要、改预算、看记录、每月那一次直接联系。按手册该从注册服务方的护理管理账户出钱——怎么付我们，关联安排里要写，现在没定。","vo":["直接 / 间接"]},"cn":{"t":"d","l":"照护记录","x":100,"y":648,"st":[2],"d":"她的要紧事：谈了什么、观察到什么、风险、事故、投诉。义务在注册服务方（§8.7），写的是我们，要能交给它。"},"pool":{"t":"d","l":"注册服务方的护理管理账户","x":625,"y":564,"st":[2],"o":1,"d":"每位老人季度预算留的一成，进注册服务方的池子。我们做的护理管理，钱该从这里来；手册把排班、交申报这些排除在外。"},"inv":{"t":"d","l":"给注册服务方的发票","x":275,"y":816,"st":[3],"key":1,"d":"我们开的税务发票，一位老人一张，一行一天一项服务，加附加费、加 GST，我们自己录进注册服务方的平台。它在平台上一路走：Created → Approved → Claimed → Pay AP。","ex":[["发票号 / 采购单号","202608497 / R-0020-082（R 加附加费、S 不加；中间是服务号，末尾是她的编号）"],["开给谁、谁付","开给 老人甲，注册服务方付"],["几行","23 行，7 月 6 日到 7 月底，隔天一次个人照护 3 小时"],["金额","$6,608.25 + GST $660.84 = $7,269.09"],["开票 / 录进平台","8 月 26 日 / 9 月 21 日（我们的员工）"],["平台上的状态","Claimed，Pay AP"]],"vo":["GST","状态"]},"sau":{"t":"p","org":1,"l":"Services Australia","x":800,"y":816,"st":[3],"d":"替她保管钱、收注册服务方的申报、逐行核、从她名下扣、付给注册服务方。不认识我们，只看见申报行上「第三方做的」一个勾。"},"claim":{"t":"d","l":"注册服务方的申报","x":800,"y":732,"st":[3],"o":1,"d":"注册服务方把我们发票的每一行去掉 GST、打上第三方的勾，报给 Services Australia。不是我们的东西，但我们的每一行都在里面。","vo":["第三方勾"]},"pay":{"t":"d","l":"注册服务方的付款","x":625,"y":816,"st":[3],"key":1,"d":"政府付了注册服务方，注册服务方付我们（Pay AP，经它的 Xero）。到账的数对回每一张发票、记进替她记的账。","ex":[["付了哪张","202608047，推拿 $143.00"],["哪天","2026 年 9 月 9 日（开票 8 月 13 日，录进平台 8 月 26 日）"],["谁批、谁付","注册服务方的财务批、付"],["从做服务到钱到手","快的一个月，慢的两三个月"]]},"ms":{"t":"d","l":"月结单","x":450,"y":900,"st":[3],"o":1,"d":"注册服务方每月给她的：这一季的钱用了多少、还剩多少。我们拿它对替她记的账——两边对不上，多半是我们做了还没开票的。"}},"E":[["gov","nod","批",0,1],["gov","sp","",0,1],["nod","old","寄给她",0,1],["sp","sa","只能从这里挑",0,1],["old","sa","签",0,1],["rp","sa","签",0,1],["rp","aa","签",0,1],["jl","aa","签",0,1],["old","assign","选了我们",0,1],["aa","assign","认了",0,1],["assign","jl","归我们",0,1],["jl","cpn","我们的人",0,0],["jl","wk","我们的人",0,0],["cpn","cp","跟她一起做",0,1],["cp","qb","配一份",0,1],["qb","ledger","起点",0,1],["qb","pool","留一成",0,0],["wk","old","上门",0,1],["wk","ev","留",0,1],["ev","sr","附上",0,1],["cpn","old","每月至少一次",0,1],["cpn","cmr","记",0,1],["cmr","cn","",0,0],["cmr","pool","该从这里出，没定",1,0],["sr","ledger","占住",0,1],["sr","inv","攒成",0,1],["inv","rp","录进它的平台",0,1],["rp","claim","去掉 GST、打上勾",0,1],["claim","sau","交",0,1],["sau","fund","核过扣",1,1],["sau","pay","付我们",0,1],["pay","inv","对回",0,1],["pay","ledger","记上",0,1],["ms","ledger","对账",1,0]]}
+</script>
+<script>
+(function () {
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim()
+  const ns = 'http://www.w3.org/2000/svg'
+  const svg = document.getElementById('map')
+  const info = document.getElementById('info')
+  const { N, E, NW, NH } = JSON.parse(document.getElementById('data').textContent)
+  const ids = (s) => Object.keys(N).filter((k) => N[k].st.includes(s))
+  const FOCI = [
+    { k: 0, l: '全图', ids: null, d: '全图只画主线。人形是责任方（一个人是个人，两个人是机构），黄方框是东西，红边的是关键的，虚边的是别人手里的。三条底色带是三段。' },
+    { k: 1, l: '① 她划到我们名下', ids: ids(1), d: '<b>① 她划到我们名下</b>：政府批了她；她和注册服务方签自我管理的协议；注册服务方和我们有关联安排；她选了我们，注册服务方在系统里把她划给我们。' },
+    { k: 2, l: '② 服务与护理管理', ids: ids(2), d: '<b>② 服务与护理管理</b>：照护伙伴跟她做照护计划和预算；工人上门、留证据、录服务记录；每月至少一次护理管理；每做一次，替她记的账上占住一笔。' },
+    { k: 3, l: '③ 开票与回款', ids: ids(3), d: '<b>③ 开票与回款</b>：服务记录攒成发票录进注册服务方的平台；注册服务方转成申报交给 Services Australia，收到钱付我们；到账对回发票、记进账；月结单对一遍。' },
+    { k: 11, fine: 1, l: '政府批了她', ids: ['gov', 'nod', 'sp', 'old'], d: '<b>政府批了她</b>：评估、决定通知书、支持计划。我们不在场，只拿到结果：她是 HCP-3，批了哪些服务类型。' },
+    { k: 12, fine: 1, l: '两份协议', ids: ['old', 'rp', 'sa', 'sp', 'aa', 'jl'], d: '<b>两份协议</b>：她和注册服务方签服务协议（自我管理版，三类服务都打算让关联服务方做，附加费一成）；注册服务方和我们签关联安排，报备给委员会。' },
+    { k: 13, fine: 1, l: '划归', ids: ['old', 'aa', 'assign', 'jl'], d: '<b>划归</b>：她选了我们，注册服务方认了，在它系统里从 4 月 1 日起把她划给 Joyful Love。' },
+    { k: 14, fine: 1, l: '照护计划与预算', ids: ['cpn', 'old', 'cp', 'qb', 'nod', 'pool', 'ledger'], d: '<b>照护计划与预算</b>：照护伙伴跟她一起做照护计划和季度预算——级别定了多少钱，扣一成给注册服务方做护理管理，剩下的分到各项服务上；这是替她记的账的起点。' },
+    { k: 15, fine: 1, l: '上门与证据', ids: ['wk', 'old', 'ev', 'sr', 'cpn', 'sa'], d: '<b>上门与证据</b>：我们的工人上门，留签到、照片、记录；照护伙伴按类别价加一成录一条服务记录。' },
+    { k: 16, fine: 1, l: '护理管理', ids: ['cpn', 'old', 'cmr', 'cn', 'pool'], d: '<b>护理管理</b>：每月至少一次直接联系，谈需要、改预算、看记录，记一条护理管理记录；写下的是她的照护记录。钱该从注册服务方的护理管理账户出，怎么付我们没定。' },
+    { k: 17, fine: 1, l: '开票', ids: ['sr', 'inv', 'jl', 'rp', 'ledger'], d: '<b>开票</b>：一位老人一个月一张，一行一天一项，加附加费（临床不加）、加 GST；我们自己录进注册服务方的平台。' },
+    { k: 18, fine: 1, l: '注册服务方申报、付我们', ids: ['inv', 'rp', 'claim', 'sau', 'fund', 'pay'], d: '<b>注册服务方申报、付我们</b>：注册服务方把发票的每一行去掉 GST、打上第三方的勾报上去；Services Australia 核过从她名下扣、付给注册服务方；注册服务方付我们（Pay AP）。' },
+    { k: 19, fine: 1, l: '对账', ids: ['pay', 'inv', 'ledger', 'ms', 'fund', 'old'], d: '<b>对账</b>：到账对回每张发票、记进替她记的账；注册服务方的月结单和它报来的余额对一遍——对不上的多半是做了还没开票的。' },
+  ]
+  const W = 900, H = 980
+  const hh = (n) => (n.t === 'p' ? 36 : NH / 2)
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H)
+  const el = (tag, a, txt, parent) => { const e = document.createElementNS(ns, tag); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; (parent || svg).appendChild(e); return e }
+  const defs = el('defs', {})
+  const m = el('marker', { id: 'ah', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, null, defs)
+  el('path', { d: 'M0 0 L10 5 L0 10 z', fill: css('--muted') }, null, m)
+  const m2 = el('marker', { id: 'ah2', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse' }, null, defs)
+  el('path', { d: 'M0 0 L10 5 L0 10 z', fill: css('--accent') }, null, m2)
+  const gBand = el('g', {}), gHull = el('g', {}), gE = el('g', {}), gN = el('g', {})
+  ;[[24, 346], [362, 700], [716, 950]].forEach(([y0, y1], i) => {
+    el('rect', { x: 6, y: y0, width: W - 12, height: y1 - y0, rx: 10, fill: css('--tint'), opacity: i % 2 ? 0.3 : 0.55 }, null, gBand)
+    el('text', { x: W - 14, y: y0 + 16, 'font-size': 12, 'text-anchor': 'end', fill: css('--muted') }, ['① 她划到我们名下', '② 服务与护理管理', '③ 开票与回款'][i], null, gBand)
+  })
+  function anchor(a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y
+    const s = Math.min(NW / 2 / (Math.abs(dx) || 1e-9), hh(a) / (Math.abs(dy) || 1e-9))
+    return [a.x + dx * s, a.y + dy * s]
+  }
+  const edges = E.map(([f, t, l, dash, s]) => {
+    const a = N[f], b = N[t]
+    const [x1, y1] = anchor(a, b), [x2, y2] = anchor(b, a)
+    const g = el('g', {}, null, gE)
+    const ln = el('line', { x1, y1, x2, y2, stroke: css('--muted'), 'stroke-width': 1.3, 'marker-end': 'url(#ah)', 'stroke-dasharray': dash ? '4 4' : '' }, null, g)
+    if (l) {
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2
+      el('rect', { x: mx - l.length * 5.6 - 3, y: my - 8, width: l.length * 11.2 + 6, height: 15, rx: 3, fill: css('--paper'), opacity: 0.92 }, null, g)
+      el('text', { x: mx, y: my + 4, 'font-size': 10.5, 'text-anchor': 'middle', fill: css('--muted') }, l, g)
+    }
+    return { f, t, g, s, ln, l }
+  })
+  const nodes = {}
+  for (const k in N) {
+    const n = N[k]
+    const g = el('g', { class: 'n', transform: 'translate(' + (n.x - NW / 2) + ',' + (n.y - hh(n)) + ')' }, null, gN)
+    if (n.t === 'p') {
+      el('rect', { width: NW, height: 72, fill: css('--paper'), opacity: 0.001 }, null, g)
+      el('circle', { cx: NW / 2, cy: 24, r: 21, fill: css('--party'), stroke: css('--party-line'), 'stroke-width': 1.5 }, null, g)
+      const person = (cx, cy, r) => {
+        el('circle', { cx, cy: cy - r * 1.1, r: r * 0.55, fill: css('--party-line') }, null, g)
+        el('path', { d: 'M' + (cx - r) + ' ' + (cy + r * 0.9) + ' a' + r + ' ' + r + ' 0 0 1 ' + (2 * r) + ' 0 z', fill: css('--party-line') }, null, g)
+      }
+      if (n.org) { person(NW / 2 - 7, 24, 6.5); person(NW / 2 + 7, 24, 6.5) } else person(NW / 2, 24, 8.5)
+      el('text', { x: NW / 2, y: 62, 'font-size': 12.5, 'text-anchor': 'middle', fill: css('--ink'), 'font-weight': 500 }, n.l, g)
+    } else {
+      const kc = n.key ? '--key' : n.o ? '--faint' : '--doc-line'
+      el('rect', { width: NW, height: NH, rx: 6, fill: css(n.key ? '--keybg' : n.o ? '--paper' : '--doc'), stroke: css(kc), 'stroke-width': n.key ? 2 : 1.5, 'stroke-dasharray': n.o ? '3 3' : '' }, null, g)
+      if (!n.o) el('rect', { x: 3, y: 3, width: NW - 6, height: NH - 6, rx: 4, fill: 'none', stroke: css(kc), 'stroke-width': 0.8, opacity: 0.6 }, null, g)
+      el('text', { x: NW / 2, y: NH / 2 + 4.5, 'font-size': 12.5, 'text-anchor': 'middle', fill: css(n.o ? '--muted' : '--ink'), 'font-weight': n.o ? 500 : 600 }, n.l, g)
+      if (n.vo) n.vo.forEach((v, i) => {
+        const x = 22 + i * 42
+        el('line', { x1: x, y1: NH, x2: x, y2: NH + 9, stroke: css('--vo-line'), 'stroke-width': 1, 'stroke-dasharray': '2 2' }, null, g)
+        el('circle', { cx: x, cy: NH + 18, r: 9, fill: css('--vo'), stroke: css('--vo-line'), 'stroke-width': 1 }, null, g)
+        el('text', { x, y: NH + 38, 'font-size': 9.5, 'text-anchor': 'middle', fill: css('--muted') }, v, g)
+      })
+    }
+    g.addEventListener('click', (ev) => { ev.stopPropagation(); pick(k) })
+    nodes[k] = g
+  }
+  function hull(pts) {
+    pts = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1])
+    const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    const lo = [], up = []
+    for (const p of pts) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p) }
+    for (const p of pts.reverse()) { while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p) }
+    return lo.slice(0, -1).concat(up.slice(0, -1))
+  }
+  function reset() { edges.forEach((e) => { e.ln.setAttribute('stroke', css('--muted')); e.ln.setAttribute('stroke-width', 1.3); e.ln.setAttribute('marker-end', 'url(#ah)') }); picked = null }
+  let picked = null
+  function pick(k) {
+    if (picked === k) { focus(FOCI[0]); return }
+    reset(); picked = k
+    gHull.innerHTML = ''
+    document.querySelectorAll('#tabs button, #tabs2 button').forEach((b) => b.setAttribute('aria-pressed', 'false'))
+    const near = new Set([k]), inn = [], out = []
+    edges.forEach((e) => { if (e.f === k) { near.add(e.t); out.push(e) } else if (e.t === k) { near.add(e.f); inn.push(e) } })
+    const far = new Set()
+    edges.forEach((e) => { if (near.has(e.f) && !near.has(e.t)) far.add(e.t); if (near.has(e.t) && !near.has(e.f)) far.add(e.f) })
+    for (const j in nodes) nodes[j].setAttribute('opacity', near.has(j) ? 1 : far.has(j) ? 0.4 : 0.1)
+    edges.forEach((e) => {
+      const mine = e.f === k || e.t === k
+      if (mine) { e.ln.setAttribute('stroke', css('--accent')); e.ln.setAttribute('stroke-width', 2.4); e.ln.setAttribute('marker-end', 'url(#ah2)') }
+      e.g.setAttribute('opacity', mine ? 1 : (near.has(e.f) && far.has(e.t)) || (near.has(e.t) && far.has(e.f)) ? 0.25 : 0.04)
+    })
+    const n = N[k]
+    const nm = (e, j) => N[j].l + (e.l ? '<span style="color:var(--muted)">（' + e.l + '）</span>' : '')
+    let h = '<b>' + n.l + '</b>　' + n.d
+    if (inn.length) h += '<div class="rel"><span class="rl">从这些来</span>' + inn.map((e) => nm(e, e.f)).join('、') + '</div>'
+    if (out.length) h += '<div class="rel"><span class="rl">到这些去</span>' + out.map((e) => nm(e, e.t)).join('、') + '</div>'
+    if (n.ex) h += '<table class="ex">' + n.ex.map((r) => '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>').join('') + '</table>'
+    h += '<div class="rel" style="color:var(--muted)">再点它一下回到全图；淡一点的是离它两步远的。</div>'
+    info.innerHTML = h
+    info.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }
+  function focus(fo) {
+    reset()
+    gHull.innerHTML = ''
+    const ids = fo.ids
+    const inF = (k) => !ids || ids.includes(k)
+    for (const k in nodes) nodes[k].setAttribute('opacity', inF(k) ? 1 : 0.25)
+    edges.forEach((e) => { const on = inF(e.f) && inF(e.t); e.g.setAttribute('opacity', !ids ? (e.s ? 1 : 0) : on ? (e.s ? 1 : 0.55) : 0.08) })
+    if (ids) {
+      const P = 14, pts = []
+      ids.forEach((k) => { const n = N[k], h = hh(n); pts.push([n.x - NW / 2 - P, n.y - h - P], [n.x + NW / 2 + P, n.y - h - P], [n.x - NW / 2 - P, n.y + h + P], [n.x + NW / 2 + P, n.y + h + P]) })
+      const h = hull(pts)
+      el('path', { d: 'M' + h.map((p) => p.join(' ')).join(' L') + ' Z', fill: css('--hull'), 'fill-opacity': 0.06, stroke: css('--hull'), 'stroke-width': 2, 'stroke-dasharray': '7 5', 'stroke-linejoin': 'round' }, null, gHull)
+    }
+    info.innerHTML = fo.d
+    document.querySelectorAll('#tabs button, #tabs2 button').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.k === fo.k)))
+  }
+  const tabs = document.getElementById('tabs'), tabs2 = document.getElementById('tabs2')
+  FOCI.forEach((fo) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.k = fo.k; b.textContent = fo.l; b.onclick = () => focus(fo); (fo.fine ? tabs2 : tabs).appendChild(b) })
+  focus(FOCI[0])
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => location.reload()) } catch (e) {}
+  new MutationObserver(() => location.reload()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+})()
+</script>

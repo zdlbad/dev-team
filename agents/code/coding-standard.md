@@ -228,7 +228,7 @@ export class OrderFailedError extends DomainError {}
 
 ### 仓储接口
 
-只出现领域类型。读写靠方法名前缀：**`find*` / `exists*` / `count*` 为读，其余为写**。
+只出现领域类型。读写靠方法名前缀：**`find*` / `list*` / `exists*` / `count*` 为读，其余为写**（`find*` 取一个，`list*` 取多条）。
 
 ```ts
 export interface OrderRepositoryInterface {
@@ -280,8 +280,8 @@ export class CreateOrderCommandHandler {
 }
 ```
 
-- 命令处理器：唯一入口 `execute(command)`，返回 `void`
-- 查询处理器：`execute(query)` 返回 `Result` 类；注入仓储接口，和模型里标了只读（`readOnly`）操作的端口；仓储只调 `find*`，端口只调那几个只读操作；要算的，调不写聚合、不发事件的领域服务操作
+- 命令处理器：唯一入口 `execute(command)`，返回 `void`；**唯一的例外是新建一份东西的命令**（造了新聚合、编号由它起的），只交回新编号 `{ <名>Id: string }`（一次建几条的交回 `{ <名>Ids: string[] }`），别的结果一律走查询；模型里也不把「交回编号」写成一步
+- 查询处理器：`execute(query)` 返回 `Result` 类；注入仓储接口，和模型里标了只读（`readOnly`）操作的端口；仓储只调 `find*` / `list*` / `exists*` / `count*`，端口只调那几个只读操作；要算的，调不写聚合、不发事件的领域服务操作
 - 事件处理器：`implements DomainEventHandler<E>`，入口 `handle(event)`；`E` 必须与类名中的 `On<E>` 一致
 - 构造注入，参数全部是接口
 - 领域服务是纯函数式的，**不注入**：处理器以字段初始化持有它（`private readonly pricing = new PricingService()`）
@@ -309,7 +309,9 @@ export class CreateOrderCommandHandler {
 
 ### 事件分发
 
-由应用层显式分发：凡调用了写方法的处理器，**最后一步必须是 `this.events.publish(x.pullEvents())`**。`EventPublisherInterface` 是每个写处理器都注入的端口。
+由应用层显式分发：凡调用了写方法的处理器，**最后一步必须是 `this.events.publish(x.pullEvents())`**；新建命令要交回新编号时，publish 之后紧跟一句 `return { <名>Id: x.id }`，这一句不算步骤。`EventPublisherInterface` 是每个写处理器都注入的端口。
+
+**事件处理器出错不连坐发事件的那条命令**：发事件的命令在 publish 之前已经存好了，它的结果不因别的模块听了出错而作废。事件总线逐个调处理器，某个处理器抛错就接住、记进事件流水（带事件名、处理器名、错误名与说明），接着调下一个，publish 照常返回；不往上抛。处理器自己能预见的情形（比如「这一种开不了」）在模型里写成分支，不靠抛错。
 
 ### 应用层守卫的错误
 
@@ -415,8 +417,8 @@ export class CreateOrderCommandHandler {
 8. 应用层调用实体或值对象的行为（只能调聚合根）
 9. 抛出非 `DomainError` 的错误、`raise` 非 `DomainEvent` 的事件
 10. 一个文件的导出超出命名规则允许的范围
-11. 查询处理器调用仓储的非 `find*` / `exists*` / `count*` 方法、端口上没标只读的操作，或调用会写聚合、会发事件的领域服务操作
-12. 写处理器最后一步不是 `publish`
+11. 查询处理器调用仓储的非 `find*` / `list*` / `exists*` / `count*` 方法、端口上没标只读的操作，或调用会写聚合、会发事件的领域服务操作
+12. 写处理器最后一步不是 `publish`（新建命令 publish 之后只交回新编号的那一句 `return` 不算）
 13. 仓储适配器分发事件
 14. 适配器中出现分支业务逻辑
 15. 缺少 `@trace` 的领域类、行为、处理器
