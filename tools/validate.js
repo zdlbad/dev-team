@@ -390,7 +390,7 @@ function closureOf(call, currentModule, seen = new Set()) {
   seen.add(key)
   const { el } = resolveCall(call, currentModule, true)
   if (!el) return { raises: [], throws: [] }
-  if (call.kind === 'factory') return { raises: [], throws: [...(el.data.aggregateInvariants ?? []), ...el.data.invariants].flatMap((i) => i.throws ?? []) }
+  if (call.kind === 'factory') return { raises: [], throws: [...new Set([...[...(el.data.aggregateInvariants ?? []), ...(el.data.invariants ?? [])].flatMap((i) => i.throws ?? []), ...(el.data.create?.throws ?? [])])] }
   if (call.kind === 'behavior') {
     const b = el.data.behaviors.find((x) => x.name === call.method)
     return b ? { raises: b.raises, throws: b.throws } : { raises: [], throws: [] }

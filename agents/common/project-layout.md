@@ -9,7 +9,7 @@
   raw/rulings.md              人拍板的事，按批累积（开发指挥写）
   business/00-framework.md    业务框架：为什么存在、各方各自要什么、核心流程（给人看全貌）
   business/00-overview.md     全景：这门生意、钱怎么走、模块候选（细一层的参考）
-  business/聚焦/<n>-<一段业务>.md  聚焦：框架的三节下到一段业务（业务分析）
+  business/聚焦/<n>-<概念>.md     聚焦：一个业务概念一篇，框架的三节下到它身上（业务分析）
   business/概念/<nn>-<概念>.md   概念卡的前半张：本质、类比、例子、样子（业务分析）
   business/<Module>/abstraction.md   业务抽象
   business/<Module>/practice.md      业务落地

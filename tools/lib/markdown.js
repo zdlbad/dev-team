@@ -1,6 +1,7 @@
 /**
  * 把项目里的 Markdown（业务、导读）转成 HTML，给工作台「业务」页用。
  * 只认这几样：标题、段落、有序/无序列表（可嵌套）、表格、引用、代码块、分隔线；行内的粗体、斜体、代码、链接。
+ * 表格里的格子写 ^^ 表示跟上面那格合并（rowspan），写 << 表示跟左边那格合并（colspan）；一层套一层的表靠它们合并。
  * ```mermaid 代码块原样交给页面，页面上画成流程图。
  * 顶层每一块带 data-b：这一块原文的指纹（同样的原文出现几次就加 -2、-3）。页面上的留言挂在指纹上，
  * 原文改了指纹就变，留言退到它前面那个标题底下。
@@ -97,8 +98,27 @@ function render(text, { mark = true } = {}) {
       const head = cells(l)
       const rows = [], from = i
       for (i += 2; i < lines.length && /^\s*\|/.test(lines[i]); i++) rows.push(cells(lines[i]))
-      push('<div class="tw"><table><thead><tr>' + head.map((c) => '<th>' + inline(c) + '</th>').join('') + '</tr></thead><tbody>'
-        + rows.map((r) => '<tr>' + head.map((_, k) => '<td' + ((r[k] ?? '').replace(/\*\*|`/g, '').length <= 6 ? ' class="nw"' : '') + '>' + inline(r[k] ?? '') + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>', lines.slice(from, i).join('\n'))
+      // 格子写 ^^：跟上面那格合并（rowspan）；写 <<：跟左边那格合并（colspan）。一层套一层的表靠它们合并
+      const all = [head, ...rows]
+      const rs = all.map(() => head.map(() => 1)), cs = all.map(() => head.map(() => 1))
+      for (let r = all.length - 1; r >= 1; r--) for (let k = 0; k < head.length; k++) if ((all[r][k] ?? '') === '^^') {
+        let up = r - 1
+        while (up >= 1 && (all[up][k] ?? '') === '^^') up--
+        if (up >= 1) { rs[up][k] += 1; rs[r][k] = 0 } else all[r][k] = ''
+      }
+      for (let r = 0; r < all.length; r++) for (let k = head.length - 1; k >= 0; k--) if ((all[r][k] ?? '') === '<<') {
+        let left = k - 1
+        while (left >= 0 && (all[r][left] ?? '') === '<<') left--
+        if (left >= 0) { cs[r][left] += 1; cs[r][k] = 0 } else all[r][k] = ''
+      }
+      const cell = (tag, r, k) => {
+        if (rs[r][k] === 0 || cs[r][k] === 0) return ''
+        const v = all[r][k] ?? ''
+        return '<' + tag + (rs[r][k] > 1 ? ' rowspan="' + rs[r][k] + '"' : '') + (cs[r][k] > 1 ? ' colspan="' + cs[r][k] + '"' : '')
+          + (tag === 'td' && v.replace(/\*\*|`/g, '').length <= 6 ? ' class="nw"' : '') + '>' + inline(v) + '</' + tag + '>'
+      }
+      push('<div class="tw"><table><thead><tr>' + head.map((_, k) => cell('th', 0, k)).join('') + '</tr></thead><tbody>'
+        + rows.map((r, ri) => '<tr>' + head.map((_, k) => cell('td', ri + 1, k)).join('') + '</tr>').join('') + '</tbody></table></div>', lines.slice(from, i).join('\n'))
       continue
     }
     if (/^\s*>/.test(l)) {

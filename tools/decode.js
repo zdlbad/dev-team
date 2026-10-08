@@ -40,7 +40,7 @@ const PREFIX_SUFFIX = {
 }
 const DOMAIN_OBJECT = new Set(['aggregate-root', 'entity', 'value-object'])
 const MUTATORS = new Set(['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'set', 'delete', 'clear', 'fill'])
-const READ_PREFIX = /^(find|exists|count)/
+const READ_PREFIX = /^(find|list|exists|count)/
 
 const issues = []
 function issue(file, text) {
@@ -897,7 +897,10 @@ for (const mod of modules.values()) {
     })
     // 最后一步是否 publish
     const stmts = blockStmts(entryMethod.body)
-    const last = stmts[stmts.length - 1]
+    // 新建命令 publish 之后可以只交回新编号：return { xxxId: ... } 或一次建几条时 return { xxxIds: [...] }（一个属性、名字以 Id 或 Ids 结尾），那一句不算步骤
+    const returnsIdOnly = (st) => st && ts.isReturnStatement(st) && st.expression && ts.isObjectLiteralExpression(unwrap(st.expression)) &&
+      unwrap(st.expression).properties.length === 1 && /Ids?$/.test(unwrap(st.expression).properties[0].name?.getText?.() ?? '')
+    const last = returnsIdOnly(stmts[stmts.length - 1]) ? stmts[stmts.length - 2] : stmts[stmts.length - 1]
     if (last && ts.isExpressionStatement(last)) {
       const ex = unwrap(last.expression)
       if (ts.isCallExpression(ex) && ts.isPropertyAccessExpression(ex.expression) && ex.expression.name.text === 'publish') published = true
