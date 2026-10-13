@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 /**
  * 解码器：从代码库的核心圈（domain / application / ports）还原模型 JSON。模块都在 src/modules/<module-folder>/ 底下。
- * 依据：agents/code/coding-standard.md「解码规则汇总」。
+ * 依据：agents/code/coding-standard.md 第九节「结构化注释」、第十一节「解码规则汇总」。
+ *
+ * 读出来的：类型 → 字段、入参、出参；JSDoc 标签 → traces、规则、不变量……；方法说明那段话 → purpose；
+ * 静态工厂 CREATE → create；方法体里的 // 注释 → 步骤（处理器、领域服务操作必有，行为与创建可有可无），
+ * 每一步改了哪几栏（changes）、抛什么、发什么都从这一步的几句代码里算（含所调方法的闭包）；
+ * 本模块里另写的一份别的模块的类型（标 @ref Module.Type）→「Module.Type」；事件处理器收的别的模块的事件同理。
  *
  * 用法：node tools/decode.js <代码库目录> <输出目录> [--system <系统名>]
  * 输出：与 model/ 同结构的 JSON；另有 _decode-issues.json 记录解码期发现的违规。
@@ -220,6 +225,27 @@ function docTags(node) {
 function tagValues(tags, name) {
   return tags.filter((t) => t.tag === name).map((t) => t.text)
 }
+/**
+ * JSDoc 第一个标签之前的那段说明文字（几行拼成一句）。方法上的这段就是模型的 `purpose.text`（作用：调用它做了什么、改了什么），
+ * 编码规范第九节。没有就返回 null
+ */
+function docLead(node) {
+  const sf = node.getSourceFile()
+  const text = sf.getFullText()
+  const ranges = ts.getLeadingCommentRanges(text, node.getFullStart()) ?? []
+  for (const r of ranges.slice().reverse()) {
+    if (r.kind !== ts.SyntaxKind.MultiLineCommentTrivia) continue
+    const raw = text.slice(r.pos, r.end)
+    if (!raw.startsWith('/**')) continue
+    const lead = []
+    for (const line of raw.slice(3, -2).split('\n').map((l) => l.replace(/^\s*\*\s?/, '').trim())) {
+      if (/^@[\w-]+/.test(line)) break
+      if (line) lead.push(line)
+    }
+    return lead.length ? lead.join(' ') : null
+  }
+  return null
+}
 function traceTags(tags) {
   const out = []
   for (const t of tagValues(tags, 'trace')) for (const id of t.split(/[\s,]+/).filter(Boolean)) if (!out.includes(id)) out.push(id)
@@ -244,15 +270,22 @@ function parseInvariant(text) {
   if (throwsList.length) inv.throws = throwsList
   return inv
 }
-/** 语句上方最后一行 // 注释 */
+/**
+ * 语句上方的 // 注释。一句话折成几行写的（紧挨着的几行 //，中间没有空行）拼回一句；
+ * 隔着空行的上一段注释不算。只拿最后一行的话，折行写的步骤只剩后半句
+ */
 function lineComment(node) {
   const sf = node.getSourceFile()
   const text = sf.getFullText()
-  const ranges = ts.getLeadingCommentRanges(text, node.getFullStart()) ?? []
-  const singles = ranges.filter((r) => r.kind === ts.SyntaxKind.SingleLineCommentTrivia)
-  if (!singles.length) return null
-  const r = singles[singles.length - 1]
-  return text.slice(r.pos + 2, r.end).trim()
+  const ranges = (ts.getLeadingCommentRanges(text, node.getFullStart()) ?? []).filter((r) => r.kind === ts.SyntaxKind.SingleLineCommentTrivia)
+  if (!ranges.length) return null
+  const run = [ranges[ranges.length - 1]]
+  for (let i = ranges.length - 2; i >= 0; i--) {
+    const gap = text.slice(ranges[i].end, run[0].pos)
+    if (/\S/.test(gap) || (gap.match(/\n/g) ?? []).length > 1) break
+    run.unshift(ranges[i])
+  }
+  return run.map((r) => text.slice(r.pos + 2, r.end).trim()).join(' ')
 }
 
 // ---------- 类型映射 ----------
@@ -263,6 +296,24 @@ function stripSuffix(name) {
 function isNullish(t) {
   return (t.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void)) !== 0
 }
+/**
+ * 别的模块的类型在本模块里另写的那一份（模块之间不许 import，编码规范第二节）：类型声明上标 `@ref Module.Type`，
+ * 就认它是那个模块的那一样，解码成「Module.Type」。没标的照本名解码，比对再按「同名 / 模块名 + 类型名」认（diff-model.js）
+ */
+function refOfType(t) {
+  for (const s of [t.aliasSymbol, t.getSymbol()]) {
+    const d = s?.declarations?.[0]
+    if (!d || isBuildingBlock(d.getSourceFile().fileName)) continue
+    if (!(ts.isTypeAliasDeclaration(d) || ts.isInterfaceDeclaration(d) || ts.isClassDeclaration(d))) continue
+    const ref = tagValues(docTags(d), 'ref')[0]
+    if (ref) return ref.split(/\s+/)[0]
+  }
+  return null
+}
+function isAnonymousObject(t) {
+  const n = t.getSymbol()?.name
+  return !t.aliasSymbol && (n === '__type' || n === '__object')
+}
 /** 返回 { type: string|null, nullable: boolean }；type 为 null 表示 void */
 function mapType(t, currentModule) {
   let nullable = false
@@ -270,6 +321,10 @@ function mapType(t, currentModule) {
     const parts = t.types.filter((x) => !isNullish(x))
     if (parts.length !== t.types.length) nullable = true
     if (parts.length === 0) return { type: null, nullable }
+    const ref = refOfType(t)
+    if (ref) return { type: ref, nullable }
+    // type Participant = { … } | null：名字在整个联合上，里面那一半是匿名对象，读成 Participant（可空），不读成一串字面量
+    if (parts.length === 1 && t.aliasSymbol && isAnonymousObject(parts[0])) return { type: t.aliasSymbol.name, nullable }
     if (parts.every((x) => x.flags & ts.TypeFlags.StringLiteral)) return { type: 'string', nullable }
     if (parts.every((x) => x.flags & ts.TypeFlags.BooleanLiteral)) return { type: 'boolean', nullable }
     if (parts.length === 1) {
@@ -302,9 +357,13 @@ function mapType(t, currentModule) {
       const q = entry.module !== currentModule ? `${entry.module}.${entry.modelName}` : entry.modelName
       return { type: q, nullable }
     }
+    const ref = refOfType(t)
+    if (ref) return { type: ref, nullable }
     if (t.aliasSymbol) return { type: t.aliasSymbol.name, nullable }
     if (name && name !== '__type' && name !== '__object') return { type: stripSuffix(name), nullable }
   }
+  const ref = refOfType(t)
+  if (ref) return { type: ref, nullable }
   if (t.aliasSymbol) return { type: t.aliasSymbol.name, nullable }
   return { type: checker.typeToString(t), nullable }
 }
@@ -372,15 +431,23 @@ function propsTypeOf(cls, currentModule) {
   if (propsParam) return membersOfType(checker.getTypeAtLocation(propsParam), currentModule)
   // 值对象：readonly 参数属性
   const fields = []
+  const refs = []
   for (const p of ctor.parameters) {
     const mods = ts.getCombinedModifierFlags(p)
     if (!(mods & (ts.ModifierFlags.Readonly | ts.ModifierFlags.Public | ts.ModifierFlags.Private))) continue
     const m = mapType(checker.getTypeAtLocation(p), currentModule)
     const f = { name: p.name.getText(), type: m.type ?? 'unknown' }
     if (m.nullable || p.questionToken) f.nullable = true
+    const tags = docTags(p)
+    const note = tagValues(tags, 'note')[0]
+    if (note) f.note = note
+    const fieldTraces = traceTags(tags)
+    if (fieldTraces.length) f.traces = fieldTraces
+    const ref = tagValues(tags, 'ref')[0]
+    if (ref) refs.push({ field: f.name, to: ref })
     fields.push(f)
   }
-  return { fields, refs: [] }
+  return { fields, refs }
 }
 
 // ---------- 调用解析 ----------
@@ -389,6 +456,11 @@ function unwrap(expr) {
   for (;;) {
     if (ts.isAwaitExpression(e) || ts.isParenthesizedExpression(e) || ts.isAsExpression(e) || ts.isNonNullExpression(e)) {
       e = e.expression
+      continue
+    }
+    // [await x.get()]：只装一样东西的数组，看里面那一次调用（取一份文件、装成一份清单）
+    if (ts.isArrayLiteralExpression(e) && e.elements.length === 1 && !ts.isSpreadElement(e.elements[0])) {
+      e = e.elements[0]
       continue
     }
     if (ts.isCallExpression(e) && ts.isIdentifier(e.expression)) {
@@ -411,8 +483,8 @@ function resolveCall(call) {
   if (!ts.isPropertyAccessExpression(callee)) return null
   const method = callee.name.text
   const obj = callee.expression
-  // 静态调用：X.CREATE
-  const objSym = checker.getSymbolAtLocation(obj)
+  // 静态调用：X.CREATE（this.x(…) 不算：this 的符号也是类本身）
+  const objSym = obj.kind === ts.SyntaxKind.ThisKeyword ? null : checker.getSymbolAtLocation(obj)
   if (objSym) {
     const real = objSym.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(objSym) : objSym
     const decl = real.declarations?.[0]
@@ -435,10 +507,15 @@ function nodeId(entry, method) {
   return `${rel(entry.file)}#${method}`
 }
 
-// ---------- 方法体分析：直接 raises / throws / 调用边 / 是否修改状态 ----------
-const graph = new Map() // nodeId → { raises: [], throws: [], calls: Set, mutates: boolean }
+// ---------- 方法体分析：直接 raises / throws / 改了哪几栏 / 调用边 / 是否修改状态 ----------
+// nodeId → { raises, throws, calls: Set, mutates, changes: Set<栏>, aliasCalls: [{ field, callee }] }
+// 节点有三种：类的方法（文件#方法名）、模块里的普通函数（文件#fn:函数名，领域服务、实体常把一段检查写成文件里的小函数）
+const graph = new Map()
+function emptyScan() {
+  return { raises: [], throws: [], calls: new Set(), mutates: false, changes: new Set(), aliasCalls: [] }
+}
 function ensureNode(id) {
-  if (!graph.has(id)) graph.set(id, { raises: [], throws: [], calls: new Set(), mutates: false })
+  if (!graph.has(id)) graph.set(id, emptyScan())
   return graph.get(id)
 }
 function whenOf(node, methodNode) {
@@ -464,9 +541,89 @@ function isDescendant(node, ancestor) {
   }
   return false
 }
-function analyzeMethod(entry, method) {
-  const id = nodeId(entry, method.name.getText())
-  const g = ensureNode(id)
+function isThisProps(e) {
+  return !!e && ts.isPropertyAccessExpression(e) && e.expression.kind === ts.SyntaxKind.ThisKeyword && e.name.text === 'props'
+}
+/** this.props.X、this.props.X.Y、this.props.X[i] → 'X'（改的是哪一栏）；不是 this.props 底下的返回 null */
+function propsFieldOfTarget(e) {
+  let cur = e
+  while (cur) {
+    if (ts.isPropertyAccessExpression(cur) && isThisProps(cur.expression)) return cur.name.text
+    if (ts.isPropertyAccessExpression(cur) || ts.isElementAccessExpression(cur) || ts.isNonNullExpression(cur) || ts.isParenthesizedExpression(cur)) {
+      cur = cur.expression
+      continue
+    }
+    return null
+  }
+  return null
+}
+/** 表达式里第一处 this.props.<栏> 的栏名：const line = this.props.lines.find(…) → 'lines' */
+function propsFieldIn(node) {
+  let found = null
+  const visit = (n) => {
+    if (found) return
+    if (ts.isPropertyAccessExpression(n) && isThisProps(n.expression)) {
+      found = n.name.text
+      return
+    }
+    ts.forEachChild(n, visit)
+  }
+  visit(node)
+  return found
+}
+/**
+ * 方法里从 this.props.<栏> 取出来的变量：const line = this.props.lines.find(…)、for (const item of this.props.items)、
+ * this.props.lines.forEach((l) => …) 的参数。对它调会改状态的行为（line.amend(…)），就算改了那一栏
+ */
+function aliasesIn(body) {
+  const alias = new Map()
+  const visit = (n) => {
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer) {
+      const f = propsFieldIn(n.initializer)
+      if (f) alias.set(n.name.text, f)
+    }
+    if ((ts.isForOfStatement(n) || ts.isForInStatement(n)) && ts.isVariableDeclarationList(n.initializer)) {
+      const f = propsFieldIn(n.expression)
+      const d = n.initializer.declarations[0]
+      if (f && d && ts.isIdentifier(d.name)) alias.set(d.name.text, f)
+    }
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression)) {
+      const f = propsFieldOfTarget(n.expression.expression)
+      if (f) for (const a of n.arguments) if ((ts.isArrowFunction(a) || ts.isFunctionExpression(a)) && a.parameters[0] && ts.isIdentifier(a.parameters[0].name)) alias.set(a.parameters[0].name.text, f)
+    }
+    ts.forEachChild(n, visit)
+  }
+  if (body) visit(body)
+  return alias
+}
+/** 调的是模块里的普通函数（readColumns(…)、sumOf(…)）：返回它的声明，好跟进去看它抛什么；构建块与库函数不算 */
+function localFunctionOf(call) {
+  if (!ts.isIdentifier(call.expression)) return null
+  const decl = declOf(call.expression)
+  if (!decl) return null
+  const file = path.normalize(decl.getSourceFile().fileName)
+  if (isBuildingBlock(file) || !file.startsWith(path.normalize(modulesDir) + path.sep)) return null
+  if (ts.isFunctionDeclaration(decl) && decl.body) return { node: decl, body: decl.body, name: decl.name?.text ?? '?' }
+  if (ts.isVariableDeclaration(decl) && decl.initializer && (ts.isArrowFunction(decl.initializer) || ts.isFunctionExpression(decl.initializer))) {
+    return { node: decl.initializer, body: decl.initializer.body, name: decl.name.getText() }
+  }
+  return null
+}
+function fnId(fn) {
+  return `${rel(fn.node.getSourceFile().fileName)}#fn:${fn.name}`
+}
+const ASSIGN = new Set([
+  ts.SyntaxKind.EqualsToken, ts.SyntaxKind.PlusEqualsToken, ts.SyntaxKind.MinusEqualsToken, ts.SyntaxKind.AsteriskEqualsToken, ts.SyntaxKind.SlashEqualsToken,
+  ts.SyntaxKind.PercentEqualsToken, ts.SyntaxKind.BarBarEqualsToken, ts.SyntaxKind.AmpersandAmpersandEqualsToken, ts.SyntaxKind.QuestionQuestionEqualsToken,
+])
+/**
+ * 扫一段代码：直接 raise / throw 的、改了自己哪几栏、调了谁。建调用图（整个方法）和解码步骤（一步里的几句）都用它。
+ * ctx：{ entry 所在类的登记项, method 方法节点（算 raise 的 when）, alias 别名表, label 报违规时的名字, isStatic, quiet 不报违规 }
+ */
+function scan(node, ctx, out) {
+  const report = (text) => {
+    if (!ctx.quiet && ctx.entry) issue(ctx.entry.file, `${ctx.label}：${text}`)
+  }
   const visit = (n) => {
     if (ts.isCallExpression(n)) {
       const callee = n.expression
@@ -475,48 +632,97 @@ function analyzeMethod(entry, method) {
         if (arg && ts.isNewExpression(arg)) {
           const evEntry = entryOfNode(declOf(arg.expression))
           if (evEntry?.prefix === 'event') {
-            const when = whenOf(n, method)
-            g.raises.push(when ? { event: evEntry.modelName, when } : evEntry.modelName)
-          } else issue(entry.file, `${method.name.getText()}：raise 的不是 DomainEvent 子类`)
+            const when = ctx.method ? whenOf(n, ctx.method) : null
+            out.raises.push(when ? { event: evEntry.modelName, when } : evEntry.modelName)
+          } else report('raise 的不是 DomainEvent 子类')
         }
-        g.mutates = true
-        if (isStatic(method)) issue(entry.file, `${method.name.getText()}：静态工厂不得 raise 事件`)
-      } else if (ts.isPropertyAccessExpression(callee) && callee.expression.getText().startsWith('this.props') && MUTATORS.has(callee.name.text)) {
-        g.mutates = true
+        out.mutates = true
+        if (ctx.isStatic) report('静态工厂不得 raise 事件')
+      } else if (ts.isPropertyAccessExpression(callee) && propsFieldOfTarget(callee.expression) && MUTATORS.has(callee.name.text)) {
+        out.mutates = true
+        out.changes.add(propsFieldOfTarget(callee.expression))
       } else {
         const r = resolveCall(n)
         if (r && r.entry) {
           const k = r.entry.prefix
-          if (DOMAIN_OBJECT.has(k) || k === 'service' || k === 'command-handler') g.calls.add(nodeId(r.entry, r.method))
+          if (DOMAIN_OBJECT.has(k) || k === 'service' || k === 'command-handler') {
+            const id = nodeId(r.entry, r.method)
+            out.calls.add(id)
+            // 对 this.props.<栏> 本身或从它取出来的东西调行为：那个行为改了状态，就算改了这一栏（改一行 → 改了 lines）
+            if (DOMAIN_OBJECT.has(k) && !r.isStatic && ts.isPropertyAccessExpression(callee)) {
+              const target = callee.expression
+              const f = propsFieldOfTarget(target) ?? (ts.isIdentifier(target) ? ctx.alias?.get(target.text) : null)
+              if (f) out.aliasCalls.push({ field: f, callee: id })
+            }
+          }
+        } else if (!r) {
+          const fn = localFunctionOf(n)
+          if (fn) {
+            analyzeFunction(fn)
+            out.calls.add(fnId(fn))
+          }
         }
       }
     }
     if (ts.isThrowStatement(n) && n.expression && ts.isNewExpression(n.expression)) {
-      const sym = checker.getSymbolAtLocation(n.expression.expression)
-      const real = sym && (sym.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(sym) : sym)
-      const decl = real?.declarations?.[0]
+      const decl = declOf(n.expression.expression)
       const errEntry = entryOfNode(decl)
       if (errEntry?.prefix === 'error') {
-        if (!g.throws.includes(errEntry.modelName)) g.throws.push(errEntry.modelName)
-      } else if (decl && !isBuildingBlock(decl.getSourceFile().fileName) && entry.layer === 'domain') {
-        issue(entry.file, `${method.name.getText()}：抛出的不是 DomainError 子类`)
+        if (!out.throws.includes(errEntry.modelName)) out.throws.push(errEntry.modelName)
+      } else if (decl && !isBuildingBlock(decl.getSourceFile().fileName) && ctx.entry?.layer === 'domain') {
+        report('抛出的不是 DomainError 子类')
       }
     }
-    if (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.EqualsToken && n.left.getText().startsWith('this.props')) g.mutates = true
+    // 赋值：this.props.<栏> = / += …；this.props = { …this.props, a, b } 整份换掉时，算字面量里列出来的几栏
+    if (ts.isBinaryExpression(n) && ASSIGN.has(n.operatorToken.kind)) {
+      const f = propsFieldOfTarget(n.left)
+      if (f) {
+        out.mutates = true
+        out.changes.add(f)
+      } else if (isThisProps(n.left)) {
+        out.mutates = true
+        if (ts.isObjectLiteralExpression(n.right)) for (const p of n.right.properties) if (p.name && !ts.isSpreadAssignment(p)) out.changes.add(p.name.getText())
+      }
+    }
+    if ((ts.isPrefixUnaryExpression(n) || ts.isPostfixUnaryExpression(n)) && (n.operator === ts.SyntaxKind.PlusPlusToken || n.operator === ts.SyntaxKind.MinusMinusToken)) {
+      const f = propsFieldOfTarget(n.operand)
+      if (f) {
+        out.mutates = true
+        out.changes.add(f)
+      }
+    }
+    // 创建：new 自己这个类(…, { a, b, … }) 交给构造的那几栏，就是创建这一步记下的几栏；
+    // 某一栏直接用前面算好的变量（{ price } 或 price: price），记下来，收尾时算到算它的那一步上
+    if (ctx.create && ts.isNewExpression(n) && ctx.entry && entryOfNode(declOf(n.expression)) === ctx.entry) {
+      for (const a of n.arguments ?? []) {
+        if (!ts.isObjectLiteralExpression(a)) continue
+        for (const p of a.properties) {
+          if (!p.name || ts.isSpreadAssignment(p)) continue
+          const field = p.name.getText()
+          out.changes.add(field)
+          const v = ts.isShorthandPropertyAssignment(p) ? p.name.text : ts.isPropertyAssignment(p) && ts.isIdentifier(p.initializer) ? p.initializer.text : null
+          if (v && out.propsFrom) out.propsFrom.set(field, v)
+        }
+      }
+    }
+    if (out.declared && ts.isVariableDeclaration(n) && ts.isIdentifier(n.name)) out.declared.add(n.name.text)
     ts.forEachChild(n, visit)
   }
-  visit(method.body)
+  if (node) visit(node)
+  return out
+}
+function analyzeMethod(entry, method) {
+  const id = nodeId(entry, method.name.getText())
+  const g = ensureNode(id)
+  scan(method.body, { entry, method, alias: aliasesIn(method.body), label: method.name.getText(), isStatic: isStatic(method) }, g)
   return g
 }
-// 步骤级 throws：调工厂 / 行为的那一步，把被调节点闭包里的 throws 挂上；仓储、端口、服务的调用不挂（模型也不在那些步骤上写）
-function attachStepThrows(steps) {
-  for (const st of steps ?? []) {
-    const id = st.call?._callee
-    if (!id) continue
-    delete st.call._callee
-    const g = graph.get(id)
-    if (g?.throws?.length) st.throws = [...g.throws]
-  }
+const analyzedFns = new Set()
+function analyzeFunction(fn) {
+  const id = fnId(fn)
+  if (analyzedFns.has(id)) return
+  analyzedFns.add(id)
+  scan(fn.body, { entry: entryOfFile(fn.node.getSourceFile().fileName), method: fn.node, alias: new Map(), label: fn.name }, ensureNode(id))
 }
 function propagate() {
   let changed = true
@@ -543,6 +749,9 @@ function propagate() {
     }
   }
 }
+function sameClass(a, b) {
+  return a.split('#')[0] === b.split('#')[0]
+}
 function mutatesTransitively(id, seen = new Set()) {
   if (seen.has(id)) return false
   seen.add(id)
@@ -552,19 +761,158 @@ function mutatesTransitively(id, seen = new Set()) {
   for (const c of g.calls) {
     const ce = graph.get(c)
     // 只沿同一个类的方法传播「修改状态」
-    if (ce && c.split('#')[0] === id.split('#')[0] && mutatesTransitively(c, seen)) return true
+    if (ce && sameClass(c, id) && mutatesTransitively(c, seen)) return true
   }
+  // 对自己 props 里的实体 / 值对象调了会改状态的行为，也算改了自己
+  for (const a of g.aliasCalls) if (mutatesTransitively(a.callee, new Set(seen))) return true
   return false
 }
+/** 一个方法改了自己哪几栏：直接改的，对 props 里的东西调了会改状态的行为的那一栏，再沿同类方法传 */
+function changesOf(id, seen = new Set()) {
+  const out = new Set()
+  if (seen.has(id)) return out
+  seen.add(id)
+  const g = graph.get(id)
+  if (!g) return out
+  for (const f of g.changes) out.add(f)
+  for (const a of g.aliasCalls) if (mutatesTransitively(a.callee)) out.add(a.field)
+  for (const c of g.calls) if (sameClass(c, id) && !c.includes('#fn:')) for (const f of changesOf(c, seen)) out.add(f)
+  return out
+}
+function entryOfId(id) {
+  return entryOfFile(path.join(codebase, id.split('#')[0]))
+}
 
-// ---------- 步骤解码（处理器与领域服务操作） ----------
+// ---------- 步骤解码（处理器、领域服务操作、领域对象的行为与创建） ----------
+/** 一次已解析的调用在步骤里记成什么：{ kind, target, method }；认不出种类的返回 null */
+function callOf(r, currentModule) {
+  const e = r.entry
+  const target = e.module !== currentModule ? `${e.module}.${e.modelName}` : e.modelName
+  let kind = null
+  if (DOMAIN_OBJECT.has(e.prefix)) kind = r.isStatic ? 'factory' : 'behavior'
+  else if (e.prefix === 'service') kind = 'service'
+  else if (e.prefix === 'repository') kind = 'repository'
+  else if (e.prefix === 'port') kind = 'port'
+  else if (e.prefix === 'command-handler') kind = 'command'
+  return kind ? { kind, target, method: r.method } : null
+}
+/**
+ * 调的是自己类上的私有方法（或不是方法）：那是这个类自己的小帮手，不算一步的调用。
+ * 调自己类上公开的行为 / 操作照样算（领域服务的一个操作先调自己另一个操作检查）
+ */
+function isOwnHelper(r, self) {
+  if (!self || r.entry !== self) return false
+  const cls = mainClass(program.getSourceFile(self.file), self.className)
+  const m = cls && methodsOf(cls).find((x) => x.name.getText() === r.method)
+  return !m || !isPublic(m)
+}
+/** 这一段里第一处能认出来的核心圈调用（不算自己类上的小帮手） */
+function firstCoreCall(node, self, currentModule) {
+  let hit = null
+  const visit = (n) => {
+    if (hit) return
+    if (ts.isCallExpression(n)) {
+      const r = resolveCall(n)
+      if (r?.entry && !isOwnHelper(r, self)) {
+        const call = callOf(r, currentModule)
+        if (call) {
+          hit = { r, call }
+          return
+        }
+      }
+    }
+    ts.forEachChild(n, visit)
+  }
+  visit(node)
+  return hit
+}
+const STATEMENT_KINDS = (n) =>
+  ts.isVariableStatement(n) || ts.isExpressionStatement(n) || ts.isReturnStatement(n) || ts.isIfStatement(n) || ts.isThrowStatement(n) ||
+  ts.isForOfStatement(n) || ts.isForInStatement(n) || ts.isForStatement(n) || ts.isWhileStatement(n) || ts.isDoStatement(n) || ts.isBlock(n)
+/** 这一段里有没有自己带 // 注释的句子（不进回调函数里看） */
+function hasCommentedStatement(node) {
+  let found = false
+  const visit = (n) => {
+    if (found || ts.isFunctionLike(n)) return
+    if (STATEMENT_KINDS(n) && !ts.isBlock(n) && lineComment(n)) {
+      found = true
+      return
+    }
+    ts.forEachChild(n, visit)
+  }
+  for (const s of blockStmts(node)) visit(s)
+  return found
+}
+/** { xxxId: … } 或 { xxxIds: […] }：只有一栏、名字以 Id / Ids 结尾 */
+function isIdOnly(expr) {
+  const e = unwrap(expr)
+  return ts.isObjectLiteralExpression(e) && e.properties.length === 1 && /Ids?$/.test(e.properties[0].name?.getText?.() ?? '')
+}
+/** return 交回的是什么：一个变量就是它的名字；只有一栏的对象字面量（return { lineId }）就是那一栏的名字 */
+function returnedName(expr) {
+  const e = unwrap(expr)
+  if (ts.isIdentifier(e)) return e.text
+  if (ts.isObjectLiteralExpression(e) && e.properties.length === 1 && e.properties[0].name) return e.properties[0].name.getText()
+  return null
+}
+const LOOP = (s) => ts.isForOfStatement(s) || ts.isForInStatement(s) || ts.isForStatement(s) || ts.isWhileStatement(s) || ts.isDoStatement(s)
+/**
+ * 把一段方法体读成步骤（编码规范第十一节）。
+ * - 一条 // 注释开一步；它下面没有注释的句子并进这一步：这一步改了哪几栏、抛什么、发什么、调了谁都算上。
+ *   这一步还没有调用时，下面没注释的那一句调用就是这一步的调用（output 跟着取那一句的变量）。
+ * - if：里面的句子各带注释时是分流，注释（没有就用条件源码）当 when；里面没有带注释的句子时，整个 if 就是一步
+ *   （守卫「找不到就抛错、找到放行」写成一句 if (…) throw，挑中了就拿掉）。处理器里的 if 照旧只当分流。
+ * - 循环（for…of 等）：是一步，标 each；循环体里的句子各带注释时，每一句各是一步，都标 each。
+ * - return：带注释就是「交回」那一步，output 是交回的变量名（或只有一栏的 { lineId } 的那一栏）。
+ * mode：handler（处理器）、service（领域服务操作）、object（领域对象的行为与创建：步骤可有可无，不报缺注释）
+ */
 function stepsOf(body, currentModule, ctx) {
+  const mode = ctx.mode ?? (ctx.handler ? 'handler' : 'service')
+  const report = (text) => {
+    if (!ctx.quiet) issue(ctx.file, text)
+  }
+  const scanCtx = { entry: ctx.entry ?? null, method: null, alias: aliasesIn(body), label: '', quiet: true, create: !!ctx.create }
   const steps = []
   const domainOutputs = new Set() // 前面步骤中来自领域调用的 output 变量名
-  const handle = (stmts, when) => {
+  let open = null // 当前这一步：后面没注释的句子并进来
+  const newStep = (text, when, each) => {
+    const st = { text, _scan: { ...emptyScan(), declared: new Set(), propsFrom: new Map() } }
+    if (each) st.each = true
+    if (when) st.when = when
+    steps.push(st)
+    return st
+  }
+  const absorb = (st, node) => scan(node, scanCtx, st._scan)
+  const setCall = (st, hit, output) => {
+    st.call = hit.call
+    // 记下被调的是谁：处理器算完 raises / throws 闭包后，被调工厂 / 行为 / 服务会抛的错、会发的事件挂回这一步（agents/model/shapes.md「步骤语法」）
+    ctx.onCall?.(hit.r.entry, hit.r, hit.call.kind)
+    if (output && ['behavior', 'factory', 'service'].includes(hit.call.kind)) domainOutputs.add(output)
+  }
+  // 复合的一句（if、循环、花括号块）里面没有自己带注释的句子：整句是一步，或者没注释时并进上一步
+  const wholeStatement = (s, comment, when, each, callNode) => {
+    const st = comment ? newStep(comment, when, each) : open
+    if (st) {
+      absorb(st, s)
+      if (!st.call) {
+        const hit = firstCoreCall(callNode ?? s, ctx.entry ?? null, currentModule)
+        if (hit) setCall(st, hit, null)
+      }
+    }
+    if (comment) open = st
+  }
+  const handle = (stmts, when, each) => {
     for (const s of stmts) {
+      const comment = lineComment(s)
       if (ts.isIfStatement(s)) {
-        const w = lineComment(s) ?? s.expression.getText()
+        const inner = hasCommentedStatement(s.thenStatement) || (s.elseStatement && hasCommentedStatement(s.elseStatement))
+        if (mode !== 'handler' && !inner) {
+          wholeStatement(s, comment, when, each)
+          // 注释写在 if 上，说的就是这个 if；后面没注释的句子不并进它
+          if (comment) open = null
+          continue
+        }
+        const w = comment ?? s.expression.getText()
         // 分流条件只能引用某次领域调用的返回值
         const idents = []
         const collect = (n) => {
@@ -572,16 +920,39 @@ function stepsOf(body, currentModule, ctx) {
           ts.forEachChild(n, collect)
         }
         collect(s.expression)
-        if (ctx.handler && !idents.some((id) => domainOutputs.has(id))) issue(ctx.file, `处理器体内的业务判断（条件未引用领域调用的结果）：if (${s.expression.getText()})`)
-        handle(blockStmts(s.thenStatement), w)
-        if (s.elseStatement) handle(blockStmts(s.elseStatement), '否则')
+        if (ctx.handler && !idents.some((id) => domainOutputs.has(id))) report(`处理器体内的业务判断（条件未引用领域调用的结果）：if (${s.expression.getText()})`)
+        open = null
+        handle(blockStmts(s.thenStatement), w, each)
+        if (s.elseStatement) handle(blockStmts(s.elseStatement), '否则', each)
+        open = null
         continue
       }
-      if (ts.isThrowStatement(s) && ctx.handler) {
-        issue(ctx.file, `处理器体内不得直接 throw（技术守卫写成调用）：${s.getText().slice(0, 60)}`)
+      if (LOOP(s)) {
+        if (hasCommentedStatement(s.statement)) {
+          if (comment) newStep(comment, when, true)
+          open = null
+          handle(blockStmts(s.statement), when, true)
+          open = null
+        } else wholeStatement(s, comment, when, true, s.statement)
         continue
       }
-      const comment = lineComment(s)
+      if (ts.isBlock(s)) {
+        if (hasCommentedStatement(s)) {
+          if (comment) newStep(comment, when, each)
+          open = null
+          handle([...s.statements], when, each)
+          open = null
+        } else wholeStatement(s, comment, when, each)
+        continue
+      }
+      if (ts.isThrowStatement(s)) {
+        if (ctx.handler) {
+          report(`处理器体内不得直接 throw（技术守卫写成调用）：${s.getText().slice(0, 60)}`)
+          continue
+        }
+        wholeStatement(s, comment, when, each)
+        continue
+      }
       let expr = null
       let output = null
       if (ts.isVariableStatement(s)) {
@@ -592,49 +963,113 @@ function stepsOf(body, currentModule, ctx) {
         }
       } else if (ts.isExpressionStatement(s)) {
         expr = unwrap(s.expression)
+        // reading = this.check.flag(reading, …)：给已有的变量重新赋值，同 const reading = …
+        if (ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(expr.left)) {
+          output = expr.left.text
+          expr = unwrap(expr.right)
+        }
       } else if (ts.isReturnStatement(s) && s.expression) {
+        // 新建命令 publish 之后只交回新编号（return { lineId }）：不是一步，模型也不写
+        if (mode === 'handler' && isIdOnly(s.expression)) continue
         expr = unwrap(s.expression)
+        output = returnedName(s.expression)
       }
-      let call = null
+      let hit = null
       let skipped = false
-      let each = false
+      let eachHere = each
       // 「对一批东西逐个做一次」：代码里是 xs.map(x => …) / forEach / flatMap，
       // 外层那个 map 本身不是业务调用，要读的是循环体里的那一次。
       const inner = eachCallOf(expr)
-      if (inner) { each = true; expr = inner }
+      if (inner) {
+        eachHere = true
+        expr = inner
+      }
       if (expr && ts.isCallExpression(expr)) {
         const r = resolveCall(expr)
         if (r?.skip) skipped = true
-        else if (r?.entry) {
-          const e = r.entry
-          const target = e.module !== currentModule ? `${e.module}.${e.modelName}` : e.modelName
-          let kind = null
-          if (DOMAIN_OBJECT.has(e.prefix)) kind = r.isStatic ? 'factory' : 'behavior'
-          else if (e.prefix === 'service') kind = 'service'
-          else if (e.prefix === 'repository') kind = 'repository'
-          else if (e.prefix === 'port') kind = 'port'
-          else if (e.prefix === 'command-handler') kind = 'command'
-          if (kind) {
-            call = { kind, target, method: r.method }
-            // 记下被调节点：处理器算完 raises / throws 闭包后，把被调工厂 / 行为会抛的错挂回这一步（agents/model/shapes.md「步骤语法」的步骤级 throws；不挂回，方向 ② 核对时这一步永远少一条错）
-            if (kind === 'factory' || kind === 'behavior' || kind === 'service') call._callee = nodeId(e, r.method) // service：交给领域服务那一步，服务操作会抛的错也挂回这一步
-            ctx.onCall?.(e, r, kind)
-            if (output && ['behavior', 'factory', 'service'].includes(kind)) domainOutputs.add(output)
-          }
+        else if (r?.entry && !isOwnHelper(r, ctx.entry ?? null)) {
+          const call = callOf(r, currentModule)
+          if (call) hit = { r, call }
         }
       }
       if (skipped) continue
-      if (!comment && !call) continue
-      const step = { text: comment ?? `(${expr?.getText().slice(0, 40) ?? s.getText().slice(0, 40)})` }
-      if (!comment) issue(ctx.file, `步骤缺少 // 注释：${step.text}`)
-      if (call) step.call = call
-      if (each) step.each = true
-      if (when) step.when = when
-      if (output) step.output = output
-      steps.push(step)
+      // 主调用不是核心圈的（this.props.messages.push(UploadMessage.CREATE(…))、xs.filter(…).sort(…)），看句子里头第一处核心圈调用
+      if (!hit && expr) hit = firstCoreCall(expr, ctx.entry ?? null, currentModule)
+      if (comment) {
+        const st = newStep(comment, when, eachHere)
+        if (hit) setCall(st, hit, output)
+        if (output) st.output = output
+        absorb(st, s)
+        open = st
+      } else if (hit && open && !open.call) {
+        // 注释下面那一步还没有调用：这一句没注释的调用就是它的调用
+        setCall(open, hit, output)
+        if (output) open.output = output
+        if (eachHere) open.each = true
+        absorb(open, s)
+      } else if (hit && mode !== 'object') {
+        const st = newStep(`(${expr.getText().slice(0, 40)})`, when, eachHere)
+        report(`步骤缺少 // 注释：${st.text}`)
+        setCall(st, hit, output)
+        if (output) st.output = output
+        absorb(st, s)
+        open = st
+      } else if (open) absorb(open, s)
     }
   }
-  handle(blockStmts(body), undefined)
+  handle(blockStmts(body), undefined, false)
+  return steps
+}
+/**
+ * 步骤收尾：一步里各句调到的（行为、工厂、领域服务操作、模块里的小函数）会抛的错、会发的事件挂回这一步（闭包），
+ * 改了哪几栏也挂上：领域对象里写自己的栏名；处理器、领域服务里写「对象.栏」。处理器调命令那一步不挂（命令自己记）。
+ * 要在 propagate() 之后调。
+ */
+function finishSteps(steps, mode, self) {
+  // 创建里交给构造的某一栏是前面哪一步算出来的变量：那一栏算那一步改的，不算 new 那一步的
+  const movedTo = new Map() // 步骤 → 挪过来的栏
+  const movedFrom = new Map() // 步骤 → 挪走的栏
+  steps.forEach((st, i) => {
+    for (const [field, v] of st._scan.propsFrom ?? []) {
+      const from = steps.slice(0, i).reverse().find((x) => x._scan.declared?.has(v))
+      if (!from) continue
+      if (!movedTo.has(from)) movedTo.set(from, [])
+      movedTo.get(from).push(field)
+      if (!movedFrom.has(st)) movedFrom.set(st, new Set())
+      movedFrom.get(st).add(field)
+    }
+  })
+  for (const st of steps) {
+    const sc = st._scan
+    delete st._scan
+    const throwsList = [...sc.throws]
+    const raises = sc.raises.map((r) => (typeof r === 'string' ? r : r.event))
+    const changes = new Set()
+    if (mode === 'object') {
+      for (const f of sc.changes) changes.add(f)
+      for (const a of sc.aliasCalls) if (mutatesTransitively(a.callee)) changes.add(a.field)
+    }
+    for (const c of sc.calls) {
+      const ce = entryOfId(c)
+      if (ce?.prefix === 'command-handler') continue
+      const g = graph.get(c)
+      if (!g) continue
+      for (const e of g.throws) if (!throwsList.includes(e)) throwsList.push(e)
+      for (const r of g.raises) {
+        const name = typeof r === 'string' ? r : r.event
+        if (!raises.includes(name)) raises.push(name)
+      }
+      if (c.includes('#fn:')) continue
+      if (mode === 'object') {
+        if (self && ce === self) for (const f of changesOf(c)) changes.add(f)
+      } else if (ce && DOMAIN_OBJECT.has(ce.prefix)) for (const f of changesOf(c)) changes.add(`${ce.modelName}.${f}`)
+    }
+    for (const f of movedTo.get(st) ?? []) changes.add(f)
+    for (const f of movedFrom.get(st) ?? []) changes.delete(f)
+    if (throwsList.length) st.throws = throwsList
+    if (raises.length) st.raises = [...new Set(raises)]
+    if (changes.size) st.changes = [...changes]
+  }
   return steps
 }
 /**
@@ -738,10 +1173,12 @@ for (const mod of modules.values()) {
         aggregateInvariants: tagValues(tags, 'aggregate-invariant').map(parseInvariant),
         fields: props.fields,
         invariants: tagValues(tags, 'invariant').map(parseInvariant),
+        create: decodeCreate(rootEntry, rootCls, M),
         behaviors: decodeBehaviors(rootEntry, rootCls, M),
         traces: rootTraces,
         questions: [],
       }
+      if (!obj.create) delete obj.create
       if (!rootTraces.length) issue(rootEntry.file, '缺少 @trace')
       checkBase(rootCls, 'AggregateRoot', rootEntry)
       emit(`${M}/domain/${rootEntry.aggregateFolder}/${path.basename(rootEntry.file, '.ts')}.json`, obj)
@@ -763,9 +1200,14 @@ for (const mod of modules.values()) {
         aggregate: e.aggregate,
         fields: props.fields,
         invariants: tagValues(tags, 'invariant').map(parseInvariant),
+        create: decodeCreate(e, cls, M),
         behaviors: decodeBehaviors(e, cls, M),
         traces: traceTags(tags),
       }
+      if (!obj.create) delete obj.create
+      // 实体、值对象 props 上的 @ref 也是这个聚合持有的别的聚合的编号（module.json 的 idRefs 记在聚合上）
+      const aggItem = moduleJson.aggregates[moduleJson.aggregates.length - 1]
+      for (const ref of props.refs) if (!aggItem.idRefs.some((x) => x.field === ref.field && x.to === ref.to)) aggItem.idRefs.push(ref)
       checkBase(cls, e.prefix === 'entity' ? 'Entity' : 'ValueObject', e)
       emit(`${M}/domain/${e.aggregateFolder}/${path.basename(e.file, '.ts')}.json`, obj)
     }
@@ -831,13 +1273,22 @@ for (const mod of modules.values()) {
         }
         const steps = stepsOf(m.body, M, {
           file: e.file,
+          entry: e,
           onCall: (te, r, kind) => {
             if (kind === 'behavior' && te.prefix === 'aggregate-root' && mutatesTransitively(nodeId(te, r.method))) if (!writes.includes(te.modelName)) writes.push(te.modelName)
+            // 工厂建出来的聚合：这个操作建了它，算它写的、它协调的
+            if (kind === 'factory' && te.prefix === 'aggregate-root' && te.module === M) {
+              if (!writes.includes(te.modelName)) writes.push(te.modelName)
+              if (!coordinates.includes(te.modelName)) coordinates.push(te.modelName)
+            }
           },
         })
         const g = graph.get(nodeId(e, m.name.getText())) ?? { raises: [], throws: [] }
-        attachStepThrows(steps)
-        const op = { name: m.name.getText(), input }
+        finishSteps(steps, 'service', e)
+        const op = { name: m.name.getText() }
+        const purpose = docLead(m)
+        if (purpose) op.purpose = { text: purpose }
+        op.input = input
         const ret = mapType(sig.getReturnType(), M).type
         if (ret) op.output = ret
         Object.assign(op, { reads, writes, steps, rules: tagValues(tags, 'rule'), raises: g.raises, throws: g.throws, traces: traceTags(tags) })
@@ -878,6 +1329,7 @@ for (const mod of modules.values()) {
     const steps = stepsOf(entryMethod.body, M, {
       file: e.file,
       handler: true,
+      entry: e,
       onCall: (te, r, kind) => {
         called.push(nodeId(te, r.method))
         if (kind === 'repository' && !READ_PREFIX.test(r.method)) {
@@ -885,6 +1337,7 @@ for (const mod of modules.values()) {
           if (te.aggregate && !writes.includes(te.aggregate)) writes.push(te.aggregate)
         }
         if (kind === 'behavior' && te.prefix === 'aggregate-root' && mutatesTransitively(nodeId(te, r.method))) if (!writes.includes(te.modelName)) writes.push(te.modelName)
+        if (kind === 'factory' && te.prefix === 'aggregate-root' && te.module === M && e.prefix !== 'query-handler' && !writes.includes(te.modelName)) writes.push(te.modelName)
         if (kind === 'service') {
           const opWrites = serviceWrites(te, r.method)
           for (const w of opWrites) if (!writes.includes(w)) writes.push(w)
@@ -913,7 +1366,7 @@ for (const mod of modules.values()) {
     propagate()
     const raises = hg.raises
     const throwsList = hg.throws
-    attachStepThrows(steps)
+    finishSteps(steps, 'handler', e)
 
     if (e.prefix === 'command-handler') {
       const cmd = mainClass(sf, `${e.modelName}Command`)
@@ -932,10 +1385,14 @@ for (const mod of modules.values()) {
       const p = entryMethod.parameters[0]
       let trigger = ''
       if (p) {
-        const t = checker.getTypeAtLocation(p)
+        const t = checker.getNonNullableType(checker.getTypeAtLocation(p))
         const te = entryOfNode(t.getSymbol()?.declarations?.[0])
         if (te?.prefix === 'event') trigger = te.module !== M ? `${te.module}.${te.modelName}` : te.modelName
-        else issue(e.file, 'handle 的参数不是领域事件')
+        else {
+          const foreign = foreignEventOf(t, mod)
+          if (foreign) trigger = foreign
+          else issue(e.file, 'handle 的参数不是领域事件')
+        }
       }
       const expected = e.modelName.split('On').pop()
       if (trigger && !trigger.endsWith(expected)) issue(e.file, `类名中的事件 ${expected} 与 handle 参数 ${trigger} 不一致`)
@@ -983,13 +1440,39 @@ function decodeBehaviors(entry, cls, M) {
     const sig = checker.getSignatureFromDeclaration(m)
     const tags = docTags(m)
     const g = graph.get(nodeId(entry, m.name.getText())) ?? { raises: [], throws: [] }
-    const b = { name: m.name.getText(), input: paramsOf(sig, M) }
+    const b = { name: m.name.getText() }
+    const purpose = docLead(m)
+    if (purpose) b.purpose = { text: purpose }
+    b.input = paramsOf(sig, M)
     const ret = mapType(sig.getReturnType(), M).type
     if (ret) b.output = ret
+    // 做法：方法体里的 // 注释一句一步（可有可无：模型没写步骤的不比）
+    const steps = finishSteps(stepsOf(m.body, M, { file: entry.file, entry, mode: 'object', quiet: true }), 'object', entry)
+    if (steps.length) b.steps = steps
     Object.assign(b, { rules: tagValues(tags, 'rule'), raises: g.raises, throws: g.throws, traces: traceTags(tags) })
     if (!b.traces.length) issue(entry.file, `${b.name}：缺少 @trace`)
     return b
   })
+}
+/**
+ * 创建（模型的 create）：静态工厂 CREATE。只收一个叫 input 的参数时，把它的各栏摊开当入参（模型照一栏一项写）；
+ * 作用是方法说明那段话，做法是方法体里的 // 注释，规则是 @rule，会抛的错是工厂的闭包。没有 CREATE 的返回 null
+ */
+function decodeCreate(entry, cls, M) {
+  const m = factoriesOf(cls).find((x) => x.name.getText() === 'CREATE')
+  if (!m) return null
+  const sig = checker.getSignatureFromDeclaration(m)
+  const tags = docTags(m)
+  const c = {}
+  const purpose = docLead(m)
+  if (purpose) c.purpose = { text: purpose }
+  const only = m.parameters.length === 1 && ts.isIdentifier(m.parameters[0].name) && m.parameters[0].name.text === 'input' ? m.parameters[0] : null
+  c.input = only ? membersOfType(checker.getNonNullableType(checker.getTypeAtLocation(only)), M).fields.map(({ name, type }) => ({ name, type })) : paramsOf(sig, M)
+  const steps = finishSteps(stepsOf(m.body, M, { file: entry.file, entry, mode: 'object', quiet: true, create: true }), 'object', entry)
+  if (steps.length) c.steps = steps
+  const g = graph.get(nodeId(entry, 'CREATE')) ?? { throws: [] }
+  Object.assign(c, { rules: tagValues(tags, 'rule'), throws: g.throws, traces: traceTags(tags) })
+  return c
 }
 function ctorParams(cls, M) {
   const ctor = cls.members.find(ts.isConstructorDeclaration)
@@ -1011,11 +1494,32 @@ function serviceWrites(entry, method) {
   const writes = []
   stepsOf(m.body, entry.module, {
     file: entry.file,
+    entry,
+    quiet: true,
     onCall: (te, r, kind) => {
       if (kind === 'behavior' && te.prefix === 'aggregate-root' && mutatesTransitively(nodeId(te, r.method))) if (!writes.includes(te.modelName)) writes.push(te.modelName)
+      if (kind === 'factory' && te.prefix === 'aggregate-root' && te.module === entry.module && !writes.includes(te.modelName)) writes.push(te.modelName)
     },
   })
   return writes
+}
+/**
+ * 别的模块的事件：模块之间不许 import，处理器所在模块里另写一份它的样子（领域事件的几栏加 payload）。
+ * 认法：那份类型声明在本模块里、带 payload；标了 @ref Module.Event 就是它，没标就看名字——以 Event 结尾，
+ * 去掉 Event 在别的模块里恰好有一个同名事件，就是那一个。认不出返回 null
+ */
+function foreignEventOf(t, mod) {
+  const s = t.aliasSymbol ?? t.getSymbol()
+  const decl = s?.declarations?.[0]
+  if (!decl || !path.normalize(decl.getSourceFile().fileName).startsWith(path.normalize(mod.dir) + path.sep)) return null
+  if (!t.getProperty('payload')) return null
+  const ref = refOfType(t)
+  if (ref) return ref
+  const name = s.name
+  if (!/Event$/.test(name)) return null
+  const modelName = name.slice(0, -'Event'.length)
+  const found = [...registry.values()].filter((x) => x.prefix === 'event' && x.module !== mod.name && x.modelName === modelName)
+  return found.length === 1 ? `${found[0].module}.${modelName}` : null
 }
 function checkBase(cls, baseName, entry) {
   const ext = cls.heritageClauses?.find((h) => h.token === ts.SyntaxKind.ExtendsKeyword)

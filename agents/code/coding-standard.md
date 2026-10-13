@@ -81,6 +81,7 @@ shared/building-block/   聚合根、实体、领域错误、事件、端口接�
 - **adapters/** 实现本模块的仓储接口（`domain/` 里的）与端口（`ports/` 里的）；本模块的路由（入站 HTTP 适配器 `http.<Module>Routes.ts`）也在这里，引本模块 `application/` 里的命令、查询与处理器类型。**模块里只有 adapters 可以 import `infras/`**：路由用 `infras/http` 的挂口工具与入参转换，以后的数据库仓储要用 infras 里的数据库连接、登录这些技术件。
 - **module.ts** 装配本模块：new 本模块的适配器、处理器，订阅事件。外面给的东西（事件总线、别的模块的查询）只认 shared 里的端口接口或本模块 `ports/` 里的接口，具体实现由 bootstrap new 出来递进来：只发布事件的认 `EventPublisherInterface`，还要订阅的认 `EventBusInterface`（带 `subscribe`）。
 - **模块（包括 module.ts）不 import bootstrap，模块之间不互相 import**；domain、application、ports、module.ts 不 import infras。跨模块走端口：本模块在 `ports/` 里写接口，`adapters/` 里的直连适配器收一个形状对得上的函数或对象（不 import 对方的类），由 bootstrap 把对方的处理器递进来。
+- **别的模块的类型在本模块里另写一份**（端口交回的、领域服务收的、事件处理器收的别的模块的事件）：起一个名字的类型（`type` / `interface`，不写成匿名的 `{ … }`），名字跟对方同名（`Fund`），或「模块名 + 类型名」（`CatalogueService`）；名字不一样（`FundRow`、`FoundDocument`）就在声明上标 `@ref Funding.Fund`。模型里写的是「模块.类型」，解码器靠这个对上（第九节）。可以为空的写成 `type Participant = { … } | null`，读出来是 `Participant`。
 - **infras/** 不含业务、不认模块：不 import 任何模块（`application/`、`adapters/` 里的路由、`module.ts` 都不），不 import bootstrap，只依赖 shared 与外部包。HTTP 应用有哪些口、每个口交给哪个处理器，由 bootstrap 递进来；碰得到路由的只有模块自己的 `adapters/` 和 bootstrap。
 - **shared/building-block/** 不含业务，不认模块、infras、bootstrap，外部包只用 node 自带的（`node:crypto`）；里面 `domain` ← `application` ← `ports`。
 - **bootstrap/** 依赖所有（各模块的 `module.ts` 与 `adapters/` 里的路由、infras、示例数据），没有谁 import 它。`module.ts` 不 import 路由（路由要引 infras，`module.ts` 不许），路由由 bootstrap 直接 import。
@@ -282,7 +283,7 @@ export class CreateOrderCommandHandler {
 
 - 命令处理器：唯一入口 `execute(command)`，返回 `void`；**唯一的例外是新建一份东西的命令**（造了新聚合、编号由它起的），只交回新编号 `{ <名>Id: string }`（一次建几条的交回 `{ <名>Ids: string[] }`），别的结果一律走查询；模型里也不把「交回编号」写成一步
 - 查询处理器：`execute(query)` 返回 `Result` 类；注入仓储接口，和模型里标了只读（`readOnly`）操作的端口；仓储只调 `find*` / `list*` / `exists*` / `count*`，端口只调那几个只读操作；要算的，调不写聚合、不发事件的领域服务操作
-- 事件处理器：`implements DomainEventHandler<E>`，入口 `handle(event)`；`E` 必须与类名中的 `On<E>` 一致
+- 事件处理器：`implements DomainEventHandler<E>`，入口 `handle(event)`；`E` 必须与类名中的 `On<E>` 一致。`E` 是别的模块的事件时，在处理器文件里另写一份它的样子（领域事件的几栏加 `payload`），类型名 = 事件名 + `Event`（`ParticipantRegisteredEvent`），解码成 `Participants.ParticipantRegistered`；别的模块里有两个同名事件、或名字不一样时，标 `@ref Participants.ParticipantRegistered`
 - 构造注入，参数全部是接口
 - 领域服务是纯函数式的，**不注入**：处理器以字段初始化持有它（`private readonly pricing = new PricingService()`）
 - 创建聚合或值对象是一步，调用静态工厂：`const order = OrderAggregateRoot.CREATE({ … })`（模型里 `call.kind: factory`）
@@ -348,19 +349,21 @@ export class CreateOrderCommandHandler {
 
 | 标签 | 放在 | 对应模型字段 |
 |---|---|---|
-| `@trace G-001 R-002` | 领域类、行为、领域服务操作、处理器的 `execute` / `handle`、端口接口、`module.ts`、**`props` 字段** | `traces` |
+| `@trace G-001 R-002` | 领域类、行为、领域服务操作、静态工厂 `CREATE`、处理器的 `execute` / `handle`、端口接口、`module.ts`、**`props` 字段** | `traces` |
+| 方法说明（JSDoc 里第一个标签之前那段话） | 行为、领域服务操作、静态工厂 `CREATE` | `purpose.text`（作用：调用它做了什么、改了什么）。作用的编号不写，方法的 `@trace` 管 |
 | `@narrative 文本` | 聚合根类 | `aggregateNarrative` |
 | `@aggregate-invariant [R-001] 文本` | 聚合根类 | `aggregateInvariants` |
 | `@invariant [R-001 R-002] 文本 {ErrA ErrB}` | 聚合根类（根自身）、实体 / 值对象类 | `invariants`；方括号内是 traces，花括号内是创建时违反抛出的错误（`throws`），两者可省 |
-| `@rule 文本` | 行为方法、领域服务操作 | `rules` |
+| `@rule 文本` | 行为方法、领域服务操作、静态工厂 `CREATE` | `rules`（`CREATE` 上的进 `create.rules`） |
 | `@condition 文本` | 错误类 | `condition` |
 | `@actor 名字` | 处理器类 | `actor` |
-| `@ref Module.Aggregate` | `props` 类型中持有其它聚合 id 的字段 | `module.json` 的 `idRefs` |
+| `@ref Module.Aggregate` | `props` 类型中持有其它聚合 id 的字段（聚合根、实体、值对象的都算，值对象写在构造参数上） | `module.json` 里那个聚合的 `idRefs` |
+| `@ref Module.Type` | 本模块里另写的一份别的模块的类型（`type` / `interface` 声明，第二节） | 用到它的地方解码成 `Module.Type` |
 | `@external-system 名字` / `@module 名字` | 端口接口 | 端口的 `kind` 与 `target` |
 | `@module 名字` + `@responsibility 文本` | `module.ts` 的组合根函数 | `modules.json` |
 | `@note 文本` | `props` 字段、端口方法 | `note` |
 | `@readOnly`（单独一行） | 端口方法 | 端口操作的 `readOnly: true`：只交回结果、对外什么都不改，查询处理器只能调这种 |
-| `// 文本` | 处理器体内每步上方 | 步骤 `text` |
+| `// 文本` | 处理器、领域服务操作体内每步上方；行为与 `CREATE` 体内每步上方（做法，可写可不写；模型写了做法就要写） | 步骤 `text`。一句话折成几行 `//` 的拼回一句 |
 | `// 文本` | `if` 语句上方（处理器体内，或行为体内包住 `raise` 的 `if`） | 分支内步骤的 `when`；条件 raise 的 `when`。无注释时用条件源码；`else` 分支为「否则」 |
 
 缺少 `@trace` 的类、行为、处理器是违规。
@@ -385,12 +388,18 @@ export class CreateOrderCommandHandler {
 | 文件前缀 + 基类 / 接口 | 种类（两者必须一致） |
 | 类名去种类后缀 | `name` |
 | `props` 的类型 | `fields` |
-| 公开实例方法（getter 除外） | `behaviors`；签名 → `input` / `output` |
+| 公开实例方法（getter 除外） | `behaviors`；签名 → `input` / `output`；方法说明 → `purpose`；体内的 `//` 注释 → `steps` |
 | 静态方法 | 工厂：不作为行为解码；处理器中对它的调用解码为 `call.kind: factory`；它抛出的错误参与传递闭包 |
+| 静态工厂 `CREATE` | `create`：方法说明 → `purpose`；只收一个叫 `input` 的参数时，它的各栏摊开就是 `input`，否则照参数；体内 `//` 注释 → `steps`；`@rule` → `rules`；闭包 → `throws` |
+| 步骤怎么切（处理器、领域服务操作、行为、创建通用） | 一条 `//` 注释开一步；下面没注释的句子并进这一步。这一步还没有调用时，下面没注释的那一句调用就是它的调用（`output` 取那一句的变量）。主调用不是核心圈的（`this.props.messages.push(Message.CREATE(…))`），取句子里头第一处核心圈调用。调自己类上公开的方法算调用，私有的小帮手不算 |
+| `if` | 里面的句子各带注释：分流，`if` 上的注释（没有就用条件源码）是 `when`，`else` 为「否则」。里面没有带注释的句子（守卫 `if (…) throw new XError(…)`、挑中了就拿掉）：整个 `if` 是一步，不带 `when`。处理器里的 `if` 只当分流 |
+| 循环 `for…of` 等，`xs.map(x => …)` / `forEach` / `flatMap` | 这一步 `each: true`，`call` 是循环体里那一次调用；循环体里的句子各带注释时，每一句各是一步，都标 `each` |
+| `return x` 带注释 | 「交回」那一步，`output` = 交回的变量名，或只有一栏的 `{ lineId }` 的那一栏。新建命令 publish 之后只交回新编号的那句不是一步 |
+| 一步里的句子 | 那一步的 `throws` / `raises`：直接 `throw` / `raise` 的，加上所调行为、工厂、领域服务操作、模块里的小函数的闭包；`changes`：行为与创建里写自己的栏名（`this.props.x = …`、`this.props.xs.push(…)`、对从 `this.props.xs` 取出来的实体调会改状态的行为算改了 `xs`、`CREATE` 里交给构造的那几栏，交给构造的是前面某一步算好的变量就算那一步的）；处理器与领域服务里调了改状态的行为，写「对象.栏」 |
 | 方法体内 `this.raise(new XEvent)` / `throw new XError` | `raises` / `throws`（在 `if` 内 → 带 `when`） |
 | 事件构造参数 | `payload` |
 | 仓储方法名前缀 | `methods[].kind` |
-| 领域服务操作的参数类型 | `reads`；操作内对参数聚合调用写行为 → `writes` |
+| 领域服务操作的参数类型 | `reads`；操作内对参数聚合调用写行为 → `writes`；操作内调本模块聚合根的工厂建出来的 → `writes` 与 `coordinates` |
 | 处理器 `execute` / `handle` 的语句序列 | `steps`；被调对象的类型 → `call.kind` / `target` / `method`。一条语句成为一步的条件：上方有 `//` 注释，或它的主调用能解析到核心圈里的对象。`await`、`assertFound(...)` 等构建块包装被剥掉后再看主调用；`return new Result(...)` 这类纯数据组装不解码 |
 | 变量声明 `const x = …` | 步骤 `output` = 变量名 |
 | 分支条件（领域调用结果的判别属性） | 分支内步骤的 `when` |
@@ -398,10 +407,12 @@ export class CreateOrderCommandHandler {
 | 调用了写方法的仓储所属聚合 + 调用了会修改状态的聚合根行为 + 所调服务操作的 `writes` | `writes`。「修改状态」= 行为体内对 `this.props…` 赋值、对 `this.props…` 调用修改型方法（push、splice 等）、或 `this.raise`，并沿同类方法的调用传播 |
 | 已解析的调用关系（行为 → 行为 / 工厂 / 服务操作；处理器 → 行为 / 工厂 / 服务操作 / 命令） | `raises` / `throws` 的传递闭包 |
 | `Command` / `Query` / `Result` 类的字段 | `input` / `result` |
-| `handle` 的参数类型 | `trigger` |
+| `handle` 的参数类型 | `trigger`；是本模块另写的一份别的模块的事件时，`@ref` 或「名字去掉 Event、别的模块里恰好一个同名事件」→ `Module.Event` |
+| 类型是本模块另写的别的模块的那一份 | 标了 `@ref Module.Type` 的解码成 `Module.Type`；没标的照本名，比对时同名或「模块名 + 类型名」跟模型的 `Module.Type` 算一致，别的名字照报 |
 | 端口接口的方法签名 | `operations` |
 | JSDoc 标签 | 见第九节 |
 | 错误的 `condition` | 无法解码，留空；比对只比名字 |
+| 模型可写可不写的几样：`create`、`purpose`、行为与创建的 `steps`、步骤上的 `changes` / `raises` | 比对时模型写了才比（`purpose` 只比那句话，编号不比）；模型没写、代码读得出来不算差异；模型写了、代码没有照报 |
 
 ---
 
