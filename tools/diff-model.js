@@ -6,8 +6,13 @@
  *
  * 规则：
  * - 忽略 questions / decisions / denylist / writesNote / system（设计侧独有）
- * - 集合型数组（traces、throws、writes、reads、coordinates、members、raises）无序比较
+ * - 集合型数组（traces、throws、writes、reads、coordinates、members、raises、changes）无序比较
  * - 命名型数组（fields、behaviors、methods、operations、input、result、payload、aggregates、modules、invariants、aggregateInvariants、idRefs、steps）按 name/text/顺序匹配
+ * - 规则、作用（purpose）只比那句话：编号是模型自己用来挑语句的，代码注释里不写
+ * - 模型可写可不写的几样（创建 create、作用 purpose、行为的做法 steps、步骤上的 changes 与 raises）：模型写了就比；
+ *   模型没写、代码读得出来不算差异（老模型没有这几样照样认，agents/model/shapes.md）。模型写了、代码没有照报
+ * - 跨模块的类型：模型写「模块.类型」；代码里模块之间不许 import，只能用本模块另写的一份。那一份标了 @ref 的解码出来就是
+ *   「模块.类型」；没标的，同名（Fund ↔ Funding.Fund）或「模块名+类型名」（CatalogueService ↔ Catalogue.Service）算一致，别的名字照报
  */
 const fs = require('node:fs')
 const path = require('node:path')
@@ -23,7 +28,30 @@ if (!modelDir || !decodedDir) {
 const IGNORE = new Set(['questions', 'decisions', 'denylist', 'writesNote', 'system', 'groups', 'relations', 'carries'])
 // 步骤上的 traces 是模型自己用来挑步骤的，代码注释里不写它，不算差异
 const DESIGN_ONLY_IN_STEPS = new Set(['input', 'traces'])
-const SET_KEYS = new Set(['traces', 'throws', 'writes', 'reads', 'coordinates', 'members', 'raises'])
+const SET_KEYS = new Set(['traces', 'throws', 'writes', 'reads', 'coordinates', 'members', 'raises', 'changes'])
+// 模型可写可不写、写了才比的几样：键 → 这个键出现在什么路径底下才算（null：哪里都算）
+const OPTIONAL_IN_MODEL = [
+  { key: 'create', at: null },
+  { key: 'purpose', at: null },
+  { key: 'steps', at: /\/(behaviors\/[^/]+|create)$/ }, // 行为与创建的做法；处理器、领域服务操作的步骤照旧必比
+  { key: 'changes', at: /\/steps\/\d+$/ },
+  { key: 'raises', at: /\/steps\/\d+$/ },
+]
+function optionalInModel(k, p) {
+  return OPTIONAL_IN_MODEL.some((o) => o.key === k && (!o.at || o.at.test(p)))
+}
+// 装类型名的那几栏：字段与入参的 type、方法与操作的 output（步骤上的 output 是变量名，不算）、事件处理器的 trigger
+function isTypeSlot(p) {
+  return /\/(type|trigger)$/.test(p) || (/\/output$/.test(p) && !/\/steps\/\d+\/output$/.test(p))
+}
+/** 模型「模块.类型」与代码本模块里那一份同名、或「模块名+类型名」的别名算一致；数组的 [] 两边要一样 */
+function sameCrossModuleType(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false
+  const m = a.match(/^([A-Z][A-Za-z0-9]*)\.([A-Za-z0-9]+)((?:\[\])*)$/)
+  if (!m) return false
+  const [, mod, name, arr] = m
+  return b === name + arr || b === mod + name + arr
+}
 const KEYED = { fields: 'name', behaviors: 'name', methods: 'name', operations: 'name', input: 'name', result: 'name', payload: 'name', aggregates: 'name', modules: 'name', invariants: 'text', aggregateInvariants: 'text', idRefs: 'field' }
 
 function walk(dir, out = [], base = dir) {
@@ -114,15 +142,19 @@ function diff(a, b, file, p) {
   }
   if (a && b && typeof a === 'object' && typeof b === 'object') {
     const inStep = /\/steps\/\d+$/.test(p)
-    const keys = new Set([...Object.keys(a), ...Object.keys(b)].filter((k) => !IGNORE.has(k) && k !== '__codeText' && !(inStep && DESIGN_ONLY_IN_STEPS.has(k))))
+    const inPurpose = /\/purpose$/.test(p)
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)].filter((k) => !IGNORE.has(k) && k !== '__codeText' && !(inStep && DESIGN_ONLY_IN_STEPS.has(k)) && !(inPurpose && k === 'traces')))
     for (const k of keys) {
+      if (!(k in a) && optionalInModel(k, p)) continue
+      // 步骤上的集合（throws、raises、changes）写成空数组和不写是一回事
+      if (inStep && SET_KEYS.has(k) && ((!(k in a) && Array.isArray(b[k]) && !b[k].length) || (!(k in b) && Array.isArray(a[k]) && !a[k].length))) continue
       if (!(k in a)) findings.push({ file, path: `${p}/${k}`, kind: 'extra', model: null, code: b[k] })
       else if (!(k in b)) findings.push({ file, path: `${p}/${k}`, kind: 'missing', model: a[k], code: null })
       else diff(a[k], b[k], file, `${p}/${k}`)
     }
     return
   }
-  if (a !== b) findings.push({ file, path: p, kind: 'changed', model: a, code: b })
+  if (a !== b && !(isTypeSlot(p) && sameCrossModuleType(a, b))) findings.push({ file, path: p, kind: 'changed', model: a, code: b })
 }
 
 const modelFiles = walk(modelDir)

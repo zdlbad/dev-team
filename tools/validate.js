@@ -204,7 +204,7 @@ const r1 = makeReport(1)
 r1.blindSpots = ['判断类检查未在此执行，见 judgments[]', '业务描述的名词是否漏建模：仅列为判断项']
 
 // 前置：schema
-const schemaRun = spawnSync(process.execPath, [path.join(devTeam, 'tools', 'check-schema.js'), root], { encoding: 'utf8' })
+const schemaRun = spawnSync(process.execPath, [path.join(devTeam, 'tools', 'check-schema.js'), root], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
 if (schemaRun.status !== 0) {
   for (const line of schemaRun.stdout.split('\n').filter((l) => l.startsWith('✗'))) add(r1, 'error', 'schema', line.slice(2).trim(), '不符合 schema（详见 check-schema）')
 }
@@ -585,7 +585,7 @@ if (codebase) {
   const decodedDir = path.join(root, 'model-decoded', version)
   r2.decodedVersion = version
   const system = model.modules?.data.system ?? ''
-  const dec = spawnSync(process.execPath, [path.join(devTeam, 'tools', 'decode.js'), codebase, decodedDir, '--system', system], { encoding: 'utf8' })
+  const dec = spawnSync(process.execPath, [path.join(devTeam, 'tools', 'decode.js'), codebase, decodedDir, '--system', system], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
   if (dec.status !== 0) {
     add(r2, 'error', 'decode.failed', codebase, dec.stderr || dec.stdout)
   } else {
@@ -593,7 +593,7 @@ if (codebase) {
     if (fs.existsSync(issuesFile)) for (const i of JSON.parse(fs.readFileSync(issuesFile, 'utf8')).issues) add(r2, 'error', 'lint', i.file, i.text)
     const diffJson = path.join(root, 'reports', '_diff.json')
     fs.mkdirSync(path.dirname(diffJson), { recursive: true })
-    spawnSync(process.execPath, [path.join(devTeam, 'tools', 'diff-model.js'), path.join(root, 'model'), decodedDir, '--json', diffJson], { encoding: 'utf8' })
+    spawnSync(process.execPath, [path.join(devTeam, 'tools', 'diff-model.js'), path.join(root, 'model'), decodedDir, '--json', diffJson], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
     const TEXTUAL = /\/(rules\/\d+|text|aggregateNarrative|condition|when|note|responsibility)$/
     for (const f of JSON.parse(fs.readFileSync(diffJson, 'utf8')).findings) {
       const target = `${f.file}${f.path ? '#' + f.path : ''}`
