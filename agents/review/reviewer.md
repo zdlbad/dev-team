@@ -11,7 +11,7 @@ reads:
     - model/shapes.md#步骤语法
     - business/layers.md#七种种类
   判代码:
-    - code/coding-standard.md#十、解码规则汇总
+    - code/coding-standard.md#十一、解码规则汇总
   审代码:
     - code/coding-standard.md
 ---

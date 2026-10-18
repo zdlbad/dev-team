@@ -124,7 +124,8 @@ const byId = new Map(business.map((s) => [s.id, s]))
 const sliceRec = sliceId ? (project.slices ?? []).map((s) => s.data).find((s) => s.id === sliceId) : null
 const scopeIds = sliceRec?.traces?.length ? new Set(sliceRec.traces) : null
 // 场景切片还没挂语句：范围内一条都没有，别的切片立的语句不在这一段要落点
-const inScope = (id) => scopeIds ? scopeIds.has(id) : !(sliceRec?.kind === 'scene')
+// 业务里放在「## 以后的一段」的语句：人定了以后另做，哪一段都不要它有落点（记进 deferred）
+const inScope = (id) => !byId.get(id)?.later && (scopeIds ? scopeIds.has(id) : !(sliceRec?.kind === 'scene'))
 // 聚合粗版（module.json 的 aggregates / members / idRefs）是战略设计时人确认的路标，场景建到哪个聚合再细化哪个。
 // 带 --slice 时，切片 scope 之外还没建的聚合、成员、引用与范围外模块的空追溯不算错，记进 report.deferred 给人看个数。
 const scopeAggs = null
@@ -201,6 +202,8 @@ function raiseKey(r) {
 
 // ========== 方向 ① ==========
 const r1 = makeReport(1)
+// 「以后的一段」的语句不要落点，记个数给人看（layers.md）
+for (const s of business) if (s.later) defer('以后的一段', s.id, s.text)
 r1.blindSpots = ['判断类检查未在此执行，见 judgments[]', '业务描述的名词是否漏建模：仅列为判断项']
 
 // 前置：schema
