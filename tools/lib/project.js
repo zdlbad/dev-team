@@ -50,12 +50,15 @@ function loadBusiness(root) {
     const lines = fs.readFileSync(f, 'utf8').split('\n')
     let inFence = false
     let cur = null // 最近一条语句和它的缩进：比它缩进深的「上一层：」归它
+    let later = false // 在「## 以后的一段」底下：人定了以后另做，这一轮不要它有落点（layers.md）
     lines.forEach((line, i) => {
       if (/^\s*(```|~~~)/.test(line)) {
         inFence = !inFence
         return
       }
       if (inFence) return // 围栏代码块里的示例不是业务语句
+      const h2 = /^##\s+(.*?)\s*$/.exec(line)
+      if (h2) later = h2[1] === '以后的一段'
       const pm = PARENT_LINE.exec(line)
       if (pm && cur && pm[1].length > cur.indent) {
         const { ids, bad } = parseParents(pm[2])
@@ -79,6 +82,7 @@ function loadBusiness(root) {
       }
       if (!kindWord && kind === 'goal' && labelLayer) kindWord = '能力'
       const st = { id: m[1], kind, ruleKind: kindWord, rawKind, layer: labelLayer ?? fileLayer, labelLayer, fileLayer, unknownLabel: unknown.length ? unknown : null, text: m[3].trim(), file: rel, line: i + 1, parents: [], badParents: [], parentLine: null }
+      if (later) st.later = true
       statements.push(st)
       cur = { s: st, indent: line.length - line.trimStart().length }
     })
