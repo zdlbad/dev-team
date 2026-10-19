@@ -9,9 +9,10 @@ window.Scene = (function () {
     '审查': { short: '审查', color: '#cf222e', desc: '只读，判模型和代码' },
     '文职': { short: '文职', color: '#bf8700', desc: '校对，只改字不改意' },
     '分身': { short: '分身', color: '#1b7c83', desc: '替指挥查东西，只带结论回来' },
+    'PM': { short: 'PM', color: '#9a6700', desc: '管项目计划，看做到哪儿' },
     '人': { short: '你', color: '#e16f24', desc: '拍板、答问题' },
   }
-  const ORDER = ['开发指挥', '业务分析', '模型师', '编码', '审查', '文职', '分身', '人']
+  const ORDER = ['开发指挥', 'PM', '业务分析', '模型师', '编码', '审查', '文职', '分身', '人']
   const role = (n) => ROLES[n] || { short: String(n || '—').slice(0, 2), color: '#6e7781' }
 
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))

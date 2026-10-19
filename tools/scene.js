@@ -30,7 +30,7 @@
  * 每次写都记下机器名；换了机器还没 git pull 就动手，看板和 slice next 都会提醒。
  *
  * 状态存 reports/_scene.json（随 git 走——reports/ 里的 json 都进 git，md 与 html 是重算出来的才忽略；开发指挥的写入目标之一，见 agents/common/project-layout.md 的写入权表）。
- * 角色名用 agents/README.md 的叫法：人、开发指挥、业务分析、模型师、编码、审查、文职、分身。
+ * 角色名用 agents/README.md 的叫法：人、开发指挥、业务分析、模型师、编码、审查、文职、分身、PM。
  */
 const fs = require('fs')
 const path = require('path')
@@ -39,7 +39,7 @@ const os = require('os')
 const ME = os.hostname()
 const clock = require('./lib/time') // 打印给人看的钟点用本机时区；写进文件的仍是 UTC 的 ISO 串
 
-const ROLES = ['人', '开发指挥', '业务分析', '模型师', '编码', '审查', '文职', '分身']
+const ROLES = ['人', '开发指挥', '业务分析', '模型师', '编码', '审查', '文职', '分身', 'PM']
 const PHASES = ['场景', '模型', '草稿原型', '一起按', '正式化']
 /** 问答模式：逐个＝人在电脑前，角色问完就停下等答；问卷＝人不在，角色照偏向先做，问题攒起来一次性答 */
 const ASK_MODES = ['逐个', '问卷']
@@ -422,7 +422,7 @@ if (cmd === 'dispatch') {
   if (!text) die('要写派了什么活，一句')
   const s = readScene()
   // 场景没定、或还有问题没答，就不派模型师、编码、审查：照着没定的东西做，多半要重来
-  const 不拦 = ['业务分析', '文职', '分身', '人', '开发指挥']
+  const 不拦 = ['业务分析', '文职', '分身', 'PM', '人', '开发指挥']
   const ss = s.slice ? sceneStatusOf(s.slice) : 'done'
   // 问卷模式下问的、角色已照偏向先做下去的（wentAhead），不拦：他回来一次答，跟偏向不一样再返工
   const open = openQuestionsOf(s, s.slice).filter((q) => !q.wentAhead)

@@ -4,7 +4,7 @@
  *
  *   node tools/brief.js <角色> [--活 <这趟干什么>] [--写 <文件>] [--list]
  *
- *   角色用中文名（业务分析、模型师、编码、审查、文职、分身）或文件名（modeler）。
+ *   角色用中文名（业务分析、模型师、编码、审查、文职、分身、PM）或文件名（modeler）。
  *   --活   只带「常驻」那几份，加上这一样活点名的那几份；不给就按角色文件头上的「默认活」。
  *   --写   把派工书落到文件，屏幕上只回一行。派工时提示里只给这个路径，角色一次读完。
  *   --list 只列会拼进去的文件与字数。
@@ -27,6 +27,7 @@ const ROLES = {
   '审查': 'review/reviewer.md', 'reviewer': 'review/reviewer.md',
   '文职': 'common/editor.md', 'editor': 'common/editor.md',
   '分身': 'common/scout.md', 'scout': 'common/scout.md',
+  'PM': 'pm/pm.md', 'pm': 'pm/pm.md',
 }
 const die = (m) => { console.error('[brief] ' + m); process.exit(2) }
 

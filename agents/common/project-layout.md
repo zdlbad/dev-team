@@ -20,6 +20,7 @@
   model/概念/<nn>-<概念>.md      概念卡的细节（模型师）；工具读模型只认 .json，这里的 .md 不进校验
   model-decoded/<版本>/       从代码解码出来的模型；永不手改、随时可删
   slices/<id>.json            切片记录：s-xxx 场景、f-xxx 正式化
+  plan/plan.json              计划与进度：几个项目、各分哪几大块、先后；一轮一轮的 sprint 与验收（PM）
   reports/                    校验与审查报告、现场看板（_scene.json）、模型图上的意见（_model-notes.json）、业务页上的留言（_business-comments.json）
   journal/<日期>.jsonl        派工与交回的流水，只追加
 ```
@@ -41,6 +42,7 @@
 | 审查 | 校验报告里判断的 `verdict`、`confidence`、`reason`；`reports/pre-pr-<切片>.md` | 一切工件 |
 | 文职 | 业务语句的正文、模型元素给人读的文字——只改字不改意 | 编号、标签、追溯、结构、词汇表、代码 |
 | 分身 | 什么都不写 | 一切 |
+| PM | `plan/` | 业务描述、模型、代码、切片记录 |
 | 开发指挥 | 切片记录、`raw/rulings.md`、现场看板与日志 | 业务描述、模型、代码、报告 |
 
 人可以直接改任何工件。校验只出报告，不改工件。

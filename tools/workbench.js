@@ -4,7 +4,7 @@
  *
  *   node tools/workbench.js <项目> [--code <代码库>] [--port 4870] [--no-open]
  *
- * 四个页签：谁在干什么（scene，群聊的样子；等他答的问题、等他拍板的关卡列成待办；日志从这一页进）· 切片 · 模型图（model-page）· 草稿原型（proto）。
+ * 页签：谁在干什么（scene，群聊的样子；等他答的问题、等他拍板的关卡列成待办；日志从这一页进）· 业务 · 切片 · 计划（PM 写的 plan/plan.json：上半是各项目的大块，下半是 sprint 进度）· 模型图（model-page）· 草稿原型（proto）。
  * 子服务各挑一个空闲口、只听本机、不自己弹浏览器，全从这一个口代理出去（/p/<页面>/…，websocket 也转）。退出时一并关掉。
  * 草稿原型不套进页签：点「原型LOCAL」在新标签页打开（/proto-open 转过去）。project.json 写了 liveUrl（上线的前端网址）时，
  * 再多一个「原型LIVE」，点了在新标签页打开那个网址。有前端工程时 proto.js 起后端与前端开发服务，
@@ -185,6 +185,178 @@ document.addEventListener('click', async (e) => {
 </script>`
 }
 
+/** 一段切片收口了没有：场景切片按完「一起按」、正式化切片验收过 */
+const closed = (s) => st(s, s.kind === 'scene' ? 'walk' : 'accept') === 'done'
+function planStamp() {
+  const dirs = [path.join(root, 'plan'), path.join(root, 'slices')]
+  let m = 0
+  for (const d of dirs) { if (!fs.existsSync(d)) continue; for (const x of fs.readdirSync(d)) { try { m = Math.max(m, fs.statSync(path.join(d, x)).mtimeMs) } catch { /* 刚删 */ } } }
+  return m
+}
+/** 计划页两块，都读 plan/plan.json（PM 写）：
+ * 计划——一张表：横着是月，竖着是项目，格子里写这个项目这个月做什么。
+ * 进度——上面按星期给每块画横条、按状态上色；下面每个项目一串 sprint，一轮走三段：需求采集、开发、验收，
+ *   验收分两条（业务规则实现了、用户接口被接受了）；三段都做完的 sprint 缩成一行做完的功能点。块的状态由动过它的 sprint 推。 */
+const PHASES = ['需求采集', '开发', '验收']
+function phasesOf(sp) {
+  const by = new Map((sp.phases ?? []).map((p) => [p.name, p]))
+  return PHASES.map((n) => ({ name: n, status: '没开始', ...by.get(n) }))
+}
+const statusOfPhases = (ps) => ps.every((p) => p.status === '做完') ? '做完' : ps.some((p) => p.status !== '没开始') ? '在做' : '没开始'
+const sprintStatus = (sp) => statusOfPhases(phasesOf(sp))
+function itemStatus(item, sprints) {
+  const ss = sprints.filter((sp) => (sp.items ?? []).includes(item.id)).map(sprintStatus)
+  if (!ss.length) return '没开始'
+  return ss.every((s) => s === '做完') ? '做完' : ss.some((s) => s !== '没开始') ? '在做' : '没开始'
+}
+function acceptOf(sp) {
+  const a = sp.acceptance ?? {}
+  return '<div class="gacc"><span>业务规则</span>' + esc(a.rules || '待定') + '</div><div class="gacc"><span>用户接口</span>' + esc(a.ui || '待定') + '</div>'
+}
+const PLAN_STATUS = { '没开始': '#8c959f', '在做': '#bf8700', '做完': '#1a7f37' }
+const pill = (s) => '<span class="ps" style="background:' + (PLAN_STATUS[s] ?? '#8c959f') + '">' + esc(s) + '</span>'
+
+/** 进度的上半：竖着是块，横着是星期（一周一格，从周一算），块照 start、end 画横条、按状态上色。 */
+function weeksPart(projects, sprints) {
+  const names = new Map(projects.flatMap((p) => (p.items ?? []).map((i) => [i.id, i.title])))
+  const DAY = 86400000
+  const dayOf = (s) => Math.floor(Date.parse(s + 'T00:00:00Z') / DAY)
+  const monday = (d) => d - ((new Date(d * DAY).getUTCDay() + 6) % 7)
+  const todayD = dayOf(clock.date(new Date()))
+  const items = projects.flatMap((p) => p.items ?? [])
+  const dated = items.filter((i) => i.start && i.end)
+  let w0 = monday(todayD), w1 = w0
+  for (const i of dated) { w0 = Math.min(w0, monday(dayOf(i.start))); w1 = Math.max(w1, monday(dayOf(i.end))) }
+  const weeks = []
+  for (let w = w0; w <= w1; w += 7) weeks.push(w)
+  const thisWeek = monday(todayD)
+  const md = (d) => { const x = new Date(d * DAY); return (x.getUTCMonth() + 1) + '/' + x.getUTCDate() }
+  const cols = 'grid-template-columns:minmax(170px,230px) repeat(' + weeks.length + ',minmax(46px,1fr)) 64px'
+  const head = '<div class="wk wkh" style="' + cols + '"><div style="grid-column:1"></div>' + weeks.map((w, k) => '<div style="grid-column:' + (k + 2) + '" class="wc' + (w === thisWeek ? ' now' : '') + '" title="' + md(w) + ' 那一周（周一到周日）">' + md(w) + (w === thisWeek ? '<br>本周' : '') + '</div>').join('') + '</div>'
+  const row = (i) => {
+    const s = itemStatus(i, sprints)
+    const tone = { '做完': 'ok', '在做': 'go', '没开始': 'no' }[s]
+    const tip = esc(i.title + '｜' + (i.deliver ?? '') + (i.after?.length ? '｜接在 ' + i.after.map((x) => names.get(x) ?? x).join('、') + ' 之后' : '') + (i.start ? '｜' + i.start + ' → ' + (i.end ?? '?') : '') + (i.judgement ? '｜PM 看：' + i.judgement : ''))
+    let cells
+    if (i.start && i.end) {
+      const c0 = (monday(dayOf(i.start)) - w0) / 7 + 2, c1 = (monday(dayOf(i.end)) - w0) / 7 + 3
+      cells = weeks.map((w, k) => '<div class="wg' + (w === thisWeek ? ' now' : '') + '" style="grid-column:' + (k + 2) + '"></div>').join('')
+        + '<div class="wbar ' + tone + '" style="grid-column:' + c0 + ' / ' + c1 + '" data-tip="' + tip + '"></div>'
+    } else {
+      cells = '<div class="wnone" style="grid-column:2 / ' + (weeks.length + 2) + '" data-tip="' + tip + '">还没排日子</div>'
+    }
+    return '<div class="wk" style="' + cols + '"><div class="wl" style="grid-column:1" data-tip="' + tip + '"><b>' + esc(i.title) + '</b></div>' + cells + '<div style="grid-column:' + (weeks.length + 2) + '">' + pill(s) + '</div></div>'
+  }
+  return '<div class="gc">' + head
+    + projects.map((p) => '<div class="gp">' + esc(p.name) + '</div>' + (p.items ?? []).map(row).join('')).join('')
+    + '</div>'
+}
+
+/** 计划：横着是月，竖着是项目，交叉的格子里写这个项目这个月做什么（项目的 months，键是 YYYY-MM）。 */
+function planPart(projects) {
+  const keys = projects.flatMap((p) => Object.keys(p.months ?? {})).filter((k) => /^\d{4}-\d{2}$/.test(k))
+  const now = clock.date(new Date()).slice(0, 7)
+  if (!keys.length) return '<div class="md"><h2>计划</h2></div><div class="gc"><div class="gnone">还没排：每个项目每个月做什么，PM 拟好你定。</div></div>'
+  const lo = [...keys, now].sort()[0], hi = [...keys].sort().at(-1)
+  const months = []
+  for (let [y, m] = lo.split('-').map(Number); y * 100 + m <= Number(hi.replace('-', '')); m === 12 ? (y++, m = 1) : m++) months.push(y + '-' + String(m).padStart(2, '0'))
+  const label = (k) => { const [y, m] = k.split('-'); return (k.slice(0, 4) === now.slice(0, 4) ? '' : y + ' 年 ') + Number(m) + ' 月' }
+  const th = '<tr><th class="mx0"></th>' + months.map((k) => '<th class="' + (k === now ? 'now' : '') + '">' + label(k) + (k === now ? '<span>本月</span>' : '') + '</th>').join('') + '</tr>'
+  const body = projects.map((p) => '<tr><th class="mxl">' + esc(p.name) + (p.note ? '<span class="gmeta">' + esc(p.note) + '</span>' : '') + '</th>' + months.map((k) => {
+    const v = p.months?.[k]
+    return '<td class="' + (k === now ? 'now' : '') + (v ? '' : ' mxe') + '">' + (v ? esc(v) : '') + '</td>'
+  }).join('') + '</tr>').join('')
+  return '<div class="md"><h2>计划</h2></div><div class="gc"><table class="mx">' + th + body + '</table></div>'
+}
+
+function progressPart(projects, sprints, slices) {
+  const tone = { '做完': 'ok', '在做': 'go', '没开始': 'no' }
+  const mark = { '做完': ' ✓', '在做': ' …', '没开始': '' }
+  const live = sprints.filter((sp) => sprintStatus(sp) !== '做完')
+  const allPhases = live.flatMap((sp) => sp.phases ?? [])
+  const dated = allPhases.some((p) => p.start && p.end)
+  const days = (s) => Math.floor(new Date(s + 'T00:00:00').getTime() / 86400000)
+  let lo = 0, hi = 1, pct = () => '0%'
+  if (dated) {
+    const ds = allPhases.filter((p) => p.start && p.end).flatMap((p) => [days(p.start), days(p.end)])
+    lo = Math.min(...ds); hi = Math.max(...ds) + 1
+    pct = (d) => ((d - lo) / Math.max(1, hi - lo) * 100).toFixed(2) + '%'
+  }
+  const today = Math.floor(Date.now() / 86400000)
+  const names = new Map(projects.flatMap((p) => (p.items ?? []).map((i) => [i.id, i.title])))
+  const seg = (sp, p, style) => '<div class="gs ' + tone[p.status] + '"' + (style ? ' style="' + style + '"' : '')
+    + ' data-tip="' + esc((sp.name ?? '') + '｜' + p.name + '：' + p.status + (p.start ? '｜' + p.start + ' → ' + (p.end || '?') : '')) + '"><span>' + esc(p.name) + mark[p.status] + '</span></div>'
+  const bar = (sp) => {
+    const ps = phasesOf(sp)
+    if (!dated) return '<div class="gb">' + ps.map((p) => seg(sp, p)).join('') + '</div>'
+    const line = today >= lo && today <= hi ? '<div class="gtoday" style="left:' + pct(today) + '" title="今天"></div>' : ''
+    const put = ps.filter((p) => p.start && p.end)
+    return '<div class="gt">' + line + (put.length ? put.map((p) => seg(sp, p, 'position:absolute;left:' + pct(days(p.start)) + ';width:calc(' + pct(days(p.end) + 1) + ' - ' + pct(days(p.start)) + ' - 2px)')).join('') : '<span class="gnone">还没排日子</span>') + '</div>'
+  }
+  const sliceNote = (sp) => {
+    const ids = sp.slices ?? []
+    if (!ids.length) return ''
+    const n = ids.filter((id) => slices.has(id) && closed(slices.get(id))).length
+    return ' · 切片收口 ' + n + ' / ' + ids.length
+  }
+  const doneRow = (sp) => {
+    const ps = phasesOf(sp), from = ps[0].start, to = ps[2].end
+    return '<div class="pdone" data-tip="' + esc('业务规则：' + (sp.acceptance?.rules ?? '') + '｜用户接口：' + (sp.acceptance?.ui ?? '')) + '"><b>✓ ' + esc(sp.name ?? '') + '</b>'
+      + ' <span class="gmeta">' + (sp.items ?? []).map((x) => esc(names.get(x) ?? x)).join('、') + (from || to ? ' · ' + esc(from ?? '?') + ' → ' + esc(to ?? '?') : '') + sliceNote(sp) + '</span></div>'
+  }
+  const liveRow = (sp) => '<div class="gstn"><b>' + esc(sp.name ?? '') + '</b> <span class="gmeta">' + (sp.items?.length ? '动：' + sp.items.map((x) => esc(names.get(x) ?? x)).join('、') : '') + sliceNote(sp) + '</span> ' + pill(sprintStatus(sp)) + '</div>'
+    + '<div class="gr"><div></div><div>' + bar(sp) + acceptOf(sp) + '</div></div>'
+  let head = ''
+  if (dated) {
+    const months = []
+    for (let d = new Date(new Date(lo * 86400000).setUTCDate(1)); days(d.toISOString().slice(0, 10)) < hi; d.setUTCMonth(d.getUTCMonth() + 1)) {
+      const dd = days(d.toISOString().slice(0, 10))
+      if (dd >= lo) months.push('<span class="gm" style="left:' + pct(dd) + '">' + (d.getUTCMonth() + 1) + ' 月</span>')
+    }
+    head = '<div class="gr gh"><div></div><div class="gt">' + months.join('') + '</div></div>'
+  }
+  const body = projects.map((p) => {
+    const mine = sprints.filter((sp) => sp.project === p.id)
+    return '<div class="gp">' + esc(p.name) + '</div>' + (mine.length ? mine.map((sp) => sprintStatus(sp) === '做完' ? doneRow(sp) : liveRow(sp)).join('') : '<div class="gnone">还没有 sprint</div>')
+  }).join('')
+  const legend = '<div class="glg"><span class="gk ok"></span>做完 ✓<span class="gk go"></span>在做 …<span class="gk no"></span>没开始<span style="margin-left:12px;color:#57606a">一个 sprint 走一轮：需求采集 → 开发 → 验收；做完的缩成一行功能点；鼠标停上去看详情</span></div>'
+  return '<div class="md"><h2>进度</h2></div>' + weeksPart(projects, sprints) + '<div class="gc">' + legend + head + body + '</div>'
+}
+
+function planPage() {
+  const dir = path.join(root, 'plan')
+  const plan = readJson(path.join(dir, 'plan.json'), null)
+  const slices = new Map(allSlices().map((s) => [s.id, s]))
+  const refresh = '<script>const T0 = ' + planStamp() + "; setInterval(() => fetch('/plan/stamp').then((r) => r.json()).then((d) => { if (d.t !== T0) location.reload() }).catch(() => {}), 3000)</script>"
+  if (!plan) return '<div class="ptree"><div class="ph">还没有项目计划。PM 跟你一起起第一版：有哪几个项目、各分哪几大块、先后，再排 sprint。它写进 <code>plan/plan.json</code>，这一页自己会刷新。</div></div>' + refresh
+  const projects = plan.projects ?? [], sprints = plan.sprints ?? []
+  const css = '<style>.gc{margin:8px 0 22px;border:1px solid #e6e8eb;border-radius:8px;padding:10px 12px;background:#fff;overflow-x:auto}'
+    + '.gp{font-weight:700;font-size:14px;margin:14px 0 4px;padding-bottom:3px;border-bottom:1px solid #e6e8eb}.gc>.gp:first-child,.glg+.gp,.gh+.gp{margin-top:4px}'
+    + '.wk{display:grid;align-items:center;min-width:620px;font-size:13px}.wk>div{grid-row:1}.wkh{position:sticky;top:0;background:#fff;z-index:1}'
+    + '.wc{font-size:11px;color:#57606a;text-align:center;line-height:1.3;padding:2px 0}.wc.now{color:#cf222e;font-weight:600}'
+    + '.wl{padding:5px 8px 5px 0;cursor:default}.wg{height:30px;border-left:1px solid #f0f2f4}.wg.now{background:#fff5f5}'
+    + '.wbar{height:18px;border-radius:4px;margin:0 1px;z-index:1;cursor:default}.wbar.ok{background:#1a7f37}.wbar.go{background:#f3d27a}.wbar.no{background:#dde3ea}'
+    + '.wnone{font-size:12px;color:#8c959f;padding-left:6px;cursor:default}'
+    + '.mx{border-collapse:collapse;width:100%;min-width:640px;font-size:12.5px;table-layout:fixed}.mx th,.mx td{border:1px solid #e6e8eb;padding:6px 8px;vertical-align:top;text-align:left;line-height:1.5}'
+    + '.mx tr:first-child th{background:#f6f8fa;font-weight:600;text-align:center}.mx th.now,.mx td.now{background:#fff5f5}.mx tr:first-child th.now{color:#cf222e}.mx th span{display:block;font-size:11px;font-weight:400}'
+    + '.mx .mx0{width:170px;border:none;background:none}.mxl{width:170px;font-weight:600;background:#fff}.mxl .gmeta{display:block;margin-top:4px;line-height:1.4}.mxe{background:#fafbfc}.mxp td{border:none;padding:12px 0 4px;font-weight:700;font-size:13.5px}'
+    + '.pdone{padding:4px 0;font-size:13px;color:#1a7f37}.pdone b{font-weight:600}'
+    + '.gr{display:grid;grid-template-columns:16px 1fr;gap:6px;align-items:start;min-width:520px;padding:2px 0 6px}.gh{align-items:end}'
+    + '.gstn{margin:8px 0 2px;font-size:13px}.gmeta{font-size:11.5px;color:#57606a;font-weight:400}'
+    + '.gb{display:flex;gap:2px}.gt{position:relative;height:26px}.gh .gt{height:18px}.gm{position:absolute;font-size:11.5px;color:#57606a;border-left:1px solid #d0d7de;padding-left:3px}'
+    + '.gtoday{position:absolute;top:-4px;bottom:-4px;width:2px;background:#cf222e;z-index:2}.gnone{font-size:12px;color:#8c959f;line-height:26px}'
+    + '.gs{flex:1;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11.5px;overflow:hidden;white-space:nowrap;cursor:default;box-sizing:border-box}'
+    + '.gt .gs{top:1px}.gs span{padding:0 4px;overflow:hidden;text-overflow:ellipsis}'
+    + '.gs.ok{background:#1a7f37;color:#fff}.gs.go{background:#f3d27a;color:#1f2328}.gs.no{background:#f6f8fa;color:#57606a;border:1px dashed #c0c6cc}'
+    + '.gacc{font-size:12px;color:#1f2328;margin:3px 0 0;line-height:1.5}.gacc span{color:#57606a;margin-right:6px}'
+    + '.ps{color:#fff;font-size:11.5px;border-radius:10px;padding:0 8px;margin-left:4px;white-space:nowrap}'
+    + '.glg{font-size:12px;margin:0 0 6px;display:flex;align-items:center;flex-wrap:wrap;gap:4px}.gk{display:inline-block;width:14px;height:10px;border-radius:3px;margin:0 3px 0 10px}.gk:first-child{margin-left:0}'
+    + '.gk.ok{background:#1a7f37}.gk.go{background:#f3d27a}.gk.no{background:#f6f8fa;border:1px dashed #c0c6cc}'
+    + '#gtip{position:fixed;pointer-events:none;background:#1f2328;color:#fff;font-size:12px;padding:5px 8px;border-radius:6px;max-width:420px;display:none;z-index:9}</style>'
+  const js = '<div id="gtip"></div><script>(function(){var tip=document.getElementById("gtip");document.addEventListener("mousemove",function(e){var s=e.target.closest&&e.target.closest("[data-tip]");if(!s){tip.style.display="none";return}tip.textContent=s.dataset.tip;tip.style.display="block";tip.style.left=Math.min(e.clientX+12,innerWidth-430)+"px";tip.style.top=(e.clientY+14)+"px"})})()</script>'
+  return css + (plan.title ? '<div class="md"><h1>' + esc(plan.title) + '</h1></div>' : '') + planPart(projects) + progressPart(projects, sprints, slices) + js + refresh
+}
+
 function journalPage(date) {
   const dir = path.join(root, 'journal')
   // 日志文件按 UTC 日期分，本机时区和 UTC 差着几个小时：一个 UTC 文件里可能装着本地的两天，
@@ -243,7 +415,7 @@ ${byRole.size ? `<table class="jsum"><tr><th>角色</th><th>派了几趟</th><th
   return back + sum + nav + `<div class="journal">${html}</div>`
 }
 
-const TABS = [['scene', '谁在干什么', '/p/scene/'], ['business', '业务', '/business'], ['slices', '切片', '/slices'], ['model', '模型图', '/p/model/'], ['proto', '原型LOCAL ↗', '/proto-open'], ...(project.liveUrl ? [['live', '原型LIVE ↗', project.liveUrl]] : [])]
+const TABS = [['scene', '谁在干什么', '/p/scene/'], ['business', '业务', '/business'], ['slices', '切片', '/slices'], ['plan', '计划', '/plan'], ['model', '模型图', '/p/model/'], ['proto', '原型LOCAL ↗', '/proto-open'], ...(project.liveUrl ? [['live', '原型LIVE ↗', project.liveUrl]] : [])]
 /** 这几个页签不套进来，点了在新标签页打开 */
 const OUTSIDE = ['proto', 'live']
 const shell = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>${esc(project.name ?? '工作台')}</title><style>
@@ -335,6 +507,8 @@ const server = http.createServer((req, res) => {
   }
   if (url === '/todo') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify(todo())) }
   if (url === '/slices') return html(wrap(slicesPage()))
+  if (url === '/plan') return html(wrap(planPage()))
+  if (url === '/plan/stamp') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); return res.end(JSON.stringify({ t: planStamp() })) }
   if (url === '/business') return html(business.page(root, q.doc))
   if (url.startsWith('/business/comments') && business.handle(root, req, res, url)) return
   if (url === '/business/stamp') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); return res.end(JSON.stringify({ t: business.stamp(root) })) }
