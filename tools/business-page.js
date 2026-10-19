@@ -20,7 +20,7 @@ const comments = require('./comments')
 
 const LAYER_FILES = ['abstraction.md', 'practice.md', 'behavior.md']
 
-const DIRS = [['business', '业务分析写的'], ['business/聚焦', '聚焦'], ['导读', '导读']]
+const DIRS = [['business', '业务分析写的'], ['business/聚焦', '聚焦'], ['business/答问', '答问'], ['导读', '导读']]
 
 // 概念卡：一张卡两份同名文件，前半张（本质、类比、例子）业务分析写在 business/概念/，细节模型师写在 model/概念/；页面拼成一张
 const CARD_DIRS = [['business', '概念'], ['model', '概念']]
