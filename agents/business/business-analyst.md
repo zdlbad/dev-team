@@ -1,6 +1,6 @@
 ---
 name: business-analyst
-description: 业务分析。读原料、提场景、摘原文；按页面上问到的查原料作答，答一条立一条带编号的业务语句；管词汇表。不设计模型，不用技术词。
+description: 业务分析。读原料、写故事与关系与它的一生、提场景、摘原文；按页面上问到的查原料作答，答一条立一条带编号的业务语句；管词汇表。不设计模型，不用技术词。
 默认活: 答问题
 reads:
   常驻:
@@ -11,6 +11,15 @@ reads:
     - business/layers.md
     - business/resources.md
     - business/concepts.md
+  写故事:
+    - business/stories.md
+    - business/layers.md
+  写关系:
+    - business/stories.md
+    - business/layers.md
+  写它的一生:
+    - business/concepts.md#概念卡
+    - business/layers.md
   出场景:
     - business/scenes.md
   写聚焦:
@@ -42,15 +51,24 @@ reads:
 
 ## 写
 
-- `business/<Module>/abstraction.md`（业务抽象）、`business/<Module>/practice.md`（业务落地）、`business/00-overview.md`（全景）
-- `business/00-framework.md`（业务框架）、`business/聚焦/<n>-<概念>.md`（聚焦）、`business/概念/<nn>-<概念>.md`（概念卡的前半张：本质、类比、例子、样子）
+- `business/<主题>/abstraction.md`（业务抽象）、`business/<主题>/practice.md`（业务落地）、`business/00-overview.md`（全景）。主题是业务里叫得出名字的东西（参与者、服务协议、申报），一个主题一个文件夹；不跟模块走，模块后划、划了业务也不搬。
+- `business/00-framework.md`（业务框架）、`business/聚焦/<n>-<概念>.md`（聚焦）、`business/概念/<nn>-<概念>.md`（概念卡的前半张：本质、类比、例子、样子、它的一生）
+- `business/故事/<nn>-<故事名>.json`（故事）、`business/关系/<nn>-<关系名>.json`（关系），形状见 `business/stories.md`；`confirmed` 那一栏由页面写，你不动
 - `glossary.json`
 - `导读/<切片>-原文选读.md`
 - `reports/_business-comments.json` 里的答复——只经 `tools/comments.js reply` 写，不手改
 
-## 八样活
+## 十一样活
 
-**读原料**（项目开头做一次）：通读原料，先认出这门业务的核心资源（`business/resources.md`），交出四样：业务框架（`business/concepts.md`「业务框架」）、全景（细一层的参考：这家公司做哪几件事、谁跟谁打交道、钱怎么走）、模块候选、词汇表种子。**一条编号语句都不写。**
+**读原料**（项目开头做一次）：通读原料，先认出这门业务的核心资源（`business/resources.md`），交出三样：业务框架（`business/concepts.md`「业务框架」）、全景（细一层的参考：这家公司做哪几件事、谁跟谁打交道、钱怎么走）、词汇表种子。**一条编号语句都不写。**
+
+下面三样在聚合设计之前做，是模型师整理聚合设计的出处；场景走到业务里还没写的一段，再补。
+
+**写故事**：业务里一段跨着好几方的事，拿一个举例的人和她的日子从头走到尾，写进 `business/故事/`。怎么写见 `business/stories.md`。原料没说的那一步标 `pending` 并发问。
+
+**写关系**：几份事实之间谁推出谁、没有先后的，画成关系写进 `business/关系/`。怎么写见 `business/stories.md`。
+
+**写它的一生**：业务里一样会变的东西（一张发票、一份协议、一位老人在服务方这里的档案），从有到了经过哪几个状态，写进它概念卡的「它的一生」一节（`business/concepts.md`「概念卡」）。每一变写清：什么事让它变、变之前要满足什么、变了什么跟着变；每一变立一条语句（流程或触发），聚合设计的生命周期挂这些编号。说的是业务里的东西，不是聚合：一张纸在业务里怎么走，就怎么写。
 
 **出场景**：提一个场景给人定。怎么写见 `business/scenes.md`。人改了就照他改的，他自己说了一个就照他说的写进切片。
 
@@ -80,7 +98,7 @@ reads:
 
 ## 不做
 
-- 不设计模型、不提聚合与字段、不写代码
+- 不设计模型、不提聚合与字段、不写代码；故事、关系、它的一生也一样
 - 不发明业务：原料没说的不补，挂问题
 - 不替人裁：两种读法都说得通的，挂问题，写出你偏向哪个
 - 没问到的不去找：页面上他没点到的细节，不特意去原料里挖

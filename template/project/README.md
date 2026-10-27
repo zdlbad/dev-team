@@ -4,9 +4,10 @@
 
 ```
 raw/                原料，人放进来；raw/rulings.md 记人拍板的事
-business/           业务描述：00-overview.md；<Module>/abstraction.md（业务抽象）、<Module>/practice.md（业务落地）
+business/           业务描述：00-overview.md；故事/、关系/；<主题>/abstraction.md（业务抽象）、<主题>/practice.md（业务落地）
 glossary.json       词汇表
-model/              模型（模型师写）
+aggregate-design/   聚合设计：属性与生命周期（模型师写，人定下）；modules.json 是模块页上划的模块
+model/              模型（模型师写）；模块没划之前都在 model/Unassigned/
 model-decoded/      从代码解码出来的模型（临时，不入库）
 slices/             切片记录：s-xxx 场景、f-xxx 正式化
 reports/            校验与审查报告、现场看板

@@ -26,6 +26,7 @@ model/
       port.<Name>Interface.json         对外依赖：外部系统或其他模块
 ```
 
+- **模块没划之前**，聚合都放在占位模块 `model/Unassigned/`（代码 `src/modules/unassigned/`，页面上叫「未划」），`modules.json` 不列它。模块定下后整个挪进各模块，`Unassigned` 就没了。
 - 六边形核心圈 = `domain` + `application` + `ports`，进模型、可解码。实现圈 = 代码里的 `adapters`，不进模型。
 - 仓储是接口，放在领域层；实现在 `adapters`。查询不引起任何改变：调用仓储的读方法取数，要算的交给不写、不发事件的领域服务操作（`writes`、`raises` 都为空）；不经过聚合行为，不设独立读模型。
 - 事件只在**发出它的聚合**里声明一次；事件处理的 `trigger` 引用事件名。
@@ -87,13 +88,13 @@ model/
   "sources": {                                      // 什么事发生了、带来哪份事实、落在哪几个属性上
     "stages": [ { "id": "open", "title": "开票", "note?": "" } ],
     "entities": [ { "id": "bill", "title": "记账软件开的发票", "note?": "" } ],   // 事实装在哪里
-    "facts": [ { "stage": "open", "entity": "bill", "event": "开出一张三方发票", "fact": "号、开给哪位老人", "fields": ["thirdPartyInvoiceNumber"], "traces": [] } ] },
+    "facts": [ { "stage": "open", "entity": "bill", "event": "开出一张三方发票", "fact": "号、开给哪位老人", "fields": ["thirdPartyInvoiceNumber"], "traces": [], "refs?": ["从开票到付款 #2"] } ] },
   "lifecycle": {                                    // 状态图：只看它自己怎么变
     "states": [ { "name": "SubmittedToGov", "title?": "Submitted to Gov" } ],
     "transitions": [ { "from": "Approved", "to": "SubmittedToGov",
       "event": { "title": "三方发票已交政府", "name?": "ThirdPartyInvoiceSubmittedToGov" },
       "trigger?": { "aggregate": "ClaimFile", "event": "申报已交上去" },
-      "requires?": "转之前要满足什么", "changes?": "转了里面跟着变什么", "traces": [] } ] },
+      "requires?": "转之前要满足什么", "changes?": "转了里面跟着变什么", "traces": [], "refs?": [] } ] },
   "sequence": {                                     // 时序图：只看流程与参与者
     "participants": [ { "id": "jl", "title": "照护伙伴" } ], "phases": [ { "id": "open", "title": "开票" } ],
     "steps": [ { "id": "1", "phase": "open", "by": "jl", "to?": "注册服务方", "title": "开出一张三方发票", "state?": "Draft", "event?": "三方发票已开出", "alongside?": "7a" } ],
@@ -106,7 +107,7 @@ model/
 - **属性六组**：外部系统的编号、抄来不跟着变的快照归外部关联；算出来的、累计、有效期归业务属性，`from` 写怎么来、存不存；来源归审计；并发用的版本号不进来；被谁引用不列。
 - **状态图**：`from` 为 `null` 是开出来那一下；没写的转移就是不许走，没有出去的转移的状态是终态。状态不变、只在某些状态能做的写成 `from` 与 `to` 相同的自环；哪个状态都能做的不写。只是往前挪、往回退的转移不起动作名，箭头上只标事件。别的聚合的事件引起的写 `trigger`，图上画虚线。原来是是非属性的（作废了没有）并进状态。
 - **状态图不写参与者，时序图不写聚合里面怎么变**；两张图靠 `state` 与 `event` 对上。时序图的卡上只有谁和标题。
-- **`traces` 指业务分析写的生命周期语句**（概念卡「它的一生」立成的语句），页面上照编号摆出原话。
+- **出处两种**：`traces` 指业务语句的编号（概念卡「它的一生」立成的语句也在里面），页面上照编号摆出原话；`refs` 指故事的步骤或关系的线，写成「<故事名> #<步骤>」「<关系名> #<线>」，页面上点了跳到那一步、那条线。
 - **`aggregate-design/modules.json`** 是模块页上划的模块：`{ "modules": [ { "name", "responsibility", "aggregates": [] } ], "unassigned": [], "confirmed?" }`。模型师摆初稿，人在页面上拖、改名，存的也是这一份。
 - **`confirmed`** 由页面写；`stamp` 是除它以外内容的指纹，内容再改，页面显示「改过，待重按」，门禁当没定。
 
