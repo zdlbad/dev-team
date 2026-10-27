@@ -5,6 +5,7 @@
 | 页面 | 地址 | 读写 |
 |---|---|---|
 | 故事 | `/stories` | 读 `business/故事/<nn>-<故事名>.json`（业务分析写）；「定下」写 `confirmed`；地址带 `#<文件>#<步骤>` 直接走到那一步 |
+| 关系 | `/relations` | 读 `business/关系/<nn>-<关系名>.json`（业务分析写）；「定下」写 `confirmed`；地址带 `#<文件>#<线>` 直接亮出那条线 |
 | 聚合设计 | `/agg` | 读 `aggregate-design/<聚合>.json` 与业务语句；「定下」写 `confirmed` |
 | 模块 | `/modules` | 读聚合设计与模型；拖动、改名存 `aggregate-design/modules.json`，「定下」写 `confirmed` |
 

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:relation",
+  "title": "business/关系/<nn>-<关系名>.json — 关系：业务里一份事实怎么推出另一份，没有先后",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "summary", "nodes", "edges", "questions"],
+  "properties": {
+    "title": { "type": "string", "minLength": 1, "description": "关系名；线的编号写成「<关系名> #<线>」" },
+    "summary": { "type": "string", "minLength": 1 },
+    "note": { "type": "string", "minLength": 1, "description": "图底下补一段话：例外、不走这张图的情形" },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "kind"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "sub": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["paper", "derived", "fixed"], "description": "paper 原料里的纸 / derived 推出来的 / fixed 政府定死的清单" },
+          "col": { "type": "integer", "minimum": 0, "description": "放第几列；不写时按推出的先后排" },
+          "facts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "text"],
+              "properties": { "name": { "type": "string", "minLength": 1 }, "text": { "type": "string", "minLength": 1 } }
+            }
+          },
+          "source": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "from", "to", "kind"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[0-9]+[a-z]?$" },
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "kind": { "enum": ["derive", "also", "narrow"], "description": "derive 推出 / also 也能 / narrow 再缩小" },
+          "label": { "type": "string", "minLength": 1, "description": "线上的几个字：条件" },
+          "text": { "type": "string", "minLength": 1, "description": "这条线说的是什么，一句话" },
+          "source": { "type": "string", "minLength": 1 },
+          "traces": { "$ref": "urn:dev-team:common#/$defs/traces" }
+        }
+      }
+    },
+    "examples": {
+      "type": "array",
+      "description": "拿一个人看：亮出她走的节点与线，节点旁写她的数",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "nodes", "edges"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "note": { "type": "string", "minLength": 1 },
+          "nodes": { "type": "object", "description": "节点 id → 写在旁边的字（可空）", "additionalProperties": { "type": "string" } },
+          "edges": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "confirmed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "stamp"],
+      "properties": { "at": { "type": "string", "minLength": 1 }, "stamp": { "type": "string", "pattern": "^[0-9a-f]{12,}$" } }
+    },
+    "questions": { "$ref": "urn:dev-team:common#/$defs/questions" }
+  }
+}

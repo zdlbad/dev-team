@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 按文件名把项目里的 JSON 对到 schema 并校验。
- * 用法：node tools/check-schema.js <项目目录>          校验 glossary、model/、slices/、aggregate-design/、business/故事/
+ * 用法：node tools/check-schema.js <项目目录>          校验 glossary、model/、slices/、aggregate-design/、business/故事/、business/关系/
  *       node tools/check-schema.js --self               只编译全部 schema，检查 schema 本身
  * 退出码：0 全部通过；1 有不合规文件；2 用法或 schema 错误。
  */
@@ -32,6 +32,7 @@ function schemaFor(file, rel) {
   if (rel.startsWith('slices')) return 'urn:dev-team:slice'
   if (rel === 'aggregate-design/modules.json') return 'urn:dev-team:module-division'
   if (rel.startsWith('business/故事/')) return 'urn:dev-team:story'
+  if (rel.startsWith('business/关系/')) return 'urn:dev-team:relation'
   if (rel.startsWith('aggregate-design/')) return 'urn:dev-team:aggregate-design'
   const m = base.match(/^(aggregate-root|entity|value-object|event|error|repository|service|command-handler|query-handler|event-handler|port)\.[A-Za-z0-9]+\.json$/)
   return m ? `urn:dev-team:${m[1]}` : null
@@ -89,6 +90,7 @@ function main() {
     ...walk(path.join(root, 'slices')),
     ...walk(path.join(root, 'aggregate-design')),
     ...walk(path.join(root, 'business', '故事')),
+    ...walk(path.join(root, 'business', '关系')),
   ].filter((f) => fs.existsSync(f) && !path.basename(f).startsWith('_'))
 
   let bad = 0

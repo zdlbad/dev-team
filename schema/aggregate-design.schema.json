@@ -185,10 +185,10 @@
               "traces": {
                 "$ref": "urn:dev-team:common#/$defs/traces"
               },
-              "stories": {
+              "refs": {
                 "type": "array",
                 "uniqueItems": true,
-                "description": "出处：故事里的哪几步，写成「<故事名> #<步骤>」",
+                "description": "出处：故事的步骤或关系的线，写成「<故事名或关系名> #<编号>」",
                 "items": {
                   "type": "string",
                   "pattern": "^.+ #[0-9]+[a-z]?$"
@@ -303,10 +303,10 @@
               "traces": {
                 "$ref": "urn:dev-team:common#/$defs/traces"
               },
-              "stories": {
+              "refs": {
                 "type": "array",
                 "uniqueItems": true,
-                "description": "出处：故事里的哪几步，写成「<故事名> #<步骤>」",
+                "description": "出处：故事的步骤或关系的线，写成「<故事名或关系名> #<编号>」",
                 "items": {
                   "type": "string",
                   "pattern": "^.+ #[0-9]+[a-z]?$"

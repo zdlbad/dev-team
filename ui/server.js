@@ -4,6 +4,9 @@
  *   /stories          故事页：业务里真实发生的一段事，跨聚合、不分聚合（business/故事/*.json）
  *   /stories/data     全部故事
  *   POST /stories/confirm {file, version}        人按「定下」
+ *   /relations        关系页：一份事实怎么推出另一份，没有先后（business/关系/*.json）
+ *   /relations/data   全部关系
+ *   POST /relations/confirm {file, version}      人按「定下」
  *   /agg              聚合设计页（每个聚合两个页签：属性、生命周期）
  *   /agg/data         全部聚合设计 + 它们挂的业务语句原话
  *   POST /agg/confirm {file, version}            人按「定下」
@@ -11,7 +14,7 @@
  *   /modules/data     聚合、它们引用谁、眼下的模块划分
  *   POST /modules/save {version, division}       拖动、改名后存
  *   POST /modules/confirm {version}              人按「定下」
- *   /agg/stamp、/modules/stamp、/stories/stamp                    页面轮询：文件变了就重取
+ *   /agg/stamp、/modules/stamp、/stories/stamp、/relations/stamp                    页面轮询：文件变了就重取
  *
  * 写回都带 version（读到时那份文件的指纹）：文件在这期间被别人改过就回 409、不写，页面重取后再按。
  * 整份覆盖会把模型师刚写的盖掉。
@@ -24,6 +27,7 @@ const { date, hm } = require('../tools/lib/time')
 
 const DIR = 'aggregate-design'
 const STORY_DIR = path.join('business', '故事')
+const RELATION_DIR = path.join('business', '关系')
 const DIVISION = 'modules.json'
 /** 还没划进模块的聚合在模型里住的占位模块；页面上叫「未划」 */
 const UNASSIGNED = 'Unassigned'
@@ -58,10 +62,15 @@ function readJsonDir(root, rel, skip = []) {
   })
 }
 const readStories = (root) => readJsonDir(root, STORY_DIR)
-/** 「从入册到退出 #5」→ 那一步：聚合设计页上摆出它的标题，点得过去 */
-function storySteps(root) {
+const readRelations = (root) => readJsonDir(root, RELATION_DIR)
+/** 出处编号 → 它指的那一步或那一条线：「从入册到退出 #5」「每个账户能买什么 #12」。聚合设计页上摆出标题，点得过去 */
+function refTargets(root) {
   const out = {}
-  for (const st of readStories(root)) for (const step of st.data?.steps ?? []) out[`${st.data.title} #${step.id}`] = { file: st.file, id: step.id, title: step.title, story: st.data.title }
+  for (const st of readStories(root)) for (const step of st.data?.steps ?? []) out[`${st.data.title} #${step.id}`] = { page: 'stories', file: st.file, id: step.id, title: step.title }
+  for (const rl of readRelations(root)) for (const e of rl.data?.edges ?? []) {
+    const name = (id) => rl.data.nodes.find((n) => n.id === id)?.title ?? id
+    out[`${rl.data.title} #${e.id}`] = { page: 'relations', file: rl.file, id: e.id, title: `${name(e.from)} → ${name(e.to)}${e.label ? '（' + e.label + '）' : ''}` }
+  }
   return out
 }
 
@@ -152,6 +161,7 @@ function guard(p, version) {
 
 const PAGES = {
   '/stories': { title: '故事', dir: 'stories' },
+  '/relations': { title: '关系', dir: 'relations' },
   '/agg': { title: '聚合设计', dir: 'aggregate-design' },
   '/modules': { title: '模块', dir: 'modules' },
 }
@@ -180,9 +190,11 @@ function handle(root, req, res, url) {
     // 左边的聚合按模块分组：模块页上划过的照它，没划过的照模型里现有的
     const { division } = modulesData(root)
     const groups = [...division.modules.map((m) => ({ name: m.name, aggregates: m.aggregates })), { name: '', aggregates: division.unassigned }]
-    send(res, 200, { designs, statements, groups, storySteps: storySteps(root) })
+    send(res, 200, { designs, statements, groups, refTargets: refTargets(root) })
     return true
   }
+  if (url === '/relations/data') { send(res, 200, { relations: readRelations(root) }); return true }
+  if (url === '/relations/stamp') { send(res, 200, { t: sha(readRelations(root).map((d) => d.file + d.version).join()) }); return true }
   if (url === '/stories/data') { send(res, 200, { stories: readStories(root) }); return true }
   if (url === '/stories/stamp') { send(res, 200, { t: sha(readStories(root).map((d) => d.file + d.version).join()) }); return true }
   if (url === '/agg/stamp') { send(res, 200, { t: sha(readDesigns(root).map((d) => d.file + d.version).join()) }); return true }
@@ -193,10 +205,10 @@ function handle(root, req, res, url) {
   }
   if (url === '/modules/data') { send(res, 200, modulesData(root)); return true }
 
-  if (req.method === 'POST' && (url === '/agg/confirm' || url === '/stories/confirm')) {
+  if (req.method === 'POST' && ['/agg/confirm', '/stories/confirm', '/relations/confirm'].includes(url)) {
     readBody(req).then((b) => {
       const file = path.basename(String(b.file ?? ''))
-      const p = path.join(root, url === '/agg/confirm' ? DIR : STORY_DIR, file)
+      const p = path.join(root, { '/agg/confirm': DIR, '/stories/confirm': STORY_DIR, '/relations/confirm': RELATION_DIR }[url], file)
       if (!file.endsWith('.json') || file === DIVISION || !fs.existsSync(p)) return send(res, 404, { error: `没有这一份：${file}` })
       const bad = guard(p, b.version)
       if (bad) return send(res, 409, bad)
@@ -235,4 +247,4 @@ function handle(root, req, res, url) {
   return false
 }
 
-module.exports = { handle, readDesigns, readStories, storySteps, contentStamp, stateOf, refsOfDesign, UNASSIGNED, DIR, DIVISION, folderOf }
+module.exports = { handle, readDesigns, readStories, readRelations, refTargets, contentStamp, stateOf, refsOfDesign, UNASSIGNED, DIR, DIVISION, folderOf }
