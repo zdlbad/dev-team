@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>关系小样</title>
+<style>
+:root{
+  --bg:#f7f6f3; --panel:#ffffff; --ink:#1d1d1b; --ink-2:#55534e; --ink-3:#8a877f;
+  --line:#dedbd3; --box:#ffffff; --accent:#2563eb; --accent-bg:#e8efff; --hl:#fff4c2;
+  --paper:#fef3c7; --paper-line:#b45309; --derived:#dbeafe; --derived-line:#1d4ed8; --fixed:#ecfdf5; --fixed-line:#047857;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#18181a; --panel:#222225; --ink:#ecebe7; --ink-2:#b5b2ab; --ink-3:#85827b;
+    --line:#3a3a3e; --box:#2a2a2e; --accent:#7aa2ff; --accent-bg:#26314d; --hl:#4a4220;
+    --paper:#3a3020; --paper-line:#fbbf24; --derived:#1e2a44; --derived-line:#7aa2ff; --fixed:#173229; --fixed-line:#34d399;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#18181a; --panel:#222225; --ink:#ecebe7; --ink-2:#b5b2ab; --ink-3:#85827b;
+  --line:#3a3a3e; --box:#2a2a2e; --accent:#7aa2ff; --accent-bg:#26314d; --hl:#4a4220;
+  --paper:#3a3020; --paper-line:#fbbf24; --derived:#1e2a44; --derived-line:#7aa2ff; --fixed:#173229; --fixed-line:#34d399;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{display:grid;grid-template-columns:200px minmax(0,1fr);gap:20px;max-width:1500px;margin:0 auto;padding:20px 16px}
+@media (max-width:820px){.wrap{grid-template-columns:minmax(0,1fr)}}
+aside{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;align-self:start}
+aside h3{margin:0 0 4px;font-size:13px;color:var(--ink-2)}
+aside .muted{font-size:12px;color:var(--ink-3);margin-bottom:10px}
+aside ul{list-style:none;margin:0;padding:0;font-size:13px}
+aside li{padding:4px 8px;border-radius:6px;color:var(--ink-2)}
+aside li small{display:block;font-size:11px;color:var(--ink-3)}
+aside li.on{background:var(--accent-bg);color:var(--ink);font-weight:600}
+main{min-width:0}
+header h1{margin:0;font-size:22px}
+header .sub{color:var(--ink-2);margin:4px 0 6px;max-width:960px}
+.note{font-size:12px;color:var(--ink-3)}
+.bar{display:flex;gap:8px;align-items:center;margin:14px 0 10px;font-size:13px;flex-wrap:wrap}
+.bar button{font:inherit;font-size:13px;padding:4px 12px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink-2);cursor:pointer}
+.bar button.on{border-color:var(--accent);background:var(--accent-bg);color:var(--ink);font-weight:600}
+.diagram{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+svg{display:block}
+svg text{font-size:12px;fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
+.nd rect{stroke-width:1.4}
+.nd.paper rect{fill:var(--paper);stroke:var(--paper-line)}
+.nd.derived rect{fill:var(--derived);stroke:var(--derived-line)}
+.nd.fixed rect{fill:var(--fixed);stroke:var(--fixed-line)}
+.nd text{stroke:none;font-size:13px}
+.nd text.sub{font-size:11px;fill:var(--ink-2)}
+.nd{cursor:pointer}
+.ed path.vis{fill:none;stroke:var(--ink-2);stroke-width:1.4}
+.ed.also path.vis{stroke-dasharray:2 4}
+.ed.narrow path.vis{stroke-dasharray:7 4}
+.ed path.hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
+.ed text{fill:var(--ink-2);font-size:11.5px}
+.dim{opacity:.18}
+.ex .vis{stroke:var(--accent)!important;stroke-width:2.4!important}
+.ex rect{stroke:var(--accent)!important;stroke-width:2.6!important}
+.nd .amt{font-size:11px;fill:var(--accent);font-weight:600;stroke:var(--bg)}
+.on-sel rect{stroke-width:3!important}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--ink-2);margin:10px 0 0}
+.legend .sw{display:inline-block;width:14px;height:10px;border-radius:3px;vertical-align:middle;margin-right:5px;border:1px solid}
+.legend i{display:inline-block;width:26px;height:0;border-top:2px solid var(--ink-2);vertical-align:middle;margin-right:6px}
+.legend i.also{border-top-style:dotted}
+.legend i.narrow{border-top-style:dashed}
+.detail[hidden]{display:none}
+.detail{position:fixed;z-index:20;width:340px;box-shadow:0 6px 24px rgba(0,0,0,.25);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.detail h4{margin:0 0 4px;font-size:15px}
+.detail .w{font-size:12px;color:var(--ink-3);margin-bottom:8px}
+.detail dl{display:grid;grid-template-columns:64px 1fr;gap:5px 10px;margin:0;font-size:13px}
+.detail dt{color:var(--ink-3)}
+.detail dd{margin:0}
+.sid{font-size:11px;color:var(--ink-3);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-family:ui-monospace,Consolas,monospace}
+.text{max-width:960px;font-size:13px;color:var(--ink-2);margin-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <h3>关系</h3>
+    <div class="muted">业务里一份事实怎么推出另一份，没有先后。业务分析写，你看过定；后面的聚合设计、模型拿它的线当出处。</div>
+    <ul>
+      <li class="on">每个账户能买什么<small>两张纸 → 账户 → 服务组</small></li>
+      <li>服务清单的四层<small>（举例）</small></li>
+    </ul>
+  </aside>
+  <main>
+    <header>
+      <h1>每个账户能买什么</h1>
+      <div class="sub">老人评估完拿到两张纸：决定通知书说批了哪一种钱、哪一级，支持计划说批了哪些服务类型。两张纸落到 Services Australia 那边，变成老人名下的几个账户，每个账户能买的服务组是政府清单定死的，支持计划再在组里圈出批了的服务类型。</div>
+      <div class="note">小样：内容取自 business/从支持计划与通知书到账户与可用服务.md。每条线有编号（每个账户能买什么 #6），聚合设计、模型拿它当出处。</div>
+    </header>
+
+    <div class="bar"><span>拿例子看：</span><button data-ex="" class="on">不看例子</button><button data-ex="xin">老人辛</button><span class="note" id="exnote"></span></div>
+    <div class="diagram"><svg id="svg"></svg></div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--paper);border-color:var(--paper-line)"></span>原料里的纸</span>
+      <span><span class="sw" style="background:var(--derived);border-color:var(--derived-line)"></span>推出来的</span>
+      <span><span class="sw" style="background:var(--fixed);border-color:var(--fixed-line)"></span>政府定死的清单</span>
+      <span><i></i>推出</span><span><i class="also"></i>也能买</span><span><i class="narrow"></i>再缩小</span>
+      <span>指着节点或线看解释，点一下钉住</span>
+    </div>
+    <div class="text">账户对服务组是政府清单定死的；支持计划再在服务组里面圈出批了的服务类型。所以「允许的服务类型」只是这个人的上限，跟哪一笔钱没有绑定。从居家护理包转过来、没重评的老人不走这张图：钱按原级别等值拨，服务清单上任何服务都能用（§6.7.2、§10.2.1）。</div>
+  </main>
+</div>
+<div class="detail" id="detail" hidden></div>
+
+<script>
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const TITLE = '每个账户能买什么'
+// 节点：第几列、种类（paper 原料里的纸 / derived 推出来的 / fixed 政府定死的清单）、两行字、解释
+const NODES = [
+  { id: 'nod', row: 3, col: 0, kind: 'paper', title: '决定通知书', sub: '分级、档位、路径', facts: { 写着: '持续服务分级 Classification 1–8；有没有批辅助技术档位、家居改造档位；有没有批复健路径、临终路径', 推出: '账户有哪几个、每个多少钱' }, source: '§6.5–6.7（行 549–580）' },
+  { id: 'sp', row: 0.85, col: 2, kind: 'paper', title: '支持计划', sub: '批了的服务类型', facts: { 写着: '批了的服务类型（SERT 那一层）；目标、推荐、转介', 推出: '每个账户能买哪些服务' }, source: '§6.5' },
+  { id: 'hcp', row: 6, col: 0, kind: 'paper', title: '居家护理包未用款', sub: '2025-10-31 那天', facts: { 写着: '转过来的老人 10 月 31 日那天联邦那份 HCP 未用款' }, source: '§13.2.1（行 2650–2656）' },
+  { id: 'on', row: 1, col: 1, kind: 'derived', title: 'ON 季度预算', sub: '持续服务', facts: { 数额: '该分级的年额 ÷ 当年天数 × 该季天数，扣掉一成进护理管理池；上季没花完的结转进来，上限取 $1,000 与季度预算一成中较高的', 期限: '一季一期，7 / 10 / 1 / 4 月初拨', 谁名下: '老人（Services Australia 的 home support account）' }, source: '§9.2–9.3、§9.7.1' },
+  { id: 'rc', row: 2, col: 1, kind: 'derived', title: 'RC 复健', sub: '复健路径', facts: { 数额: '一段的数（§14.4）', 期限: '一段最长十六周', 谁名下: '老人' }, source: '§14.4' },
+  { id: 'el', row: 3, col: 1, kind: 'derived', title: 'EL 临终', sub: '临终路径', facts: { 数额: '一次性 $25,000', 期限: '十二周，没花完可用到十六周', 谁名下: '老人' }, source: '§15.3（行 3070）' },
+  { id: 'at', row: 4, col: 1, kind: 'derived', title: 'AT / AS 辅助技术', sub: '档位；辅助犬另一笔 AS', facts: { 数额: '低 / 中 / 高档各一个数，高档 $15,000 以上凭处方可加', 期限: '十二个月', 谁名下: '老人' }, source: '§13.2' },
+  { id: 'hm', row: 5, col: 1, kind: 'derived', title: 'HM 家居改造', sub: '档位', facts: { 数额: '低 / 中 / 高档各一个数', 期限: '十二个月', 谁名下: '老人' }, source: '§13.2' },
+  { id: 'hca', row: 6, col: 1, kind: 'derived', title: 'Home care account', sub: '转来的老人才有', facts: { 数额: '多少就是多少（老人丙 $45,465.54）', 期限: '开放期', 谁名下: '老人，Services Australia 保管' }, source: '§13.2.1' },
+  { id: 'cm', row: 0, col: 2, kind: 'derived', title: 'CM 护理管理', sub: '注册服务方的池子', facts: { 数额: '每位老人季度预算的一成', 期限: '按季', 谁名下: '注册服务方，按网点合成一个池子' }, source: '§9.2' },
+  { id: 'g1', row: 2.4, col: 3, kind: 'fixed', title: 'SERG-0001 居家支持', sub: '13 个服务类型', facts: {}, source: '服务清单' },
+  { id: 'g2', row: 4.2, col: 3, kind: 'fixed', title: 'SERG-0002 辅助技术', sub: '', facts: {}, source: '服务清单' },
+  { id: 'g3', row: 5.2, col: 3, kind: 'fixed', title: 'SERG-0003 家居改造', sub: '', facts: {}, source: '服务清单' },
+]
+// 线：编号、从、到、种类（derive 推出 / also 也能买 / narrow 再缩小）、线上的字、解释、出处
+const EDGES = [
+  { id: '1', from: 'nod', to: 'on', kind: 'derive', label: 'Classification 1–8', text: '分级定下季度预算的年额', source: '§6.7' },
+  { id: '2', from: 'nod', to: 'rc', kind: 'derive', label: '批了复健路径', text: '批了复健路径才有这一笔', source: '§14' },
+  { id: '3', from: 'nod', to: 'el', kind: 'derive', label: '批了临终路径', text: '批了临终路径才有这一笔', source: '§15' },
+  { id: '4', from: 'nod', to: 'at', kind: 'derive', label: '批了辅助技术档位', text: '批了辅助技术档位才有；评估认定需要辅助犬另有一笔 AS', source: '§13.2' },
+  { id: '5', from: 'nod', to: 'hm', kind: 'derive', label: '批了家居改造档位', text: '批了家居改造档位才有', source: '§13.2' },
+  { id: '6', from: 'hcp', to: 'hca', kind: 'derive', label: '', text: '不由通知书定：转来的老人那天的未用款就是这一笔', source: '§13.2.1' },
+  { id: '7', from: 'on', to: 'cm', kind: 'derive', label: '每季一成', text: '季度预算扣下一成进注册服务方的护理管理池', source: '§9.2' },
+  { id: '8', from: 'on', to: 'g1', kind: 'derive', label: '除复健护理管理', text: '季度预算能买居家支持组的服务，复健护理管理除外', source: '服务清单分类表' },
+  { id: '9', from: 'rc', to: 'g1', kind: 'derive', label: '除护理管理', text: '复健路径的钱买居家支持组的服务，护理管理除外；跟持续服务并行时各买各的、不互相补贴', source: '§14.5（行 2984）' },
+  { id: '10', from: 'el', to: 'g1', kind: 'derive', label: '除复健护理管理', text: '临终路径的钱买居家支持组的服务，复健护理管理除外', source: '服务清单分类表' },
+  { id: '11', from: 'at', to: 'g2', kind: 'derive', label: '', text: '辅助技术的钱只买辅助技术组', source: '服务清单分类表' },
+  { id: '12', from: 'hm', to: 'g3', kind: 'derive', label: '', text: '家居改造的钱只买家居改造组；扶手只能从这里出', source: '服务清单分类表' },
+  { id: '13', from: 'hca', to: 'g1', kind: 'also', label: '季度预算花完顶上', text: '季度预算花完，Services Australia 自动从 Home care account 扣', source: '§16.4.5（行 3526–3535）' },
+  { id: '14', from: 'hca', to: 'g2', kind: 'also', label: '', text: '也能买辅助技术组；先扣未用款、后扣档位', source: '§13.2.1、§16.4.5' },
+  { id: '15', from: 'hca', to: 'g3', kind: 'also', label: '', text: '也能买家居改造组；先扣未用款、后扣档位', source: '§13.2.1、§16.4.5' },
+  { id: '16', from: 'sp', to: 'g1', kind: 'narrow', label: '再按批了的服务类型缩小', text: '支持计划在服务组里圈出批了的服务类型；这只是上限，跟哪一笔钱没有绑定', source: '裁定第四批第 2 条' },
+]
+// 例子：亮出哪几个节点、哪几条线，节点旁写数
+const EXAMPLES = {
+  xin: { note: '老人辛：通知书批了 Class 8 和家居改造高档。预算单上印作 ongoing 与 hm。', nodes: { nod: '', sp: '', on: '一季 $18,179.05', hm: '十二个月 $15,390.00', g1: '她排的十项全在这一组', g3: '两项' }, edges: ['1', '5', '8', '12', '16'] },
+}
+
+const W = 168, H = 46, COLW = 290, GAPY = 22, PADX = 30, PADY = 30
+function layout() {
+  const pos = {}
+  for (const n of NODES) pos[n.id] = { x: PADX + n.col * COLW, y: PADY + n.row * (H + GAPY) }
+  const maxRow = Math.max(...NODES.map((n) => n.row))
+  return { pos, width: PADX * 2 + (Math.max(...NODES.map((n) => n.col)) * COLW) + W, height: PADY * 2 + (maxRow + 1) * (H + GAPY) }
+}
+const outDeg = {}, inDeg = {}
+for (const e of EDGES) { outDeg[e.from] = (outDeg[e.from] ?? 0) + 1; inDeg[e.to] = (inDeg[e.to] ?? 0) + 1 }
+let ex = ''
+function draw() {
+  const { pos, width, height } = layout()
+  const E = EXAMPLES[ex]
+  let g = `<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink-2)"/></marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/></marker></defs>`
+  for (const e of EDGES) {
+    const a = pos[e.from], b = pos[e.to]
+    const x1 = a.x + W, y1 = a.y + H / 2, x2 = b.x - 2, y2 = b.y + H / 2, dx = (x2 - x1) * 0.45
+    const d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`
+    // 一处分出好几条线的，字靠终点；好几条线汇到一处的，字靠起点：字各在各的线上，不挤在一头
+    const t = outDeg[e.from] > 1 && outDeg[e.from] >= inDeg[e.to] ? 0.74 : 0.28, mt = 1 - t
+    const lx = mt ** 3 * x1 + 3 * mt * mt * t * (x1 + dx) + 3 * mt * t * t * (x2 - dx) + t ** 3 * x2
+    const ly = mt ** 3 * y1 + 3 * mt * mt * t * y1 + 3 * mt * t * t * y2 + t ** 3 * y2
+    const on = E && E.edges.includes(e.id)
+    g += `<g class="ed ${e.kind}${E ? (on ? ' ex' : ' dim') : ''}" data-e="${e.id}"><path class="vis" d="${d}" marker-end="url(#${on ? 'aa' : 'a'})"/><path class="hit" d="${d}"/>${e.label ? `<text x="${lx}" y="${ly - 6}" text-anchor="middle">${esc(e.label)}</text>` : ''}</g>`
+  }
+  for (const n of NODES) {
+    const p = pos[n.id]
+    const on = E && n.id in E.nodes
+    g += `<g class="nd ${n.kind}${E ? (on ? ' ex' : ' dim') : ''}" data-n="${n.id}"><rect x="${p.x}" y="${p.y}" width="${W}" height="${H}" rx="${n.kind === 'derived' ? 8 : 3}"/>
+      <text x="${p.x + W / 2}" y="${p.y + (n.sub ? 19 : 28)}" text-anchor="middle">${esc(n.title)}</text>${n.sub ? `<text class="sub" x="${p.x + W / 2}" y="${p.y + 36}" text-anchor="middle">${esc(n.sub)}</text>` : ''}
+      ${on && E.nodes[n.id] ? `<text class="amt" x="${p.x + W / 2}" y="${p.y + H + 14}" text-anchor="middle">${esc(E.nodes[n.id])}</text>` : ''}</g>`
+  }
+  const svg = document.getElementById('svg')
+  svg.setAttribute('width', width); svg.setAttribute('height', height + 10); svg.innerHTML = g
+  document.getElementById('exnote').textContent = E ? E.note : ''
+}
+
+// 解释浮在指着的节点或线旁边；点一下钉住，点别处收起
+let pinned = null
+const pop = document.getElementById('detail')
+function fill(key) {
+  const row = (k, v) => v ? `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>` : ''
+  if (key.n) {
+    const n = NODES.find((x) => x.id === key.n)
+    const kind = { paper: '原料里的纸', derived: '推出来的', fixed: '政府定死的清单' }[n.kind]
+    pop.innerHTML = `<h4>${esc(n.title)}</h4><div class="w">${kind}${n.sub ? ' · ' + esc(n.sub) : ''}</div><dl>${Object.entries(n.facts).map(([k, v]) => row(k, v)).join('')}${row('出处', n.source)}</dl>`
+  } else {
+    const e = EDGES.find((x) => x.id === key.e)
+    const A = NODES.find((x) => x.id === e.from), B = NODES.find((x) => x.id === e.to)
+    const kind = { derive: '推出', also: '也能买', narrow: '再缩小' }[e.kind]
+    pop.innerHTML = `<h4>${esc(A.title)} → ${esc(B.title)}</h4><div class="w">${kind}${e.label ? ' · ' + esc(e.label) : ''}</div><dl>${row('说的是', e.text)}${row('出处', e.source)}<dt>编号</dt><dd><span class="sid">${esc(TITLE)} #${esc(e.id)}</span></dd></dl>`
+  }
+}
+function place(ev) {
+  pop.hidden = false
+  const w = pop.offsetWidth, ht = pop.offsetHeight
+  let x = ev.clientX + 16
+  if (x + w > innerWidth - 8) x = ev.clientX - w - 16
+  pop.style.left = Math.max(8, x) + 'px'
+  pop.style.top = Math.max(8, Math.min(ev.clientY - 20, innerHeight - ht - 8)) + 'px'
+}
+const keyOf = (t) => { const n = t.closest('.nd'), e = t.closest('.ed'); return n ? { n: n.dataset.n } : e ? { e: e.dataset.e } : null }
+const svgEl = document.getElementById('svg')
+svgEl.addEventListener('mousemove', (ev) => { if (pinned) return; const k = keyOf(ev.target); if (!k) { pop.hidden = true; return } fill(k); place(ev) })
+svgEl.addEventListener('mouseleave', () => { if (!pinned) pop.hidden = true })
+svgEl.addEventListener('click', (ev) => {
+  const k = keyOf(ev.target); if (!k) return
+  ev.stopPropagation()
+  const id = JSON.stringify(k)
+  document.querySelectorAll('.on-sel').forEach((n) => n.classList.remove('on-sel'))
+  if (pinned === id) { pinned = null; pop.hidden = true; return }
+  pinned = id; fill(k); place(ev)
+  ev.target.closest('.nd,.ed').classList.add('on-sel')
+})
+document.addEventListener('click', (ev) => { if (pinned && !ev.target.closest('.detail')) { pinned = null; pop.hidden = true; document.querySelectorAll('.on-sel').forEach((n) => n.classList.remove('on-sel')) } })
+document.querySelector('.bar').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return
+  ex = b.dataset.ex
+  document.querySelectorAll('.bar button').forEach((x) => x.classList.toggle('on', x === b))
+  draw()
+})
+draw()
+</script>
+</body>
+</html>
