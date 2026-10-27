@@ -116,7 +116,7 @@ function renderAttr(d) {
     lastSt = f.stage
     if (!seenEnt.has(f.entity)) { seenEnt.add(f.entity); const en = entity(f.entity); flow += `<div class="ent" data-ent="${esc(f.entity)}"><b>${esc(en.title)}</b><span>${esc(en.note ?? '')}</span></div>` }
     else flow += `<div></div>`
-    flow += `<div class="src" data-i="${i}"><div class="t"><i>事件</i>${esc(f.event)}</div><div class="f"><i>事实</i>${esc(f.fact)}</div></div>`
+    flow += `<div class="src" data-i="${i}"><div class="t"><i>事件</i>${esc(f.event)}</div><div class="f"><i>事实</i>${esc(f.fact)}${(f.stories ?? []).length ? `<div class="refs">${storyLinks(f.stories)}</div>` : ''}</div></div>`
   })
   if (!src.facts.length) flow += `<div></div><div></div><div class="note">来源还没整理：什么事发生了、带来哪份事实、落在哪几个属性上</div>`
 
@@ -320,6 +320,14 @@ function drawStates(d) {
   pick(d, picked ?? (trans.findIndex((t) => t.from !== null) >= 0 ? trans.findIndex((t) => t.from !== null) : 0))
 }
 
+/** 故事步骤「从入册到退出 #5」→ 一个点得过去的链接；故事里找不到的照原样标出来 */
+function storyLinks(refs) {
+  return (refs ?? []).map((r) => {
+    const st = DATA.storySteps?.[r]
+    return st ? `<a href="stories#${encodeURIComponent(st.file)}#${encodeURIComponent(st.id)}">${esc(r)} ${esc(st.title)}</a>` : `<span class="miss">${esc(r)}（故事里找不到）</span>`
+  }).join('<br>')
+}
+
 function pick(d, i) {
   const trans = d.lifecycle?.transitions ?? []
   const t = trans[i]
@@ -340,7 +348,8 @@ function pick(d, i) {
     ${row('要满足', t.requires || '—')}
     ${row('带来的变化', t.changes)}
     ${row('发出', t.event?.title + (t.event?.name ? `（${t.event.name}）` : ''), 'ev')}
-    ${row('业务编号', (t.traces ?? []).join('、') || '—')}</dl>`
+    ${row('业务编号', (t.traces ?? []).join('、') || '—')}
+    ${(t.stories ?? []).length ? `<dt>故事</dt><dd>${storyLinks(t.stories)}</dd>` : ''}</dl>`
 }
 
 /* ---------- 时序图 ---------- */

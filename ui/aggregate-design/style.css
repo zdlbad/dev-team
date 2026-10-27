@@ -128,3 +128,6 @@ ol.biz li.miss{color:var(--ink-3)}
 .lc .s{margin-top:5px;font-size:11px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 .lc .s .state{border:1px solid var(--box-line);border-radius:4px;padding:0 5px;color:var(--ink);font-weight:600}
 .lc .s .ev{color:var(--event)}
+.refs a,.detail a{color:var(--accent);text-decoration:none;font-size:12px}
+.refs{margin-top:3px;font-size:12px}
+.miss{color:var(--ink-3);font-size:12px}

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:story",
+  "title": "business/故事/<nn>-<故事名>.json — 故事：业务里真实发生的一段事，跨聚合、不分聚合",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "summary", "participants", "phases", "steps", "questions"],
+  "properties": {
+    "title": { "type": "string", "minLength": 1, "description": "故事名；步骤编号写成「<故事名> #<步骤>」" },
+    "summary": { "type": "string", "minLength": 1, "description": "拿一个举例的人和日子说这段事，一两句" },
+    "participants": { "type": "array", "minItems": 1, "description": "谁在这段事里做事，一个一道", "items": { "$ref": "#/$defs/labelled" } },
+    "phases": { "type": "array", "items": { "$ref": "#/$defs/labelled" } },
+    "branches": {
+      "type": "array",
+      "description": "摆在头尾的几组路，如「进来的路」「出去的路」；图上走的是其中一条",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "items"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1 },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["key", "title"],
+              "properties": {
+                "key": { "type": "string", "minLength": 1, "description": "①、A 这样的标号" },
+                "title": { "type": "string", "minLength": 1 },
+                "detail": { "type": "string", "minLength": 1 },
+                "source": { "type": "string", "minLength": 1 },
+                "shown": { "type": "boolean", "description": "图上走的就是这一条" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "description": "按先后排；相邻两步之间画箭头",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "phase", "by", "title"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[0-9]+[a-z]?$" },
+          "phase": { "type": "string", "description": "phases 里的 id" },
+          "by": { "type": "string", "description": "participants 里的 id" },
+          "to": { "type": "string", "minLength": 1, "description": "交给谁，卡上写成「谁 → 谁」" },
+          "title": { "type": "string", "minLength": 1 },
+          "date": { "type": "string", "minLength": 1, "description": "例子里的日子" },
+          "due": { "type": "string", "minLength": 1, "description": "期限，卡上标红" },
+          "every": { "type": "string", "minLength": 1, "description": "按月、按季打转的写多久一次" },
+          "source": { "type": "string", "minLength": 1, "description": "原料出处，如手册章节与行号" },
+          "pending": { "type": "string", "minLength": 1, "description": "还没定的：问的是什么、在哪里问" },
+          "traces": { "$ref": "urn:dev-team:common#/$defs/traces" }
+        }
+      }
+    },
+    "loops": {
+      "type": "array",
+      "description": "打转的一段：从哪一步绕回哪一步",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "label"],
+        "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "label": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "confirmed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "stamp"],
+      "properties": { "at": { "type": "string", "minLength": 1 }, "stamp": { "type": "string", "pattern": "^[0-9a-f]{12,}$" } }
+    },
+    "questions": { "$ref": "urn:dev-team:common#/$defs/questions" }
+  },
+  "$defs": {
+    "labelled": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": { "id": { "type": "string", "minLength": 1 }, "title": { "type": "string", "minLength": 1 }, "note": { "type": "string", "minLength": 1 } }
+    }
+  }
+}
