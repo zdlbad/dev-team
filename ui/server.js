@@ -161,7 +161,10 @@ function handle(root, req, res, url) {
     ]))
     const statements = {}
     for (const s of loadBusiness(root)) if (want.has(s.id)) statements[s.id] = s.text
-    send(res, 200, { designs, statements })
+    // 左边的聚合按模块分组：模块页上划过的照它，没划过的照模型里现有的
+    const { division } = modulesData(root)
+    const groups = [...division.modules.map((m) => ({ name: m.name, aggregates: m.aggregates })), { name: '', aggregates: division.unassigned }]
+    send(res, 200, { designs, statements, groups })
     return true
   }
   if (url === '/agg/stamp') { send(res, 200, { t: sha(readDesigns(root).map((d) => d.file + d.version).join()) }); return true }

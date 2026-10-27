@@ -21,10 +21,15 @@ function render() {
     app.innerHTML = `<div class="empty-page"><h2>还没有聚合设计</h2><p>模型师照业务写的生命周期整理出 <code>aggregate-design/&lt;聚合&gt;.json</code>，这里就有了。</p></div>`
     return
   }
-  const list = DATA.designs.map((d) => `<li data-f="${esc(d.file)}" class="${d === cur ? 'on' : ''}"><span class="t">${esc(d.data?.aggregate ?? d.file)}<small>${esc(d.data?.title ?? d.error ?? '')}</small></span><span class="badge ${esc(d.state ?? '未定')}">${esc(d.state ?? '读不了')}</span></li>`).join('')
   app.innerHTML = `<div class="wrap">
-    <aside><h3>聚合</h3><div class="muted">先看聚合，模块等业务范围清楚了再划（「模块」页）。</div><ul id="aggs">${list}</ul></aside>
+    <aside><h3>聚合</h3><div class="muted">先看聚合，模块等业务范围清楚了再划（「模块」页）。</div><div id="aggs">${sideList()}</div></aside>
     <main id="main"></main></div>`
+  app.querySelector('#aggs').addEventListener('toggle', (e) => {
+    const g = e.target.closest('details'); if (!g) return
+    const open = new Set(JSON.parse(store.get('agg-open') || '[]'))
+    g.open ? open.add(g.dataset.g) : open.delete(g.dataset.g)
+    store.set('agg-open', JSON.stringify([...open]))
+  }, true)
   app.querySelector('#aggs').addEventListener('click', (e) => {
     const li = e.target.closest('li'); if (!li) return
     cur = DATA.designs.find((d) => d.file === li.dataset.f); picked = null
@@ -32,6 +37,24 @@ function render() {
     render()
   })
   renderMain()
+}
+
+/** 左边的聚合按模块收起、展开：当前这个所在的模块总是开着，别的照本机记的 */
+function sideList() {
+  const byName = Object.fromEntries(DATA.designs.filter((d) => d.data).map((d) => [d.data.aggregate, d]))
+  const listed = new Set()
+  const groups = (DATA.groups ?? []).map((g) => ({ name: g.name, items: g.aggregates.map((n) => byName[n]).filter(Boolean) }))
+  for (const g of groups) for (const d of g.items) listed.add(d)
+  const rest = DATA.designs.filter((d) => !listed.has(d))
+  if (rest.length) { const un = groups.find((g) => !g.name); un ? un.items.push(...rest) : groups.push({ name: '', items: rest }) }
+  const open = new Set(JSON.parse(store.get('agg-open') || '[]'))
+  const item = (d) => `<li data-f="${esc(d.file)}" class="${d === cur ? 'on' : ''}"><span class="t">${esc(d.data?.aggregate ?? d.file)}<small>${esc(d.data?.title ?? d.error ?? '')}</small></span><span class="badge ${esc(d.state ?? '未定')}">${esc(d.state ?? '读不了')}</span></li>`
+  return groups.filter((g) => g.items.length).map((g) => {
+    const key = g.name || '_'
+    const done = g.items.filter((d) => d.state === '已定').length
+    const isOpen = g.items.includes(cur) || open.has(key)
+    return `<details data-g="${esc(key)}" ${isOpen ? 'open' : ''}><summary><span>${esc(g.name || '未划')}</span><small>${done}/${g.items.length} 定下</small></summary><ul>${g.items.map(item).join('')}</ul></details>`
+  }).join('')
 }
 
 function renderMain() {
