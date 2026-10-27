@@ -13,12 +13,14 @@
  * 场景切片的四关：scene（场景定下）→ model（模型）→ draft（草稿原型）→ walk（一起按，他说够了才收口）。
  *   一次按下来的答案攒成一批：advance <切片> model pending "<这一批答了什么>"，模型与草稿一起重开，
  *   业务分析先把答案立成语句（slice lit），模型师再改，编码再改草稿。
+ * 模型这一关之前先过聚合设计（lib/design-gate.js）：故事、关系、聚合设计都定下了才建模。
  * 正式化切片的三关：code（测试、外壳、契约）→ check（代码对模型、审查）→ accept（他按一遍）。
  */
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { openQuestions } = require('./lib/project')
+const { designGate } = require('./lib/design-gate')
 
 const args = process.argv.slice(2)
 const cmd = args[0]
@@ -168,6 +170,9 @@ function next(s) {
   if (open.length && st('model') !== 'done') return ask()
   if (s.batch && !s.batch.lit) return { who: '业务分析', what: `把这一批答案立成语句、注明出处，登记进切片：${s.batch.note ?? '（看看板上这一段答过的问题）'}`, run: `node tools/slice.js lit ${R} ${s.id} R-…` }
   if (st('model') !== 'done') {
+    // 聚合设计没定下、或模型里冒出没设计过的聚合，模型不往下走
+    const gate = designGate(root)
+    if (gate) return gate
     const rp = path.join(root, 'reports', 'validate-1.json')
     const r = fs.existsSync(rp) ? readJson(rp) : null
     const mine = r && r.slice === s.id && (!s.stages.model.at || r.at.slice(0, 10) >= s.stages.model.at)

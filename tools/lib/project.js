@@ -191,4 +191,7 @@ function openQuestions(root, sliceId, scene = null) {
   if (!sc) { try { sc = JSON.parse(fsx.readFileSync(px.join(root, 'reports', '_scene.json'), 'utf8')) } catch { return [] } }
   return (sc.questions ?? []).filter((q) => q.slice === sliceId && !q.answeredAt)
 }
-module.exports = { openQuestions, folderOf, moduleOfFolder, modulesDirOf, NON_MODULE_SRC_FOLDERS, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }
+/** 还没划进模块的聚合在模型里住的占位模块；页面上叫「未划」 */
+const UNASSIGNED = 'Unassigned'
+
+module.exports = { UNASSIGNED, openQuestions, folderOf, moduleOfFolder, modulesDirOf, NON_MODULE_SRC_FOLDERS, applyWordMap, loadProject, loadBusiness, loadModel, loadGlossary, loadSlices, walk, readJson, ruleText, conditionText, PREFIXES, LAYERS, KINDS, labelOf }

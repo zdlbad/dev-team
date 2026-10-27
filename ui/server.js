@@ -22,15 +22,13 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
-const { loadBusiness, loadModel, folderOf } = require('../tools/lib/project')
+const { loadBusiness, loadModel, folderOf, UNASSIGNED } = require('../tools/lib/project')
 const { date, hm } = require('../tools/lib/time')
 
 const DIR = 'aggregate-design'
 const STORY_DIR = path.join('business', '故事')
 const RELATION_DIR = path.join('business', '关系')
 const DIVISION = 'modules.json'
-/** 还没划进模块的聚合在模型里住的占位模块；页面上叫「未划」 */
-const UNASSIGNED = 'Unassigned'
 
 const sha = (s) => crypto.createHash('sha1').update(s).digest('hex').slice(0, 16)
 /** 定下时记的指纹：除 confirmed 以外的内容 */

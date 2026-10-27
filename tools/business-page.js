@@ -3,11 +3,11 @@
  * 概念卡一张拼两份：business/概念/<nn>-<概念>.md（业务分析写本质、类比、例子）接上 model/概念/ 里同名的那份（模型师写细节）。
  * 左栏列文件和当前这一篇的目录，右边是正文；文件一变（角色正在写），页面自己刷新、停在原来的位置。
  * 每一段右边有 💬：人留言，业务分析用 tools/comments.js 作答，答复留在问题下面，人可以接着追问。
- * 每个模块另有一页「<模块>：三层」：一件事一行，从左到右是业务抽象 → 业务落地 → 应用行为，靠语句的「上一层」对齐；
+ * 每个主题另有一页「<主题>：三层」：一件事一行，从左到右是业务抽象 → 业务落地 → 应用行为，靠语句的「上一层」对齐；
  * 那一页的留言挂在一行打头的语句编号上，原文改了也跟得住。
  *
  *   const business = require('./business-page')
- *   business.page(root, doc)   → 整页 HTML（doc 是相对项目根的路径，或 'glossary'、'layers/<模块>'；不给就取第一篇）
+ *   business.page(root, doc)   → 整页 HTML（doc 是相对项目根的路径，或 'glossary'、'layers/<主题>'；不给就取第一篇）
  *   business.stamp(root)       → 所有文件最后改动的时间，页面拿它判断要不要刷新
  *   business.handle(root, req, res, url) → 留言的三个接口；认得就答、回 true
  */
@@ -41,26 +41,23 @@ function docs(root) {
     if (dir === 'business') {
       const cards = cardFiles(root)
       if (cards.length) groups.push({ name: '概念', items: cards.map((f) => ({ key: CARD_KEY + f, title: titleOf(path.join(root, 'business', '概念', f)) || f.replace(/\.md$/, '').replace(/^\d+-/, '') })) })
-      const mods = modules(root)
-      if (mods.length) groups.push({ name: '按模块看三层', items: mods.map((m) => ({ key: 'layers/' + m, title: m + '：三层' })) })
+      const mods = topics(root)
+      if (mods.length) groups.push({ name: '按主题看三层', items: mods.map((m) => ({ key: 'layers/' + m, title: m + '：三层' })) })
     }
   }
   if (fs.existsSync(path.join(root, 'glossary.json'))) groups.push({ name: '词汇', items: [{ key: 'glossary', title: '词汇表' }] })
   return groups
 }
 
-/** business/<模块>/ 下有分层文件的模块；次序照 model/modules.json，没列在里面的按字母排在后面 */
-function modules(root) {
+/** business/<主题>/ 下有分层文件的主题，按名字排；主题不跟模块，模块划了也不照它排 */
+function topics(root) {
   const dir = path.join(root, 'business')
   let names = []
   try {
     names = fs.readdirSync(dir, { withFileTypes: true })
       .filter((e) => e.isDirectory() && LAYER_FILES.some((f) => fs.existsSync(path.join(dir, e.name, f)))).map((e) => e.name)
   } catch { /* 还没有 business/ */ }
-  let order = []
-  try { order = (JSON.parse(fs.readFileSync(path.join(root, 'model', 'modules.json'), 'utf8')).modules ?? []).map((m) => m.name) } catch { /* 还没有模块划分 */ }
-  const at = (m) => (order.includes(m) ? order.indexOf(m) : order.length)
-  return names.sort((a, b) => at(a) - at(b) || a.localeCompare(b))
+  return names.sort((a, b) => a.localeCompare(b, 'zh'))
 }
 
 function titleOf(p) {
@@ -78,7 +75,7 @@ function stamp(root) {
     see(path.join(root, ...d))
     try { for (const f of fs.readdirSync(path.join(root, ...d))) see(path.join(root, ...d, f)) } catch { /* 没有这个目录 */ }
   }
-  for (const m of modules(root)) {
+  for (const m of topics(root)) {
     see(path.join(root, 'business', m))
     for (const f of LAYER_FILES) see(path.join(root, 'business', m, f))
   }
@@ -129,10 +126,10 @@ function notesOf(root, st, cache) {
 }
 
 /**
- * 一个模块的三层表。一行一件事：
+ * 一个主题的三层表。一行一件事：
  *   照手册来的：一条业务抽象打头，挂在它下面的业务落地各占一小行，挂在那条落地下的应用行为排在它右边；直接挂抽象的应用行为中格空着。
  *   没有上一层的业务落地、应用行为各自起一行，左边空着。
- * 挂的编号不存在、挂到同层或下层的不算数（校验会报），这条就当没挂。跨模块挂的也排进来，格子里标上模块名。
+ * 挂的编号不存在、挂到同层或下层的不算数（校验会报），这条就当没挂。跨主题挂的也排进来，格子里标上主题名。
  */
 function layersView(root, mod) {
   const all = loadBusiness(root).filter((st) => st.fileLayer)
@@ -146,7 +143,7 @@ function layersView(root, mod) {
 
   const cell = (st, here) => {
     if (!st) return ''
-    const other = moduleOf(st) !== mod ? '<span class="mod" title="这条在别的模块">' + esc(moduleOf(st)) + '</span>' : ''
+    const other = moduleOf(st) !== mod ? '<span class="mod" title="这条在别的主题">' + esc(moduleOf(st)) + '</span>' : ''
     const kind = st.ruleKind ? '<span class="k ' + (KIND_CLASS[st.ruleKind] ?? '') + '">' + esc(st.ruleKind) + '</span>' : ''
     const bad = st.parents.filter((id) => !valid(st).includes(id))
     const also = st.parents.length > 1 ? '<div class="up">挂在 ' + st.parents.map(esc).join('、') + '</div>' : ''
@@ -198,13 +195,13 @@ function layersView(root, mod) {
     + '<p class="meta">业务抽象 ' + count('业务抽象').length + ' 条 · 业务落地 ' + count('业务落地').length + ' 条（挂了上一层的 ' + hung('业务落地') + ' 条）· 应用行为 ' + count('应用行为').length + ' 条（挂了上一层的 ' + hung('应用行为') + ' 条）'
     + ' · <code>business/' + esc(mod) + '/</code> ' + files.map((f) => '<code>' + f + '</code>').join(' ')
     + (mt ? ' · 最后改动 ' + esc(clock.date(new Date(mt)) + ' ' + clock.hm(new Date(mt))) : '') + '</p>'
-    + '<div class="lg">种类：' + Object.keys(KIND_CLASS).map((k) => '<span class="k ' + KIND_CLASS[k] + '">' + k + '</span>').join('') + ' · 灰底模块名是挂在别的模块的那一条 · 点「依据」看出处</div>'
+    + '<div class="lg">种类：' + Object.keys(KIND_CLASS).map((k) => '<span class="k ' + KIND_CLASS[k] + '">' + k + '</span>').join('') + ' · 灰底主题名是挂在别的主题的那一条 · 点「依据」看出处</div>'
     + '<input id="lq" placeholder="找：编号或正文里的字" autocomplete="off"> <span id="lqn" class="meta"></span>'
     + '<div class="l3h">' + COLS.map(([l, h, c]) => '<div class="' + c + '">' + l + '<small>' + h + '</small></div>').join('') + '</div>'
     + section('照手册来的', '左边一条业务抽象；中间是我们照它怎么做；右边是系统在那件事上怎么表现。', fromBook)
     + section('我们自己的做法', '这几条业务落地没有挂手册上的哪一条：这家公司自己才有的做法，或者还没挂上。', ownPractice)
     + section('没挂上一层的系统行为', '这几条应用行为没挂在哪条业务落地或业务抽象下。', ownBehavior)
-    + (fromBook.length + ownPractice.length + ownBehavior.length ? '' : '<p class="meta">这个模块还没有语句。</p>')
+    + (fromBook.length + ownPractice.length + ownBehavior.length ? '' : '<p class="meta">这个主题还没有语句。</p>')
   return { html, outline, wide: true }
 }
 

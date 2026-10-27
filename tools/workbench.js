@@ -19,6 +19,7 @@ const { spawn, spawnSync } = require('node:child_process')
 const clock = require('./lib/time')
 const business = require('./business-page')
 const ui = require('../ui/server')
+const { designState, names: nameList } = require('./lib/design-gate')
 const { frontendOf } = require('./lib/frontend')
 
 const args = process.argv.slice(2)
@@ -123,7 +124,13 @@ function todo() {
   const sc = readJson(path.join(root, 'reports', '_scene.json'), {})
   const qs = (sc.questions ?? []).filter((q) => !q.answeredAt)
   const gates = allSlices().map((s) => ({ s, g: gateOf(s) })).filter((x) => x.g)
-  return { n: qs.length + gates.length, questions: qs.length, gates: gates.map((x) => ({ slice: x.s.id, title: x.s.title ?? '', kind: x.g.kind, ask: x.g.ask, button: x.g.button })) }
+    .map((x) => ({ slice: x.s.id, title: x.s.title ?? '', kind: x.g.kind, ask: x.g.ask, button: x.g.button }))
+  // 故事、关系、聚合设计没定下的，各算一件，在它们自己的页上按
+  const d = designState(root)
+  for (const [kind, names, page] of [['stories', d.stories, '故事'], ['relations', d.relations, '关系'], ['agg', d.designs, '聚合设计']]) {
+    if (names.length) gates.push({ slice: null, title: page, kind, ask: '在「' + page + '」页看 ' + nameList(names) + '，对了按「定下」', button: '定下' })
+  }
+  return { n: qs.length + gates.length, questions: qs.length, gates }
 }
 
 const wrap = (body) => `<!doctype html><html lang="zh"><head><meta charset="utf-8"><style>

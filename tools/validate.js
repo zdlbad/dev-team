@@ -12,9 +12,10 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync, spawnSync } = require('node:child_process')
-const { applyWordMap, loadProject, LAYERS, KINDS, labelOf } = require('./lib/project')
+const { applyWordMap, loadProject, LAYERS, KINDS, labelOf, UNASSIGNED } = require('./lib/project')
 const { checkDependencies } = require('./lib/deps')
 const { judgeKey, knownVerdicts } = require('./lib/judgments')
+const { readDesigns } = require('../ui/server')
 
 const args = process.argv.slice(2)
 const root = args[0] && path.resolve(args[0])
@@ -556,7 +557,8 @@ for (const mf of model.moduleFiles) {
       else add(r1, 'error', 'module.idRefs', `${mf.file}#${a.name}`, `idRef 指向不存在的聚合：${ref.to}`)
     }
   }
-  if (!model.modules?.data.modules.some((m) => m.name === mf.module)) add(r1, 'error', 'modules.list', mf.file, `modules.json 未列出模块 ${mf.module}`)
+  // 占位模块 Unassigned：模块还没划，modules.json 本来就不列它（model/shapes.md「模型目录」）
+  if (mf.module !== UNASSIGNED && !model.modules?.data.modules.some((m) => m.name === mf.module)) add(r1, 'error', 'modules.list', mf.file, `modules.json 未列出模块 ${mf.module}`)
 }
 for (const m of model.modules?.data.modules ?? []) {
   if (model.moduleFiles.some((mf) => mf.module === m.name)) continue
@@ -571,6 +573,30 @@ for (const el of [...entities, ...vos, ...events, ...errors, ...repos]) {
   const root = roots.find((r) => r.module === el.module && r.aggregateFolder === el.aggregateFolder)
   if (root && el.data.aggregate !== root.data.name) add(r1, 'error', 'aggregate.field', el.file, `aggregate 字段 ${el.data.aggregate} 与所在文件夹的聚合根 ${root.data.name} 不一致`)
 }
+// 模型对聚合设计（seed 第 2 条）：模型照人定下的聚合设计建；设计里没有的聚合、属性、事件，先退回聚合设计补上再建
+{
+  const designs = readDesigns(root).filter((d) => d.data)
+  const byName = new Map(designs.map((d) => [d.data.aggregate, d]))
+  const unsettled = []
+  if (designs.length) for (const r of roots) {
+    const d = byName.get(r.data.name)
+    if (!d) { add(r1, 'error', 'design.missing', r.file, `聚合设计里没有 ${r.data.name}：先退回聚合设计补上，人定下再建`); continue }
+    // 没定下的先不对：门禁会拦着它的模型，定下了再对
+    if (d.state !== '已定') { unsettled.push(r.data.name); continue }
+    const fields = [...(d.data.attributes ?? []).flatMap((g) => g.fields ?? []), ...(d.data.parts ?? []).flatMap((p) => p.fields ?? [])]
+    const designed = new Set(fields.map((f) => f.name))
+    for (const f of r.data.fields ?? []) if (!designed.has(f.name)) add(r1, 'error', 'design.field', `${r.file}#fields.${f.name}`, `聚合设计的属性里没有 ${f.name}：先退回聚合设计补上，再建`)
+    const named = (d.data.lifecycle?.transitions ?? []).map((t) => t.event?.name).filter(Boolean)
+    const mine = events.filter((e) => e.module === r.module && e.aggregateFolder === r.aggregateFolder)
+    if (!named.length) {
+      if (mine.length) add(r1, 'warning', 'design.event', `aggregate-design/${d.file}`, `状态图上的事件没写英文名，模型里的 ${mine.map((e) => e.data.name).join('、')} 对不上`)
+      continue
+    }
+    for (const e of mine) if (!named.includes(e.data.name)) add(r1, 'error', 'design.event', e.file, `状态图上没有事件 ${e.data.name}：先退回聚合设计补上，再建`)
+  }
+  if (unsettled.length) add(r1, 'warning', 'design.unconfirmed', 'aggregate-design/', `${unsettled.length} 份聚合设计还没定下（或定下后又改过），模型先不跟它们对：${unsettled.slice(0, 5).join('、')}${unsettled.length > 5 ? ' 等' : ''}`)
+}
+
 // 不变量跨聚合（判断）
 for (const el of roots) for (const inv of el.data.aggregateInvariants ?? []) judge(r1, '这条不变量是否需要另一个聚合才能成立？', `${el.file}#aggregateInvariants`, { model: inv.text }, 'high')
 
