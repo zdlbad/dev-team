@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:aggregate-design",
+  "title": "aggregate-design/<aggregate-folder>.json — 聚合设计：属性与生命周期",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["aggregate", "title", "summary", "attributes", "sources", "lifecycle", "sequence", "questions"],
+  "properties": {
+    "aggregate": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+    "title": { "type": "string", "minLength": 1, "description": "中文名，照原料里的叫法" },
+    "summary": { "type": "string", "minLength": 1, "description": "它是什么、怎么认出一个，一两句" },
+    "attributes": {
+      "type": "array",
+      "minItems": 1,
+      "description": "属性按六组排：身份、业务属性（可分几个方面，各起一组）、状态、外部关联、成员、审计",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["group"],
+        "properties": {
+          "group": { "enum": ["身份", "业务属性", "状态", "外部关联", "成员", "审计"] },
+          "aspect": { "type": "string", "minLength": 1, "description": "业务属性的哪个方面，如「开票」；别的组不写" },
+          "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/attribute" } },
+          "none": { "type": "string", "minLength": 1, "description": "这一组没有属性时写明为什么，如「不记：谁在哪天挪的」" }
+        },
+        "oneOf": [{ "properties": { "fields": true }, "required": ["fields"] }, { "properties": { "none": true }, "required": ["none"] }]
+      }
+    },
+    "parts": {
+      "type": "array",
+      "description": "成员组与属性类型里用到的实体、值对象",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "title", "kind", "fields"],
+        "properties": {
+          "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+          "title": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["entity", "value-object"] },
+          "fields": { "type": "array", "items": { "$ref": "#/$defs/attribute" } }
+        }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stages", "entities", "facts"],
+      "description": "什么事发生了、带来哪份事实、事实落在哪几个属性上",
+      "properties": {
+        "stages": { "type": "array", "items": { "$ref": "#/$defs/labelled" } },
+        "entities": { "type": "array", "description": "事实装在哪里：业务里的那张纸、那个平台", "items": { "$ref": "#/$defs/labelled" } },
+        "facts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["stage", "entity", "event", "fact", "fields", "traces"],
+            "properties": {
+              "stage": { "type": "string" },
+              "entity": { "type": "string" },
+              "event": { "type": "string", "minLength": 1, "description": "业务里发生的事" },
+              "fact": { "type": "string", "minLength": 1, "description": "它带来哪份事实" },
+              "fields": { "type": "array", "minItems": 1, "items": { "$ref": "urn:dev-team:common#/$defs/fieldName" } },
+              "traces": { "$ref": "urn:dev-team:common#/$defs/traces" }
+            }
+          }
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["states", "transitions"],
+      "description": "状态图：只看它自己怎么变，不写谁来做",
+      "properties": {
+        "states": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+              "title": { "type": "string", "minLength": 1, "description": "页面上显示的名字，与 name 不同时写" }
+            }
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to", "event", "traces"],
+            "properties": {
+              "from": { "oneOf": [{ "type": "null" }, { "$ref": "urn:dev-team:common#/$defs/modelName" }], "description": "null 是开出来那一下" },
+              "to": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+              "event": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["title"],
+                "description": "转了发出的领域事件",
+                "properties": {
+                  "title": { "type": "string", "minLength": 1 },
+                  "name": { "$ref": "urn:dev-team:common#/$defs/modelName", "description": "模型里的事件名；建模时补上" }
+                }
+              },
+              "trigger": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["aggregate", "event"],
+                "description": "别的聚合的事件引起的转移：图上画虚线",
+                "properties": {
+                  "aggregate": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+                  "event": { "type": "string", "minLength": 1 }
+                }
+              },
+              "requires": { "type": "string", "minLength": 1, "description": "转之前要满足什么" },
+              "changes": { "type": "string", "minLength": 1, "description": "转了里面跟着变什么" },
+              "traces": { "$ref": "urn:dev-team:common#/$defs/traces" }
+            }
+          }
+        }
+      }
+    },
+    "sequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["participants", "phases", "steps", "links"],
+      "description": "时序图：只看流程与参与者，时间从上往下",
+      "properties": {
+        "participants": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/labelled" } },
+        "phases": { "type": "array", "items": { "$ref": "#/$defs/labelled" } },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "phase", "by", "title"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "phase": { "type": "string", "description": "phases 里的 id" },
+              "by": { "type": "string", "description": "participants 里的 id" },
+              "to": { "type": "string", "minLength": 1, "description": "交给谁，卡上写成「谁 → 谁」" },
+              "title": { "type": "string", "minLength": 1 },
+              "state": { "$ref": "urn:dev-team:common#/$defs/modelName", "description": "这一步落到的状态，跟状态图对上" },
+              "event": { "type": "string", "minLength": 1, "description": "这一步发出的事件，写状态图上的 title" },
+              "alongside": { "type": "string", "description": "跟哪一步并排（二选一的结果）" }
+            }
+          }
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to", "kind"],
+            "properties": {
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "kind": { "enum": ["next", "condition", "back"] },
+              "label": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "confirmed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "stamp"],
+      "description": "人在页面上按「定下」时写入；stamp 是定下那一刻其余内容的指纹，内容再改就是「改过，待重按」",
+      "properties": {
+        "at": { "type": "string", "minLength": 1 },
+        "stamp": { "type": "string", "pattern": "^[0-9a-f]{12,}$" }
+      }
+    },
+    "questions": { "$ref": "urn:dev-team:common#/$defs/questions" }
+  },
+  "$defs": {
+    "attribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "meaning"],
+      "properties": {
+        "name": { "$ref": "urn:dev-team:common#/$defs/fieldName" },
+        "type": { "type": "string", "minLength": 1, "description": "标量、模型名，或「→ 聚合名」表示只记对方编号" },
+        "meaning": { "type": "string", "minLength": 1 },
+        "from": { "type": "string", "minLength": 1, "description": "谁给的值；算出来的写怎么算、存不存" }
+      }
+    },
+    "labelled": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "note": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

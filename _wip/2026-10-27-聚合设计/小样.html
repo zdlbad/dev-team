@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>聚合设计小样</title>
+<style>
+:root{
+  --bg:#f7f6f3; --panel:#ffffff; --ink:#1d1d1b; --ink-2:#55534e; --ink-3:#8a877f;
+  --line:#dedbd3; --box:#ffffff; --box-line:#6b6860; --wire:#b9c3d6;
+  --event:#0f766e; --ext:#c2410c; --accent:#2563eb; --accent-bg:#e8efff; --hl:#fff4c2;
+  --green:#15803d; --agg-bg:#f4f7fb;
+  --lane-a:#ea580c; --lane-b:#15803d; --lane-c:#2563eb; --cond:#c81e1e;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#18181a; --panel:#222225; --ink:#ecebe7; --ink-2:#b5b2ab; --ink-3:#85827b;
+    --line:#3a3a3e; --box:#2a2a2e; --box-line:#9a978f; --wire:#4b5670;
+    --event:#2dd4bf; --ext:#fb923c; --accent:#7aa2ff; --accent-bg:#26314d; --hl:#4a4220;
+    --green:#22a356; --agg-bg:#1f232b;
+    --lane-a:#fb923c; --lane-b:#34d399; --lane-c:#7aa2ff; --cond:#f87171;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#18181a; --panel:#222225; --ink:#ecebe7; --ink-2:#b5b2ab; --ink-3:#85827b;
+  --line:#3a3a3e; --box:#2a2a2e; --box-line:#9a978f; --wire:#4b5670;
+  --event:#2dd4bf; --ext:#fb923c; --accent:#7aa2ff; --accent-bg:#26314d; --hl:#4a4220;
+  --green:#22a356; --agg-bg:#1f232b;
+  --lane-a:#fb923c; --lane-b:#34d399; --lane-c:#7aa2ff; --cond:#f87171;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{display:grid;grid-template-columns:200px minmax(0,1fr);gap:20px;max-width:1500px;margin:0 auto;padding:20px 16px}
+@media (max-width:820px){.wrap{grid-template-columns:minmax(0,1fr)}}
+aside,.card{background:var(--panel);border:1px solid var(--line);border-radius:10px}
+aside{padding:14px;align-self:start}
+aside h3{margin:0 0 4px;font-size:13px;color:var(--ink-2)}
+aside .muted{font-size:12px;color:var(--ink-3);margin-bottom:10px}
+aside ul{list-style:none;margin:0;padding:0;font-size:13px}
+aside li{padding:3px 8px;border-radius:6px;color:var(--ink-2)}
+aside li.on{background:var(--accent-bg);color:var(--ink);font-weight:600}
+main{min-width:0}
+header h1{margin:0;font-size:22px}
+header .sub{color:var(--ink-2);margin:4px 0 6px}
+.note{font-size:12px;color:var(--ink-3)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:14px 0 16px}
+.tabs button,.subtabs button{font:inherit;background:none;border:0;color:var(--ink-2);cursor:pointer}
+.tabs button{padding:8px 16px;border-bottom:2px solid transparent;margin-bottom:-1px;font-size:15px}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.subtabs{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:12px}
+.subtabs button{padding:5px 14px;font-size:13px}
+.subtabs button.on{background:var(--accent-bg);color:var(--ink);font-weight:600}
+.pane[hidden]{display:none}
+.card{padding:16px;margin-bottom:18px}
+.who{font-size:12px;color:var(--ink-3);margin-bottom:12px}
+.scroll{overflow-x:auto}
+
+/* 属性 */
+.attr{position:relative;display:flex;gap:56px;align-items:flex-start;min-width:1180px;padding:4px 0 8px}
+.attr svg.wires{position:absolute;inset:0;pointer-events:none;overflow:visible}
+.attr svg.wires path{fill:none;stroke:var(--wire);stroke-width:1.2}
+.flow{display:grid;grid-template-columns:110px 150px 300px;column-gap:24px;row-gap:14px;flex:none}
+.flow .hd{font-weight:600;font-size:13px}
+.flow .hd span{font-weight:400;color:var(--ink-3);font-size:12px;margin-left:6px}
+.stage{position:relative;text-align:right;padding-right:16px;border-right:2px solid var(--line)}
+.stage b{display:block;font-size:13px}
+.stage span{font-size:12px;color:var(--ink-3)}
+.stage::after{content:"";position:absolute;right:-6px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--ink-2)}
+.stage.cont{border-right:2px solid var(--line)}
+.stage.cont::after{display:none}
+.ent{border:1px solid var(--box-line);border-radius:8px;padding:6px 10px;background:var(--box);align-self:start}
+.ent b{display:block;font-size:13px}
+.ent span{font-size:11px;color:var(--ink-3)}
+.src{border:1px solid var(--green);border-radius:8px;overflow:hidden;background:var(--box)}
+.src .t{background:var(--green);color:#fff;font-weight:600;font-size:13px;padding:4px 10px}
+.src .t i,.src .f i{font-style:normal;font-size:11px;font-weight:400;margin-right:8px;opacity:.85}
+.src .f{padding:5px 10px;font-size:13px}
+.src .f i{color:var(--ink-3)}
+.agg{flex:none;border:1px dashed var(--box-line);border-radius:14px;background:var(--agg-bg);padding:28px 22px 22px;position:relative}
+.agg>.cap{position:absolute;top:-10px;left:16px;background:var(--panel);padding:0 8px;font-size:13px;color:var(--ink-2)}
+.cls{border:1.5px solid var(--ink);border-radius:8px;background:var(--box);width:400px;font-size:13px}
+.cls .h{display:flex;align-items:baseline;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line)}
+.cls .h small{color:var(--ink-3);font-size:11px}
+.cls .h b{font-size:15px}
+.cls .h .cn{margin-left:auto;color:var(--ink-2);font-size:12px}
+.cls .g{font-size:11px;color:var(--ink-3);padding:5px 10px 1px;border-top:1px dashed var(--line);letter-spacing:.05em}
+.cls .g:first-of-type{border-top:0}
+.cls .row{display:flex;gap:8px;padding:1px 10px}
+.cls .row .n{flex:none}
+.cls .row .m{color:var(--ink-3);font-size:12px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cls .row .ty{color:var(--ink-3);font-size:12px}
+.cls .row .ty.cx{color:var(--ink);font-weight:600}
+.cls .row.on{background:var(--hl)}
+.cls .empty{padding:1px 10px 4px;color:var(--ink-3);font-size:12px;font-style:italic}
+.cls .pad{height:6px}
+.vo{border:1px solid var(--box-line);border-radius:8px;background:var(--box);width:250px;font-size:13px;margin-top:26px;margin-left:150px}
+.vo .h{display:flex;gap:8px;align-items:baseline;padding:5px 10px;border-bottom:1px solid var(--line)}
+.vo .h small{color:var(--ink-3);font-size:11px}
+.vo .h .cn{margin-left:auto;color:var(--ink-2);font-size:12px}
+.vo .row{padding:0 10px;display:flex;justify-content:space-between}
+.vo .row span{color:var(--ink-3);font-size:12px}
+.vo .ft{padding:3px 10px 6px;color:var(--ink-3);font-size:12px}
+
+/* 状态图 */
+svg.sd text{fill:var(--ink);font-size:12px;paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
+svg.sd .st rect{fill:var(--box);stroke:var(--box-line);stroke-width:1.4}
+svg.sd .st text{font-size:13px;font-weight:600;stroke:none}
+svg.sd .st.final rect.outer{fill:none}
+svg.sd .tr path.vis{fill:none;stroke:var(--ink-2);stroke-width:1.5}
+svg.sd .tr.ext path.vis{stroke:var(--ext);stroke-dasharray:6 4}
+svg.sd .tr path.hit{fill:none;stroke:transparent;stroke-width:16;cursor:pointer}
+svg.sd .tr text{cursor:pointer;fill:var(--event)}
+svg.sd .tr text.srcl{fill:var(--ext);font-size:11px}
+svg.sd .tr.on path.vis{stroke:var(--accent);stroke-width:2.6}
+svg.sd .tr.on text{font-weight:700}
+svg.sd .start{fill:var(--ink)}
+.diagram{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+svg{display:block}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--ink-2);margin:10px 0 0}
+.legend i{display:inline-block;width:26px;height:0;border-top:2px solid var(--ink-2);vertical-align:middle;margin-right:6px}
+.legend i.ext{border-top:2px dashed var(--ext)}
+.legend i.back{border-top:2px dashed var(--ink-3)}
+.legend i.cond{border-top:2px solid var(--cond)}
+.legend .ev{color:var(--event)}
+.sdwrap{display:flex;gap:20px;align-items:flex-start}
+.sdl{flex:none;max-width:100%}
+.sdl .diagram{width:max-content;max-width:100%}
+.cols{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;flex:1;min-width:0}
+@media (max-width:980px){.sdwrap{flex-direction:column}}
+.detail{border:1px solid var(--line);border-radius:8px;padding:12px;min-height:160px}
+.detail h4{margin:0 0 8px;font-size:14px}
+.detail dl{display:grid;grid-template-columns:84px 1fr;gap:4px 10px;margin:0;font-size:13px}
+.detail dt{color:var(--ink-3)}
+.detail dd{margin:0}
+.detail .ev{color:var(--event);font-weight:600}
+.detail .srcl{color:var(--ext)}
+ol.biz{margin:0;padding-left:22px;font-size:13px}
+ol.biz li{padding:3px 6px;border-radius:6px;margin-bottom:2px}
+ol.biz li.hl{background:var(--hl)}
+.events{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+@media (max-width:720px){.events{grid-template-columns:minmax(0,1fr)}}
+.events ul{margin:0;padding-left:18px;font-size:13px}
+.events .ev{color:var(--event);font-weight:600}
+.events .srcl{color:var(--ext)}
+.tag{display:inline-block;font-size:11px;padding:0 6px;border-radius:4px;border:1px solid var(--line);color:var(--ink-3);margin-left:6px}
+
+/* 泳道 */
+.lanes{position:relative}
+.lanes svg.lw{position:absolute;inset:0;pointer-events:none;overflow:visible}
+.lanes svg.lw path{fill:none;stroke:var(--ink-2);stroke-width:1.3}
+.lanes svg.lw path.back{stroke:var(--ink-3);stroke-dasharray:5 4}
+.lanes svg.lw path.cond{stroke:var(--cond)}
+.lanes svg.lw text{font-size:11px;fill:var(--ink-2);paint-order:stroke;stroke:var(--bg);stroke-width:4px}
+.lanes svg.lw text.cond{fill:var(--cond);font-weight:600}
+.phase{position:absolute;left:0;width:118px;border-left:3px solid var(--ink-2);font-size:12px;font-weight:600;padding:2px 0 0 8px}
+.phase span{display:block;font-weight:400;color:var(--ink-3)}
+.phase-line{position:absolute;left:0;border-top:1px dashed var(--line)}
+.lane-h{position:absolute;top:0;text-align:center;border-bottom:3px solid var(--c);padding-bottom:4px}
+.lane-h b{display:block;font-size:13px}
+.lane-h span{font-size:11px;color:var(--ink-3)}
+.lane-line{position:absolute;border-left:1px dashed var(--line)}
+.lc{position:absolute;width:200px;background:var(--box);border:1px solid var(--line);border-left:4px solid var(--c);border-radius:6px;padding:6px 9px 7px;font-size:12px;line-height:1.5}
+.lc .w{color:var(--c);font-size:11px;padding-right:22px}
+.lc .k{position:absolute;right:6px;top:6px;background:var(--ink-2);color:var(--bg);border-radius:9px;font-size:10px;min-width:18px;height:18px;line-height:18px;text-align:center;padding:0 4px}
+.lc b{display:block;font-size:13px;margin:1px 0 3px;line-height:1.4}
+.lc p{margin:0;color:var(--ink-2)}
+.lc .s{margin-top:5px;font-size:11px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.lc .s .state{border:1px solid var(--box-line);border-radius:4px;padding:0 5px;color:var(--ink);font-weight:600}
+.lc .s .ev{color:var(--event)}
+.lc .r{margin-top:4px;color:var(--ink-3);font-size:11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <h3>聚合</h3>
+    <div class="muted">模块：还没划，等业务范围清楚了再定。聚合先平放着。</div>
+    <ul id="aggs"></ul>
+  </aside>
+
+  <main>
+    <header>
+      <h1>三方发票 <code>ThirdPartyInvoice</code></h1>
+      <div class="sub">关联服务方 替注册服务方做了服务，开给注册服务方的一张发票。以「号 + 第几版」认出一张，一张只开给一位老人。</div>
+      <div class="note">小样：内容取自养老项目现在的模型。除「三方发票已作废」以外，事件名都是小样起的。这一步只看聚合的样子，动作往后排。</div>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button data-t="attr">属性</button>
+      <button data-t="life">生命周期</button>
+    </nav>
+
+    <!-- 属性 -->
+    <section class="pane card" id="pane-attr">
+      <div class="who">业务里什么事发生了、带来哪份事实，事实落在聚合的哪个属性上 · 模型师整理 · 你看过定 · 指着一张卡看它连到哪几个属性</div>
+      <div class="scroll"><div class="attr" id="attr">
+        <svg class="wires" id="wires"></svg>
+        <div class="flow" id="flow"></div>
+        <div>
+          <div class="agg" id="agg">
+            <div class="cap">聚合 ThirdPartyInvoice（三方发票）</div>
+            <div class="cls" id="cls"></div>
+            <div class="vo" id="vo"></div>
+          </div>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 生命周期 -->
+    <section class="pane card" id="pane-life" hidden>
+      <div class="subtabs" id="subtabs">
+        <button data-v="sd">状态图：它自己怎么变</button>
+        <button data-v="ln">时序图：流程和参与者</button>
+      </div>
+
+      <div id="view-sd">
+        <div class="who">只看聚合内部：有哪些状态、怎么转、转之前要满足什么、转了里面跟着变什么、发出什么事件；不写谁来做 · 业务分析写生命周期（右下的原话），模型师整理成图 · 点箭头看这一条转移</div>
+        <div class="sdwrap"><div class="sdl"><div class="diagram"><svg class="sd" id="svg" viewBox="0 0 600 830" width="600" height="830"></svg></div>
+        <div class="legend">
+          <span>箭头上：<span class="ev">发出的领域事件</span></span>
+          <span><i class="ext"></i>别的聚合的事件引起的转移</span>
+          <span>双框：终态</span>
+          <span>没画箭头的转移不许走</span>
+        </div></div>
+        <div class="cols">
+          <div class="detail" id="detail"></div>
+          <div>
+            <h4 style="margin:0 0 8px;font-size:14px">业务写的生命周期（原话）</h4>
+            <ol class="biz" id="biz"></ol>
+          </div>
+        </div></div>
+        <div class="events">
+          <div><b>它发出的</b><ul id="out"></ul></div>
+          <div><b>它听的（别的聚合发来）</b><ul id="in"></ul></div>
+        </div>
+      </div>
+
+      <div id="view-ln" hidden>
+        <div class="who">只看流程与参与者：谁在什么时候做了什么；时间从上往下走。卡底的状态与事件用来跟状态图对上</div>
+        <div class="diagram"><div class="lanes" id="lanes"><svg class="lw" id="lw"></svg></div></div>
+        <div class="legend">
+          <span><i></i>往下走</span>
+          <span><i class="cond"></i>红字：过得去要满足的</span>
+          <span><i class="back"></i>退回去</span>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const AGGS = ['ThirdPartyInvoice 三方发票','ServiceRecord','ClaimFile','Participant','Budget','CareNote','CarePlan','Document','Fund','FundingAccount','AgreedPrice','ListPrice','PriceListVersion','Projection','ProjectionRule','MonthlyStatement','PaymentStatement','Item','Service','ServiceGroup','ServiceType','FundAccountType','CatalogueLoad','ParticipantUpload','User'];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const store = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+
+document.getElementById('aggs').innerHTML = AGGS.map((a,i)=>`<li class="${i?'':'on'}">${esc(a)}</li>`).join('');
+
+/* ---------- 属性 ---------- */
+// 属性分六组：身份、业务属性（可分几个方面）、状态、外部关联、成员、审计
+const CLS = [
+  {g:'身份', rows:[
+    ['thirdPartyInvoiceNumber','三方发票号','string'],
+    ['version','第几版','number'],
+  ]},
+  {g:'业务属性 · 开票', rows:[
+    ['issueDate','开票日','date'],
+    ['dueDate','到期日 = 开票日 + 28 天','date'],
+    ['purchaseOrderNumber','采购单号','string'],
+  ]},
+  {g:'状态', rows:[
+    ['status','走到哪一步','ThirdPartyInvoiceStatus',true],
+  ]},
+  {g:'外部关联', rows:[
+    ['participantId','开给哪位老人','→ Participant'],
+    ['documentId','凭据：那张发票文件','→ Document'],
+  ]},
+  {g:'成员', empty:'没有：行是带这个号与第几版的服务记录'},
+  {g:'审计', empty:'不记：谁在哪天开的、挪的'},
+];
+
+const STAGES = [
+  {id:'open', b:'开票', s:'照护伙伴开出来'},
+  {id:'plat', b:'走平台', s:'注册服务方那边'},
+  {id:'claim', b:'申报', s:'交给政府'},
+  {id:'after', b:'有了结果之后', s:'要改就重开'},
+];
+const ENTS = {
+  bill:{b:'记账软件开的发票', s:'照护伙伴开的'},
+  po:{b:'采购单', s:'注册服务方给的'},
+  file:{b:'发票文件', s:'PDF 或照片'},
+  plat:{b:'注册服务方的平台', s:'Aged Care Provider Portal'},
+  gov:{b:'申报回执', s:'Services Australia'},
+};
+const SRC = [
+  {st:'open', ent:'bill', t:'开出一张三方发票', f:'号照记账软件开的那张填；开给哪位老人；头一版', to:['thirdPartyInvoiceNumber','version','participantId','status']},
+  {st:'open', ent:'po', t:'填上开票信息', f:'开票日、注册服务方给的采购单号；到期日照开票日算', to:['issueDate','dueDate','purchaseOrderNumber']},
+  {st:'open', ent:'file', t:'挂上凭据', f:'上传的那张发票文件', to:['documentId']},
+  {st:'plat', ent:'plat', t:'录进平台、审过、批了', f:'走到 Submitted、Reviewed、Approved', to:['status']},
+  {st:'claim', ent:'gov', t:'交给政府、回执回来', f:'走到 Submitted to Gov，再到 Claimed 或 Unclaimable', to:['status']},
+  {st:'after', ent:'bill', t:'作废这一版、同号重开', f:'这一版作废；新的一版第几版加 1', to:['status','version']},
+];
+const STATUS_VALUES = ['Draft','Submitted','Reviewed','Approved','SubmittedToGov','Claimed','Unclaimable','Voided（作废）'];
+
+function renderAttr(){
+  // 左边三栏：阶段、实体、来源；同一阶段只在第一行写阶段名，实体在同一阶段里重复的不再画
+  let h = `<div class="hd">阶段</div><div class="hd">实体<span>事实装在哪里</span></div><div class="hd">来源<span>什么事发生了、带来哪份事实</span></div>`;
+  let lastSt = null; const seenEnt = new Set();
+  SRC.forEach((s,i)=>{
+    const st = STAGES.find(x=>x.id===s.st);
+    h += s.st!==lastSt ? `<div class="stage"><b>${esc(st.b)}</b><span>${esc(st.s)}</span></div>` : `<div class="stage cont"></div>`;
+    lastSt = s.st;
+    const ek = s.ent;
+    if (!seenEnt.has(ek)) { seenEnt.add(ek); h += `<div class="ent" data-ent="${ek}"><b>${esc(ENTS[ek].b)}</b><span>${esc(ENTS[ek].s)}</span></div>`; }
+    else h += `<div></div>`;
+    h += `<div class="src" data-i="${i}"><div class="t"><i>事件</i>${esc(s.t)}</div><div class="f"><i>事实</i>${esc(s.f)}</div></div>`;
+  });
+  document.getElementById('flow').innerHTML = h;
+
+  let c = `<div class="h"><small>聚合根</small><b>ThirdPartyInvoice</b><span class="cn">三方发票</span></div>`;
+  for (const grp of CLS) {
+    c += `<div class="g">${esc(grp.g)}</div>`;
+    if (grp.empty) c += `<div class="empty">${esc(grp.empty)}</div>`;
+    else for (const [n,m,ty,cx] of grp.rows) c += `<div class="row" data-f="${n}"><span class="n">${esc(n)}</span><span class="m">${esc(m)}</span><span class="ty${cx?' cx':''}">${esc(ty)}</span></div>`;
+  }
+  c += `<div class="pad"></div>`;
+  document.getElementById('cls').innerHTML = c;
+  document.getElementById('vo').innerHTML = `<div class="h"><small>值对象</small><b>ThirdPartyInvoiceStatus</b><span class="cn">状态</span></div>`
+    + STATUS_VALUES.map(v=>`<div class="row">${esc(v)}</div>`).join('')
+    + `<div class="ft">怎么转，见「生命周期」</div>`;
+}
+
+function wireAttr(){
+  const root = document.getElementById('attr'), svg = document.getElementById('wires');
+  const R = root.getBoundingClientRect();
+  if (!R.width) return;
+  const box = el => { const r = el.getBoundingClientRect(); return {l:r.left-R.left, r:r.right-R.left, t:r.top-R.top, b:r.bottom-R.top, m:(r.top+r.bottom)/2-R.top}; };
+  let p = '';
+  // 实体 → 来源
+  SRC.forEach((s,i)=>{
+    const e = box(root.querySelector(`.ent[data-ent="${s.ent}"]`)), c = box(root.querySelector(`.src[data-i="${i}"]`));
+    const y1 = e.t + 18, x1 = e.r, x2 = c.l, y2 = c.t + 14, mx = x1 + 12;
+    p += `<path d="M ${x1} ${y1} L ${mx} ${y1} L ${mx} ${y2} L ${x2} ${y2}"/>`;
+  });
+  // 来源 → 属性：每张卡一条横线出去，到一根竖线后分到各个属性
+  const cls = box(document.getElementById('cls'));
+  SRC.forEach((s,i)=>{
+    const c = box(root.querySelector(`.src[data-i="${i}"]`));
+    const bx = cls.l - 14 - i*4;
+    for (const f of s.to) {
+      const r = box(root.querySelector(`.row[data-f="${f}"]`));
+      p += `<path d="M ${c.r} ${c.t+14} L ${bx} ${c.t+14} L ${bx} ${r.m} L ${cls.l} ${r.m}" data-i="${i}"/>`;
+    }
+  });
+  // 状态 → 值对象
+  const st = box(root.querySelector('.row[data-f="status"]')), vo = box(document.getElementById('vo'));
+  p += `<path d="M ${st.r-40} ${st.b} L ${st.r-40} ${(st.b+vo.t)/2+60} L ${vo.l+40} ${(st.b+vo.t)/2+60} L ${vo.l+40} ${vo.t}" style="stroke:var(--ink-2)"/>`;
+  svg.setAttribute('width', R.width); svg.setAttribute('height', R.height);
+  svg.innerHTML = p;
+}
+
+document.getElementById('flow').addEventListener('mouseover', e=>{
+  const c = e.target.closest('.src'); const on = c ? SRC[+c.dataset.i].to : [];
+  document.querySelectorAll('#cls .row').forEach(r=>r.classList.toggle('on', on.includes(r.dataset.f)));
+  document.querySelectorAll('#wires path[data-i]').forEach(p=>{ const hit = c && p.dataset.i===c.dataset.i; p.style.stroke = hit ? 'var(--accent)' : ''; p.style.strokeWidth = hit ? 2 : ''; });
+});
+
+/* ---------- 生命周期：状态图 ---------- */
+const BIZ = [
+  '照护伙伴先开出一张 Draft，再往里记服务。同一个号最多一版现行。',
+  '挂上凭据、录进注册服务方的平台以后，照平台一步一步往前挪：Draft → Submitted → Reviewed。离开 Draft，名下的服务记录就定住了。',
+  'Approved 是申报员代表注册服务方批的，只从 Reviewed 批。',
+  '申报交上去了，Approved 的这一张跟着变 Submitted to Gov；回执里这一张的行都过了，变 Claimed。',
+  '政府报不了的，Submitted to Gov 之后标 Unclaimable。没有 Paid：政府付没付看付款对账单。',
+  'Submitted、Reviewed 时要改名下的记录，把这一版退回 Draft 就地改，号、第几版、开票日、采购单号、凭据照留。Approved、Submitted to Gov 退不回，等结果。',
+  'Claimed、Unclaimable 以后要改，作废这一版、同号重开一版新的 Draft。作废了的那一版什么都不再变，名下的服务记录随它作废。',
+  '凭据哪一步都挂得上，再挂一份就换成新的；还在 Draft 时挂错的能取下。',
+];
+document.getElementById('biz').innerHTML = BIZ.map((b,i)=>`<li data-i="${i}">${esc(b)}</li>`).join('');
+
+// 从上往下：主线一列，到 Submitted to Gov 分成两个结果，最后都落到作废
+const W = 124, H = 44, X = 300;
+const STATES = {
+  Draft:{x:X,y:110}, Submitted:{x:X,y:220}, Reviewed:{x:X,y:330}, Approved:{x:X,y:440},
+  SubmittedToGov:{x:X,y:550,label:'Submitted to Gov'},
+  Claimed:{x:190,y:670}, Unclaimable:{x:410,y:670},
+  Voided:{x:X,y:790,label:'作废',final:true},
+};
+const lab = s => STATES[s].label || s;
+
+// 转移：箭头上只标事件；别的聚合引起的，另标引起它的事件。d 与标签位置手摆
+const TRANS = [
+  {from:null,to:'Draft',ev:'三方发票已开出',pre:'同一个号没有现行的版',biz:[0], d:'M 300 39 L 300 86', ex:312, ey:68, anchor:'start'},
+  {from:'Draft',to:'Submitted',ev:'三方发票已录入平台',pre:'挂着凭据',eff:'名下的服务记录定住',biz:[1], d:'M 300 132 L 300 196', ex:312, ey:170, anchor:'start'},
+  {from:'Submitted',to:'Reviewed',ev:'三方发票已审过',biz:[1], d:'M 300 242 L 300 306', ex:312, ey:280, anchor:'start'},
+  {from:'Reviewed',to:'Approved',ev:'三方发票已批',biz:[2], d:'M 300 352 L 300 416', ex:312, ey:390, anchor:'start'},
+  {from:'Approved',to:'SubmittedToGov',src:'ClaimFile',srcEv:'申报已交上去',ev:'三方发票已交政府',biz:[3], d:'M 300 462 L 300 526', ex:312, ey:508, sx:312, sy:490, anchor:'start'},
+  {from:'SubmittedToGov',to:'Claimed',src:'ClaimFile',srcEv:'回执里的行都过了',ev:'三方发票已报成',eff:'有一行被拒就留在 Submitted to Gov，等重报',biz:[3], d:'M 270 572 C 270 610, 190 610, 190 646', ex:206, ey:622, sx:206, sy:604, anchor:'end'},
+  {from:'SubmittedToGov',to:'Unclaimable',ev:'三方发票报不了',biz:[4], d:'M 330 572 C 330 610, 410 610, 410 646', ex:396, ey:612, anchor:'start'},
+  {from:'Submitted',to:'Draft',ev:'三方发票已退回 Draft',eff:'名下的服务记录又能改；号、第几版、开票日、采购单号、凭据照留',biz:[5], d:'M 238 226 C 200 226, 200 116, 236 116', ex:202, ey:176, anchor:'end'},
+  {from:'Reviewed',to:'Draft',ev:'三方发票已退回 Draft',eff:'同上',biz:[5], d:'M 238 336 C 150 336, 150 104, 236 104', ex:156, ey:290, anchor:'end'},
+  {from:'Draft',to:'Draft',ev:'三方发票凭据已取下',eff:'凭据空着',biz:[7], d:'M 362 100 C 420 88, 420 132, 364 122', ex:424, ey:115, anchor:'start'},
+  {from:'Claimed',to:'Voided',ev:'三方发票已作废',eff:'这一版原样留着、不再算钱；名下的服务记录随它作废；同号重开一版新的 Draft（第几版加 1）',biz:[6], d:'M 190 692 C 190 730, 270 730, 270 764', ex:214, ey:744, anchor:'end'},
+  {from:'Unclaimable',to:'Voided',ev:'三方发票已作废',eff:'同上',biz:[6], d:'M 410 692 C 410 730, 330 730, 330 764', ex:386, ey:744, anchor:'start'},
+];
+
+const outs = [...new Map(TRANS.map(t=>[t.ev, t])).values()];
+document.getElementById('out').innerHTML = outs.map(t=>`<li><span class="ev">${esc(t.ev)}</span><span class="tag">${t.from?lab(t.from):'●'} → ${lab(t.to)}</span></li>`).join('');
+document.getElementById('in').innerHTML = TRANS.filter(t=>t.src).map(t=>`<li><span class="srcl">〔${esc(t.src)}〕${esc(t.srcEv)}</span><span class="tag">${lab(t.from)} → ${lab(t.to)}</span></li>`).join('');
+
+const svg = document.getElementById('svg');
+let g = `<defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink-2)"/></marker>
+  <marker id="ahx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--ext)"/></marker>
+  <marker id="aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/></marker>
+</defs><circle class="start" cx="300" cy="30" r="9"/>`;
+for (const [k,s] of Object.entries(STATES)) {
+  const x = s.x - W/2, y = s.y - H/2;
+  g += `<g class="st${s.final?' final':''}">`;
+  if (s.final) g += `<rect class="outer" x="${x-4}" y="${y-4}" width="${W+8}" height="${H+8}" rx="10"/>`;
+  g += `<rect x="${x}" y="${y}" width="${W}" height="${H}" rx="8"/><text x="${s.x}" y="${s.y+5}" text-anchor="middle">${esc(lab(k))}</text></g>`;
+}
+TRANS.forEach((t,i)=>{
+  const a = t.anchor || 'middle';
+  g += `<g class="tr${t.src?' ext':''}" data-i="${i}">
+    <path class="vis" d="${t.d}" marker-end="url(#${t.src?'ahx':'ah'})"/><path class="hit" d="${t.d}"/>
+    ${t.src?`<text class="srcl" x="${t.sx}" y="${t.sy}" text-anchor="${a}">〔${esc(t.src)}〕${esc(t.srcEv)}</text>`:''}
+    <text x="${t.ex}" y="${t.ey}" text-anchor="${a}">${esc(t.ev)}</text></g>`;
+});
+svg.innerHTML = g;
+
+function pick(i){
+  svg.querySelectorAll('.tr').forEach(n=>{
+    const on = +n.dataset.i === i;
+    n.classList.toggle('on', on);
+    n.querySelector('path.vis').setAttribute('marker-end', `url(#${on?'aha':(TRANS[+n.dataset.i].src?'ahx':'ah')})`);
+  });
+  const t = TRANS[i];
+  document.querySelectorAll('ol.biz li').forEach(li=>li.classList.toggle('hl', t.biz.includes(+li.dataset.i)));
+  const row = (k,v,cls='') => v ? `<dt>${k}</dt><dd class="${cls}">${esc(v)}</dd>` : '';
+  document.getElementById('detail').innerHTML = `<h4>${t.from?esc(lab(t.from)):'●'} → ${esc(lab(t.to))}</h4><dl>
+    ${t.src?row('引起它的', '〔'+t.src+'〕'+t.srcEv, 'srcl'):''}
+    ${row('要满足', t.pre || '—')}
+    ${row('带来的变化', t.eff)}
+    ${row('发出', t.ev, 'ev')}
+    ${row('业务原话', t.biz.map(b=>'第 '+(b+1)+' 条').join('、'))}
+  </dl>`;
+}
+svg.addEventListener('click', e=>{ const n = e.target.closest('.tr'); if (n) pick(+n.dataset.i); });
+pick(1);
+
+/* ---------- 生命周期：泳道（从上到下的时序） ---------- */
+// 每条道一列；政府那条有两个并排的位置，放「报成」与「报不了」两个结果
+const LANES = [
+  {id:'jl', b:'照护伙伴', s:'关联服务方，开票与录平台', c:'var(--lane-a)', slots:1},
+  {id:'co', b:'申报员', s:'代表注册服务方批、报', c:'var(--lane-b)', slots:1},
+  {id:'gov', b:'政府', s:'Services Australia', c:'var(--lane-c)', slots:2},
+];
+const LEFT = 230, SLOT = 236, HEAD = 56, GAP = 46;
+const PHASES = [
+  {b:'开票', s:'还在 Draft', r0:0, r1:1},
+  {b:'走平台', s:'注册服务方那边', r0:2, r1:4},
+  {b:'申报', s:'交给政府', r0:5, r1:6},
+  {b:'有了结果之后', s:'要改就重开', r0:7, r1:7},
+];
+// 每张卡：哪条道、第几行（时序）、道里第几个位置、谁→谁、标题、说明、落到的状态、发出的事件、出处
+const CARDS = [
+  {k:'1', lane:'jl', row:0, w:'照护伙伴', t:'开出一张三方发票', p:'照护伙伴在记账软件里开好发票，再照着它在系统里开出这一张。', state:'Draft', ev:'三方发票已开出', r:''},
+  {k:'2', lane:'jl', row:1, w:'照护伙伴', t:'往里记服务，挂上凭据', p:'把这段时间做过的服务记进来，上传记账软件出的那份发票文件。', state:'Draft', ev:'', r:'R-297'},
+  {k:'3', lane:'jl', row:2, w:'照护伙伴 → 注册服务方', t:'录进注册服务方的平台', p:'照护伙伴在 Aged Care Provider Portal 上把这一张录进去，交给注册服务方。', state:'Submitted', ev:'三方发票已录入平台', r:'R-292'},
+  {k:'4', lane:'jl', row:3, w:'照护伙伴', t:'在平台上审过', p:'再往前归申报员与申报。', state:'Reviewed', ev:'三方发票已审过', r:'R-292'},
+  {k:'5', lane:'co', row:4, w:'申报员，代表注册服务方', t:'批', p:'只从 Reviewed 批；照护伙伴审过才轮到申报员。', state:'Approved', ev:'三方发票已批', r:'R-489、R-504'},
+  {k:'6', lane:'co', row:5, w:'申报员 → Services Australia', t:'申报交上去', p:'申报只勾 Approved 的；这一张跟着变。', state:'Submitted to Gov', ev:'三方发票已交政府', r:'R-498'},
+  {k:'7a', lane:'gov', row:6, slot:0, w:'Services Australia', t:'回执里这一张的行都过了', p:'有一行被拒，申报员改了重报，那一行过了才算。', state:'Claimed', ev:'三方发票已报成', r:'R-500、R-501'},
+  {k:'7b', lane:'gov', row:6, slot:1, w:'Services Australia', t:'报不了', p:'政府那边给的结果。付没付不在这里，看付款对账单。', state:'Unclaimable', ev:'三方发票报不了', r:'R-292'},
+  {k:'8', lane:'jl', row:7, w:'照护伙伴', t:'要改：作废这一版、同号重开', p:'有了结果以后发现记错了，照护伙伴作废这一版，用同一个号重开一张，从 1 再走一遍。', state:'作废', ev:'三方发票已作废', r:'R-300'},
+];
+// 连线：from、to、种类（next 往下走 / cond 带条件 / back 退回）、线上的字
+const LINKS = [
+  ['1','2','next'], ['2','3','cond','挂着凭据才能录'], ['3','4','next'], ['4','5','next'],
+  ['5','6','next'], ['6','7a','next'], ['6','7b','next'], ['7a','8','next'], ['7b','8','next'],
+  ['3','1','back','退回 Draft'], ['4','1','back','退回 Draft'],
+];
+const laneX = []; { let x = LEFT; for (const l of LANES) { laneX.push(x); x += SLOT*l.slots; } }
+
+function renderLanes(){
+  const el = document.getElementById('lanes');
+  let h = '';
+  LANES.forEach((l,i)=>{
+    h += `<div class="lane-h" style="--c:${l.c};left:${laneX[i]}px;width:${SLOT*(l.slots-1)+200}px"><b>${esc(l.b)}</b><span>${esc(l.s)}</span></div>`;
+  });
+  for (const c of CARDS) {
+    const li = LANES.findIndex(l=>l.id===c.lane);
+    h += `<div class="lc" id="lc-${c.k}" style="--c:${LANES[li].c};left:${laneX[li]+(c.slot||0)*SLOT}px;top:0">
+      <div class="w">${esc(c.w)}</div><span class="k">${esc(c.k)}</span><b>${esc(c.t)}</b>
+      <div class="s"><span class="state">${esc(c.state)}</span>${c.ev?`<span class="ev">${esc(c.ev)}</span>`:'<span class="ev" style="color:var(--ink-3)">状态不变</span>'}</div></div>`;
+  }
+  el.insertAdjacentHTML('beforeend', h);
+}
+
+function wireLanes(){
+  const el = document.getElementById('lanes'), svg = document.getElementById('lw');
+  if (!el.getBoundingClientRect().width) return;
+  // 按每一行最高的卡排出各行的上沿
+  const rows = Math.max(...CARDS.map(c=>c.row)) + 1, rowH = Array(rows).fill(0);
+  for (const c of CARDS) rowH[c.row] = Math.max(rowH[c.row], document.getElementById('lc-'+c.k).offsetHeight);
+  const rowTop = []; { let y = HEAD + 14; for (let r=0;r<rows;r++){ rowTop.push(y); y += rowH[r] + GAP; } }
+  for (const c of CARDS) document.getElementById('lc-'+c.k).style.top = rowTop[c.row]+'px';
+  const width = laneX[laneX.length-1] + SLOT*LANES[LANES.length-1].slots, height = rowTop[rows-1] + rowH[rows-1] + 20;
+  el.style.width = width+'px'; el.style.height = height+'px';
+
+  el.querySelectorAll('.phase,.phase-line,.lane-line').forEach(n=>n.remove());
+  let h = '';
+  for (const ph of PHASES) {
+    const top = rowTop[ph.r0] - GAP/2 + 4, bot = rowTop[ph.r1] + rowH[ph.r1] + GAP/2 - 4;
+    h += `<div class="phase" style="top:${top}px;height:${bot-top}px">${esc(ph.b)}<span>${esc(ph.s)}</span></div>`;
+    if (ph.r0) h += `<div class="phase-line" style="top:${rowTop[ph.r0]-GAP/2}px;width:${width}px"></div>`;
+  }
+  laneX.slice(1).forEach(x=>{ h += `<div class="lane-line" style="left:${x-18}px;top:0;height:${height}px"></div>`; });
+  el.insertAdjacentHTML('afterbegin', h);
+
+  const box = k => { const n = document.getElementById('lc-'+k); return {l:n.offsetLeft, r:n.offsetLeft+n.offsetWidth, t:n.offsetTop, b:n.offsetTop+n.offsetHeight, cx:n.offsetLeft+n.offsetWidth/2}; };
+  let p = `<defs>
+    <marker id="la" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink-2)"/></marker>
+    <marker id="lac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--cond)"/></marker>
+    <marker id="lab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink-3)"/></marker></defs>`;
+  let backN = 0;
+  for (const [f,t,kind,txt] of LINKS) {
+    const a = box(f), b = box(t);
+    if (kind === 'back') {
+      // 退回：从卡的左边沿着道的左缘往上绕回去
+      backN++;
+      const x = a.l - 8 - backN*10;
+      const y1 = a.t + 20 + backN*12, y2 = b.t + 20 + backN*12;
+      p += `<path class="back" d="M ${a.l} ${y1} L ${x} ${y1} L ${x} ${y2} L ${b.l-2} ${y2}" marker-end="url(#lab)"/>`;
+      if (txt) p += `<text x="${x-4}" y="${y1-4}" text-anchor="end">${esc(txt)}</text>`;
+      continue;
+    }
+    const x1 = a.cx, y1 = a.b, x2 = b.cx, y2 = b.t - 2;
+    const d = Math.abs(x1-x2) < 2 ? `M ${x1} ${y1} L ${x2} ${y2}` : `M ${x1} ${y1} C ${x1} ${y1+30}, ${x2} ${y2-30}, ${x2} ${y2}`;
+    p += `<path class="${kind==='cond'?'cond':''}" d="${d}" marker-end="url(#${kind==='cond'?'lac':'la'})"/>`;
+    if (txt) p += `<text class="cond" x="${x1+8}" y="${(y1+y2)/2+4}">${esc(txt)}</text>`;
+  }
+  svg.setAttribute('width', width); svg.setAttribute('height', height);
+  svg.innerHTML = p;
+}
+
+/* ---------- 页签 ---------- */
+function showTab(t){
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.t===t));
+  document.getElementById('pane-attr').hidden = t!=='attr';
+  document.getElementById('pane-life').hidden = t!=='life';
+  store.set('agg-tab', t);
+  requestAnimationFrame(()=>{ wireAttr(); wireLanes(); });
+}
+function showView(v){
+  document.querySelectorAll('#subtabs button').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
+  document.getElementById('view-sd').hidden = v!=='sd';
+  document.getElementById('view-ln').hidden = v!=='ln';
+  store.set('agg-view', v);
+  requestAnimationFrame(wireLanes);
+}
+document.getElementById('tabs').addEventListener('click', e=>{ const b = e.target.closest('button'); if (b) showTab(b.dataset.t); });
+document.getElementById('subtabs').addEventListener('click', e=>{ const b = e.target.closest('button'); if (b) showView(b.dataset.v); });
+window.addEventListener('resize', ()=>{ wireAttr(); wireLanes(); });
+
+renderAttr();
+renderLanes();
+showView(store.get('agg-view') || 'sd');
+showTab(store.get('agg-tab') || 'attr');
+</script>
+</body>
+</html>

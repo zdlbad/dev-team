@@ -72,6 +72,43 @@ model/
 
 与模型无关，只是业务的语言。模型的名字必须是词汇表里的词——这是校验项，不是词汇表的字段。
 
+### aggregate-design/&lt;aggregate-folder&gt;.json
+
+聚合设计，一个聚合一份，放在项目根下的 `aggregate-design/`，不进 `model/`：它先于模块，也不经编码。文件名用聚合文件夹的写法（`third-party-invoice.json`）。工作台「聚合设计」页照它画属性与生命周期两个页签。
+
+```jsonc
+{ "aggregate": "ThirdPartyInvoice", "title": "三方发票", "summary": "它是什么、怎么认出一个",
+  "attributes": [                                   // 六组：身份、业务属性、状态、外部关联、成员、审计
+    { "group": "身份", "fields": [ { "name": "thirdPartyInvoiceNumber", "type": "string", "meaning": "三方发票号", "from?": "谁给的值" } ] },
+    { "group": "业务属性", "aspect": "开票", "fields": [ … ] },   // 业务属性按方面各起一组
+    { "group": "外部关联", "fields": [ { "name": "participantId", "type": "→ Participant", "meaning": "开给哪位老人" } ] },
+    { "group": "审计", "none": "不记：谁在哪天挪的" } ],          // 没有的写明为什么
+  "parts?": [ { "name": "AssessmentOutcome", "title": "评估结果", "kind": "entity", "fields": [ … ] } ],
+  "sources": {                                      // 什么事发生了、带来哪份事实、落在哪几个属性上
+    "stages": [ { "id": "open", "title": "开票", "note?": "" } ],
+    "entities": [ { "id": "bill", "title": "记账软件开的发票", "note?": "" } ],   // 事实装在哪里
+    "facts": [ { "stage": "open", "entity": "bill", "event": "开出一张三方发票", "fact": "号、开给哪位老人", "fields": ["thirdPartyInvoiceNumber"], "traces": [] } ] },
+  "lifecycle": {                                    // 状态图：只看它自己怎么变
+    "states": [ { "name": "SubmittedToGov", "title?": "Submitted to Gov" } ],
+    "transitions": [ { "from": "Approved", "to": "SubmittedToGov",
+      "event": { "title": "三方发票已交政府", "name?": "ThirdPartyInvoiceSubmittedToGov" },
+      "trigger?": { "aggregate": "ClaimFile", "event": "申报已交上去" },
+      "requires?": "转之前要满足什么", "changes?": "转了里面跟着变什么", "traces": [] } ] },
+  "sequence": {                                     // 时序图：只看流程与参与者
+    "participants": [ { "id": "jl", "title": "照护伙伴" } ], "phases": [ { "id": "open", "title": "开票" } ],
+    "steps": [ { "id": "1", "phase": "open", "by": "jl", "to?": "注册服务方", "title": "开出一张三方发票", "state?": "Draft", "event?": "三方发票已开出", "alongside?": "7a" } ],
+    "links": [ { "from": "1", "to": "2", "kind": "next|condition|back", "label?": "挂着凭据才能录" } ] },
+  "confirmed?": { "at": "2026-10-27 15:00", "stamp": "…" },   // 人按「定下」时由页面写
+  "questions": [] }
+```
+
+- **只看聚合的样子，不写动作。** 方法、守卫、谁调什么是建模那一步的事。
+- **属性六组**：外部系统的编号、抄来不跟着变的快照归外部关联；算出来的、累计、有效期归业务属性，`from` 写怎么来、存不存；来源归审计；并发用的版本号不进来；被谁引用不列。
+- **状态图**：`from` 为 `null` 是开出来那一下；没写的转移就是不许走，没有出去的转移的状态是终态。状态不变、只在某些状态能做的写成 `from` 与 `to` 相同的自环；哪个状态都能做的不写。只是往前挪、往回退的转移不起动作名，箭头上只标事件。别的聚合的事件引起的写 `trigger`，图上画虚线。原来是是非属性的（作废了没有）并进状态。
+- **状态图不写参与者，时序图不写聚合里面怎么变**；两张图靠 `state` 与 `event` 对上。时序图的卡上只有谁和标题。
+- **`traces` 指业务分析写的生命周期语句**（概念卡「它的一生」立成的语句），页面上照编号摆出原话。
+- **`confirmed`** 由页面写；`stamp` 是除它以外内容的指纹，内容再改，页面显示「改过，待重按」，门禁当没定。
+
 ### model/modules.json
 
 ```jsonc

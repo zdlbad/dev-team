@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模块小样</title>
+<style>
+:root{
+  --bg:#f7f6f3; --panel:#ffffff; --ink:#1d1d1b; --ink-2:#55534e; --ink-3:#8a877f;
+  --line:#dedbd3; --box:#ffffff; --box-line:#6b6860; --mod-bg:#f4f7fb; --mod-line:#9aa7bd;
+  --out:#2563eb; --in:#c2410c; --hl:#fff4c2; --drop:#e8efff; --wire:#b9c3d6;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#18181a; --panel:#222225; --ink:#ecebe7; --ink-2:#b5b2ab; --ink-3:#85827b;
+    --line:#3a3a3e; --box:#2a2a2e; --box-line:#9a978f; --mod-bg:#1f232b; --mod-line:#4b5670;
+    --out:#7aa2ff; --in:#fb923c; --hl:#4a4220; --drop:#26314d; --wire:#4b5670;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#18181a; --panel:#222225; --ink:#ecebe7; --ink-2:#b5b2ab; --ink-3:#85827b;
+  --line:#3a3a3e; --box:#2a2a2e; --box-line:#9a978f; --mod-bg:#1f232b; --mod-line:#4b5670;
+  --out:#7aa2ff; --in:#fb923c; --hl:#4a4220; --drop:#26314d; --wire:#4b5670;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+.page{max-width:1500px;margin:0 auto;padding:20px 16px}
+header h1{margin:0;font-size:22px}
+header .sub{color:var(--ink-2);margin:4px 0 6px}
+.note{font-size:12px;color:var(--ink-3)}
+.bar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin:14px 0;font-size:13px;color:var(--ink-2)}
+.bar b{color:var(--ink)}
+.bar label{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--ink-2)}
+.legend i{display:inline-block;width:26px;height:0;vertical-align:middle;margin-right:6px}
+.legend i.out{border-top:2px solid var(--out)}
+.legend i.in{border-top:2px dashed var(--in)}
+.stage{position:relative}
+.stage svg{position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:2}
+.stage svg path{fill:none;stroke-width:1.6}
+.stage svg path.out{stroke:var(--out)}
+.stage svg path.in{stroke:var(--in);stroke-dasharray:5 4}
+.stage svg path.all{stroke:var(--wire);stroke-width:1}
+.stage svg path.all.x{stroke:var(--mod-line);stroke-width:1.2}
+.tray{border:1.5px dashed var(--box-line);border-radius:12px;padding:10px 14px;margin-bottom:16px;background:var(--panel)}
+.tray .h{font-weight:600;font-size:13px}
+.tray .h span{font-weight:400;color:var(--ink-3);font-size:12px;margin-left:8px}
+.mods{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:18px;align-items:start}
+.mod{border:1.5px solid var(--mod-line);border-radius:14px;background:var(--mod-bg);padding:10px 12px 12px;min-height:120px}
+.mod.on{border-color:var(--out);box-shadow:0 0 0 2px var(--drop)}
+.mod .h{display:flex;align-items:baseline;gap:8px}
+.mod .h b{font-size:15px}
+.mod .h .n{margin-left:auto;font-size:11px;color:var(--ink-3)}
+.mod .r{font-size:12px;color:var(--ink-2);margin:2px 0 8px;line-height:1.5}
+.mod .deps{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.mod .deps span{font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 6px;color:var(--ink-3);background:var(--panel)}
+.cards{display:flex;flex-wrap:wrap;gap:8px;min-height:44px;border-radius:8px}
+.drop-on .cards,.tray.drop-on .cards{background:var(--drop);outline:2px dashed var(--out);outline-offset:2px}
+.ag{background:var(--box);border:1px solid var(--box-line);border-radius:8px;padding:4px 10px;cursor:grab;user-select:none;position:relative;z-index:3}
+.ag b{display:block;font-size:13px;line-height:1.3}
+.ag span{font-size:11px;color:var(--ink-3)}
+.ag.on{border-color:var(--out);box-shadow:0 0 0 2px var(--drop)}
+.ag.ref-out{background:var(--hl)}
+.ag.ref-in{background:var(--hl);border-style:dashed}
+.ag.dragging{opacity:.4}
+.ag a{color:inherit;text-decoration:none}
+.ag .open{position:absolute;right:4px;top:2px;font-size:10px;color:var(--out)}
+.empty{font-size:12px;color:var(--ink-3);padding:6px 2px}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>模块</h1>
+    <div class="sub">聚合设计做完、业务范围清楚了以后，把成簇的聚合圈进模块。几个模块摆在一起看：模块里面引用多、模块之间引用少，就是划得好。</div>
+    <div class="note">小样：模块与聚合取自养老项目现在的模型，引用照各聚合上的编号属性连。拖动聚合可以换模块，下面的数跟着变；点三方发票打开它的聚合设计。</div>
+  </header>
+
+  <div class="bar" id="bar"></div>
+  <div class="legend" style="margin-bottom:12px">
+    <span>指着一个聚合：</span>
+    <span><i class="out"></i>它引用谁</span>
+    <span><i class="in"></i>谁引用它</span>
+    <span>指着模块名：看这个模块往外引用的全部</span>
+  </div>
+
+  <div class="stage" id="stage">
+    <svg id="wires"></svg>
+    <div class="tray" data-m="_">
+      <div class="h">未划<span>还没归进模块的聚合先放这里（模型文件在 model/_未划/）</span></div>
+      <div class="cards"></div>
+    </div>
+    <div class="mods" id="mods"></div>
+  </div>
+</div>
+
+<script>
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const MODULES = [
+  {id:'Participants', r:'参与者档案：她是谁'},
+  {id:'Users', r:'登进系统的账号和各自担的角色'},
+  {id:'Documents', r:'公用的文件模块：别的模块要存文件都用它'},
+  {id:'Catalogue', r:'政府发的、带编号、我们改不了的清单'},
+  {id:'Funding', r:'一位老人名下的基金账户，和账户底下一期一期的基金'},
+  {id:'Budgets', r:'照护伙伴替注册服务方给老人一笔基金排的预算'},
+  {id:'Prices', r:'我们自己定的价，公司一级'},
+  {id:'ServiceRecords', r:'一次服务的具体发生一条'},
+  {id:'Claims', r:'模拟申报'},
+  {id:'Statements', r:'对账'},
+  {id:'CarePlans', r:'居家支持照护计划'},
+  {id:'CareNotes', r:'照护伙伴给老人写的照护记录，一件事一条'},
+  {id:'ParticipantUploads', r:'参与者自己付了钱的服务，她传上来的凭据'},
+];
+// 聚合：所在模块、中文名、它引用的聚合（照它身上的编号属性）
+const AGGS = {
+  Participant:{m:'Participants', cn:'参与者', refs:[]},
+  User:{m:'Users', cn:'用户', refs:['Participant']},
+  Document:{m:'Documents', cn:'文件', refs:[]},
+  ServiceGroup:{m:'Catalogue', cn:'服务组', refs:[]},
+  ServiceType:{m:'Catalogue', cn:'服务类型', refs:['ServiceGroup']},
+  Service:{m:'Catalogue', cn:'服务', refs:['ServiceType']},
+  Item:{m:'Catalogue', cn:'物品', refs:['Service']},
+  FundAccountType:{m:'Catalogue', cn:'基金账户类型', refs:[]},
+  CatalogueLoad:{m:'Catalogue', cn:'目录载入', refs:[]},
+  FundingAccount:{m:'Funding', cn:'基金账户', refs:['Participant']},
+  Fund:{m:'Funding', cn:'基金', refs:['FundingAccount']},
+  Budget:{m:'Budgets', cn:'预算', refs:['Fund','Participant','FundingAccount']},
+  ListPrice:{m:'Prices', cn:'表价', refs:[]},
+  PriceListVersion:{m:'Prices', cn:'价目表版本', refs:['Document']},
+  AgreedPrice:{m:'Prices', cn:'谈定价', refs:['Participant']},
+  ServiceRecord:{m:'ServiceRecords', cn:'服务记录', refs:['Participant','FundingAccount']},
+  ThirdPartyInvoice:{m:'ServiceRecords', cn:'三方发票', refs:['Participant','Document'], open:'小样.html'},
+  Projection:{m:'ServiceRecords', cn:'预计', refs:['Participant','Fund']},
+  ProjectionRule:{m:'ServiceRecords', cn:'给 AI 的规则', refs:['Participant','Fund']},
+  ClaimFile:{m:'Claims', cn:'申报文件', refs:['Document']},
+  MonthlyStatement:{m:'Statements', cn:'月结单', refs:['Participant','Document']},
+  PaymentStatement:{m:'Statements', cn:'付款对账单', refs:['Participant']},
+  CarePlan:{m:'CarePlans', cn:'照护计划', refs:['Participant','User','Document']},
+  CareNote:{m:'CareNotes', cn:'照护记录', refs:['Participant','Document']},
+  ParticipantUpload:{m:'ParticipantUploads', cn:'上传', refs:['Participant','Document','ServiceRecord']},
+};
+const store = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+try { const saved = JSON.parse(store.get('mod-assign') || 'null'); if (saved) for (const [a,m] of Object.entries(saved)) if (AGGS[a]) AGGS[a].m = m; } catch {}
+
+const stage = document.getElementById('stage'), svg = document.getElementById('wires');
+let showAll = store.get('mod-all') === '1';
+
+function cardHtml(id){
+  const a = AGGS[id];
+  return `<div class="ag" draggable="true" data-a="${id}">${a.open?'<span class="open">打开 ↗</span>':''}<b>${esc(id)}</b><span>${esc(a.cn)}</span></div>`;
+}
+function render(){
+  document.getElementById('mods').innerHTML = MODULES.map(m=>`<div class="mod" data-m="${m.id}">
+    <div class="h"><b>${esc(m.id)}</b><span class="n"></span></div><div class="r">${esc(m.r)}</div>
+    <div class="cards"></div><div class="deps"></div></div>`).join('');
+  for (const [id,a] of Object.entries(AGGS)) {
+    const box = stage.querySelector(`[data-m="${a.m}"] .cards`) || stage.querySelector('[data-m="_"] .cards');
+    box.insertAdjacentHTML('beforeend', cardHtml(id));
+  }
+  stage.querySelectorAll('[data-m] .cards').forEach(c=>{ if (!c.children.length) c.innerHTML = '<div class="empty">空</div>'; });
+  stats();
+  requestAnimationFrame(()=>draw());
+}
+
+function stats(){
+  let inner = 0, cross = 0;
+  const deps = {};
+  for (const [id,a] of Object.entries(AGGS)) for (const r of a.refs) {
+    const b = AGGS[r];
+    if (a.m === b.m) inner++; else { cross++; (deps[a.m] ||= {})[b.m] = ((deps[a.m]||{})[b.m]||0) + 1; }
+  }
+  const unassigned = Object.values(AGGS).filter(a=>a.m==='_').length;
+  const used = new Set(Object.values(AGGS).map(a=>a.m).filter(m=>m!=='_'));
+  document.getElementById('bar').innerHTML = `
+    <span>模块 <b>${used.size}</b></span><span>聚合 <b>${Object.keys(AGGS).length}</b></span><span>未划 <b>${unassigned}</b></span>
+    <span>模块里面的引用 <b>${inner}</b></span><span>跨模块的引用 <b>${cross}</b></span>
+    <label><input type="checkbox" id="all" ${showAll?'checked':''}> 画出全部引用</label>
+    <button id="reset" style="font:inherit;font-size:12px">恢复原样</button>`;
+  document.getElementById('all').onchange = e=>{ showAll = e.target.checked; store.set('mod-all', showAll?'1':'0'); draw(); };
+  document.getElementById('reset').onclick = ()=>{ store.set('mod-assign', ''); location.reload(); };
+  for (const m of MODULES) {
+    const el = stage.querySelector(`.mod[data-m="${m.id}"]`);
+    const n = Object.values(AGGS).filter(a=>a.m===m.id).length;
+    el.querySelector('.n').textContent = `${n} 个聚合`;
+    const d = deps[m.id] || {};
+    el.querySelector('.deps').innerHTML = Object.entries(d).sort((x,y)=>y[1]-x[1]).map(([t,c])=>`<span>→ ${esc(t)} ${c}</span>`).join('');
+  }
+}
+
+function center(id){
+  const S = stage.getBoundingClientRect(), r = stage.querySelector(`.ag[data-a="${id}"]`).getBoundingClientRect();
+  return {x:(r.left+r.right)/2 - S.left, y:(r.top+r.bottom)/2 - S.top, l:r.left-S.left, r:r.right-S.left, t:r.top-S.top, b:r.bottom-S.top};
+}
+function curve(a,b){
+  const p = center(a), q = center(b);
+  const dx = q.x - p.x, dy = q.y - p.y;
+  const bend = Math.min(80, Math.hypot(dx,dy)/3);
+  const mx = (p.x+q.x)/2 - dy/Math.hypot(dx,dy||1)*bend*0.4, my = (p.y+q.y)/2 + dx/Math.hypot(dx||1,dy)*bend*0.4;
+  return `M ${p.x} ${p.y} Q ${mx} ${my} ${q.x} ${q.y}`;
+}
+function draw(focus){
+  const S = stage.getBoundingClientRect();
+  svg.setAttribute('width', S.width); svg.setAttribute('height', S.height);
+  let p = '';
+  stage.querySelectorAll('.ag').forEach(n=>n.classList.remove('on','ref-out','ref-in'));
+  stage.querySelectorAll('.mod').forEach(n=>n.classList.remove('on'));
+  if (showAll && !focus) for (const [id,a] of Object.entries(AGGS)) for (const r of a.refs) p += `<path class="all${a.m!==AGGS[r].m?' x':''}" d="${curve(id,r)}"/>`;
+  if (focus?.agg) {
+    const id = focus.agg;
+    stage.querySelector(`.ag[data-a="${id}"]`).classList.add('on');
+    for (const r of AGGS[id].refs) { p += `<path class="out" d="${curve(id,r)}"/>`; stage.querySelector(`.ag[data-a="${r}"]`).classList.add('ref-out'); }
+    for (const [o,a] of Object.entries(AGGS)) if (a.refs.includes(id)) { p += `<path class="in" d="${curve(o,id)}"/>`; stage.querySelector(`.ag[data-a="${o}"]`).classList.add('ref-in'); }
+  }
+  if (focus?.mod) {
+    stage.querySelector(`.mod[data-m="${focus.mod}"]`).classList.add('on');
+    for (const [id,a] of Object.entries(AGGS)) if (a.m === focus.mod) for (const r of a.refs) if (AGGS[r].m !== a.m) { p += `<path class="out" d="${curve(id,r)}"/>`; stage.querySelector(`.ag[data-a="${r}"]`).classList.add('ref-out'); }
+  }
+  svg.innerHTML = p;
+}
+
+stage.addEventListener('mouseover', e=>{
+  const ag = e.target.closest('.ag'); if (ag) return draw({agg:ag.dataset.a});
+  const h = e.target.closest('.mod .h'); if (h) return draw({mod:h.closest('.mod').dataset.m});
+});
+stage.addEventListener('mouseleave', ()=>draw());
+stage.addEventListener('mouseout', e=>{ if (!e.relatedTarget || !stage.contains(e.relatedTarget) || (!e.relatedTarget.closest('.ag') && !e.relatedTarget.closest('.mod .h'))) draw(); });
+stage.addEventListener('click', e=>{ const ag = e.target.closest('.ag'); if (ag && AGGS[ag.dataset.a].open) window.open(AGGS[ag.dataset.a].open, '_blank'); });
+
+// 拖动换模块
+let dragId = null;
+stage.addEventListener('dragstart', e=>{ const ag = e.target.closest('.ag'); if (!ag) return; dragId = ag.dataset.a; ag.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; svg.innerHTML = ''; });
+stage.addEventListener('dragend', e=>{ e.target.closest('.ag')?.classList.remove('dragging'); stage.querySelectorAll('.drop-on').forEach(n=>n.classList.remove('drop-on')); });
+stage.addEventListener('dragover', e=>{
+  const t = e.target.closest('[data-m]'); if (!t || !dragId) return;
+  e.preventDefault();
+  stage.querySelectorAll('.drop-on').forEach(n=>n!==t && n.classList.remove('drop-on'));
+  t.classList.add('drop-on');
+});
+stage.addEventListener('drop', e=>{
+  const t = e.target.closest('[data-m]'); if (!t || !dragId) return;
+  e.preventDefault();
+  AGGS[dragId].m = t.dataset.m;
+  const assign = Object.fromEntries(Object.entries(AGGS).map(([k,a])=>[k,a.m]));
+  store.set('mod-assign', JSON.stringify(assign));
+  dragId = null;
+  render();
+});
+window.addEventListener('resize', ()=>draw());
+
+render();
+</script>
+</body>
+</html>

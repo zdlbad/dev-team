@@ -16,6 +16,7 @@
   business/<Module>/behavior.md      应用行为
   glossary.json               词汇表
   导读/                       给人读的原文选读
+  aggregate-design/<聚合>.json  聚合设计：属性与生命周期，先于模块（形状见 model/shapes.md）
   model/                      模型（形状见 model/shapes.md）
   model/概念/<nn>-<概念>.md      概念卡的细节（模型师）；工具读模型只认 .json，这里的 .md 不进校验
   model-decoded/<版本>/       从代码解码出来的模型；永不手改、随时可删
@@ -37,7 +38,7 @@
 | 角色 | 只写 | 不得写 |
 |---|---|---|
 | 业务分析 | `business/`、`glossary.json`、`导读/`；`reports/_business-comments.json` 里的答复（经 `tools/comments.js`） | 模型、代码 |
-| 模型师 | `model/`；`reports/_model-notes.json` 里的 `handled` | 业务描述、词汇表、代码 |
+| 模型师 | `aggregate-design/`（`confirmed` 除外，那是人在页面上按的）、`model/`；`reports/_model-notes.json` 里的 `handled` | 业务描述、词汇表、代码 |
 | 编码 | 代码库（`src/`、`tests/`、`contracts/`）、前端工程 | 模型、业务描述、词汇表 |
 | 审查 | 校验报告里判断的 `verdict`、`confidence`、`reason`；`reports/pre-pr-<切片>.md` | 一切工件 |
 | 文职 | 业务语句的正文、模型元素给人读的文字——只改字不改意 | 编号、标签、追溯、结构、词汇表、代码 |
