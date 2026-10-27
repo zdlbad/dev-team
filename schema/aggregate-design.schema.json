@@ -31,7 +31,7 @@
     "attributes": {
       "type": "array",
       "minItems": 1,
-      "description": "属性按六组排：身份、业务属性（可分几个方面，各起一组）、状态、外部关联、成员、审计",
+      "description": "属性分组摆；推荐的分法：身份、业务属性（可分几个方面，各起一组）、状态、外部关联、成员、审计。有哪组写哪组，不必凑齐",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -40,14 +40,9 @@
         ],
         "properties": {
           "group": {
-            "enum": [
-              "身份",
-              "业务属性",
-              "状态",
-              "外部关联",
-              "成员",
-              "审计"
-            ]
+            "type": "string",
+            "minLength": 1,
+            "description": "组名；推荐的六组以外也可以起别的"
           },
           "aspect": {
             "type": "string",

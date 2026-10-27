@@ -120,7 +120,9 @@ function renderAttr(d) {
   })
   if (!src.facts.length) flow += `<div></div><div></div><div class="note">来源还没整理：什么事发生了、带来哪份事实、落在哪几个属性上</div>`
 
-  const groups = [...(d.attributes ?? [])].sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group))
+  // 推荐的六组照次序排；别起的组跟在业务属性后面
+  const rank = (x) => (GROUP_ORDER.includes(x) ? GROUP_ORDER.indexOf(x) : 1.5)
+  const groups = [...(d.attributes ?? [])].sort((a, b) => rank(a.group) - rank(b.group))
   const partNames = (d.parts ?? []).map((p) => p.name)
   let cls = `<div class="h"><small>聚合根</small><b>${esc(d.aggregate)}</b><span class="cn">${esc(d.title)}</span></div>`
   groups.forEach((g, gi) => {
