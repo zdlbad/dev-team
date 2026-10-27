@@ -42,7 +42,7 @@ function renderMain() {
   main.innerHTML = `<header>
       <h1>${esc(d.title)} <span class="badge ${esc(cur.state)}">${esc(cur.state)}</span></h1>
       <div class="sub">${esc(d.summary)}</div>
-      <div class="gate"><button class="act" id="confirm" ${cur.state === '已定' ? 'disabled' : ''}>定下</button><span>${gate}</span></div>
+      <div class="gate"><button class="act${cur.state === '已定' ? ' undo' : ''}" id="confirm">${cur.state === '已定' ? '撤销定下' : '定下'}</button><span>${gate}</span></div>
     </header>
     ${exs.length ? `<div class="bar" id="bar"><span>拿例子看：</span><button data-ex="">不看例子</button>${exs.map((x) => `<button data-ex="${esc(x.id)}">${esc(x.title)}</button>`).join('')}<span class="note" id="exnote"></span></div>` : '<div style="height:12px"></div>'}
     <div class="diagram"><svg id="svg"></svg></div>
@@ -55,8 +55,9 @@ function renderMain() {
     </div>
     ${d.note ? `<div class="text">${esc(d.note)}</div>` : ''}`
   document.getElementById('confirm').onclick = async () => {
-    const r = await postJson('relations/confirm', { file: cur.file, version: cur.version })
-    if (r.ok) toast('定下了')
+    const undo = cur.state === '已定'
+    const r = await postJson('relations/confirm', { file: cur.file, version: cur.version, undo })
+    if (r.ok) toast(undo ? '撤销了，回到没定下' : '定下了')
     load()
   }
   document.getElementById('bar')?.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { ex = b.dataset.ex; draw() } })

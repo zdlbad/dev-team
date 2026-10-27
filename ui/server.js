@@ -9,7 +9,7 @@
  *   POST /relations/confirm {file, version}      人按「定下」
  *   /agg              聚合设计页（每个聚合两个页签：属性、生命周期）
  *   /agg/data         全部聚合设计 + 它们挂的业务语句原话
- *   POST /agg/confirm {file, version}            人按「定下」
+ *   POST /agg/confirm {file, version}            人按「定下」；四处 confirm 都可带 undo: true 撤销（手误按了）
  *   /modules          模块页
  *   /modules/data     聚合、它们引用谁、眼下的模块划分
  *   POST /modules/save {version, division}       拖动、改名后存
@@ -211,8 +211,9 @@ function handle(root, req, res, url) {
       const bad = guard(p, b.version)
       if (bad) return send(res, 409, bad)
       const data = JSON.parse(fs.readFileSync(p, 'utf8'))
-      data.confirmed = { at: now(), stamp: contentStamp(data) }
-      send(res, 200, { version: writeJson(p, data), state: '已定' })
+      if (b.undo) delete data.confirmed
+      else data.confirmed = { at: now(), stamp: contentStamp(data) }
+      send(res, 200, { version: writeJson(p, data), state: stateOf(data) })
     }).catch((e) => send(res, 400, { error: e.message }))
     return true
   }
@@ -234,8 +235,9 @@ function handle(root, req, res, url) {
       } else {
         if (!fs.existsSync(p)) return send(res, 400, { error: '还没存过划分，先拖一下或改个名再定' })
         data = JSON.parse(fs.readFileSync(p, 'utf8'))
-        if ((data.unassigned ?? []).length) return send(res, 400, { error: `还有 ${data.unassigned.length} 个聚合没划进模块` })
-        data.confirmed = { at: now(), stamp: contentStamp(data) }
+        if (b.undo) delete data.confirmed
+        else if ((data.unassigned ?? []).length) return send(res, 400, { error: `还有 ${data.unassigned.length} 个聚合没划进模块` })
+        else data.confirmed = { at: now(), stamp: contentStamp(data) }
       }
       const version = writeJson(p, data)
       send(res, 200, { version, state: stateOf(data) })

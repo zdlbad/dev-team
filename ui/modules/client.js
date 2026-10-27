@@ -49,10 +49,11 @@ function renderHead() {
   const from = { file: '', model: '照模型里现有的模块摆的，还没存过。', none: '还没有模块，聚合都在「未划」里。' }[D.source]
   document.getElementById('head').innerHTML = `<h1>模块 <span class="badge ${esc(D.state)}">${esc(D.state)}</span></h1>
     <div class="sub">聚合设计做完、业务范围清楚了，把成簇的聚合圈进模块。模块里面引用多、模块之间引用少，就是划得好。${from}</div>
-    <div style="display:flex;gap:10px;align-items:center;font-size:12px;color:var(--ink-3)"><button class="act" id="confirm" ${D.state === '已定' ? 'disabled' : ''}>定下</button><span>${gate}</span></div>`
+    <div style="display:flex;gap:10px;align-items:center;font-size:12px;color:var(--ink-3)"><button class="act${D.state === '已定' ? ' undo' : ''}" id="confirm">${D.state === '已定' ? '撤销定下' : '定下'}</button><span>${gate}</span></div>`
   document.getElementById('confirm').onclick = async () => {
-    const r = await postJson('modules/confirm', { version: D.version })
-    if (r.ok) toast('模块定下了')
+    const undo = D.state === '已定'
+    const r = await postJson('modules/confirm', { version: D.version, undo })
+    if (r.ok) toast(undo ? '撤销了，回到没定下' : '模块定下了')
     load()
   }
 }

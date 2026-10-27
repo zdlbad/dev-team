@@ -41,15 +41,16 @@ function renderMain() {
   main.innerHTML = `<header>
       <h1>${esc(d.title)} <span class="badge ${esc(cur.state)}">${esc(cur.state)}</span></h1>
       <div class="sub">${esc(d.summary)}</div>
-      <div class="gate"><button class="act" id="confirm" ${cur.state === '已定' ? 'disabled' : ''}>定下</button><span>${gate}</span></div>
+      <div class="gate"><button class="act${cur.state === '已定' ? ' undo' : ''}" id="confirm">${cur.state === '已定' ? '撤销定下' : '定下'}</button><span>${gate}</span></div>
     </header>
     ${branches ? `<section class="card" style="margin-top:14px">${branches}</section>` : ''}
-    <div class="nav"><button id="prev">← 上一步</button><span id="where"></span><button id="next">下一步 →</button><span class="note">键盘左右键、按住画布拖都行</span></div>
+    <div class="nav"><button id="prev">← 上一步</button><button id="next">下一步 →</button><span id="where"></span><span class="note">点卡片、键盘左右键、按住画布拖都行</span></div>
     <div class="diagram" id="scroller"><div class="lanes" id="lanes"><svg id="lw"></svg></div></div>
     <div class="legend"><span>时间从左往右；按谁来做分道</span><span><span class="sid">${esc(d.title)} #5</span> 步骤的编号，聚合设计拿它当出处</span><span><span class="pend">待你定</span> 还没定的</span>${(d.loops ?? []).length ? '<span><i class="loop"></i>打转的一段</span>' : ''}</div>`
   document.getElementById('confirm').onclick = async () => {
-    const r = await postJson('stories/confirm', { file: cur.file, version: cur.version })
-    if (r.ok) toast('定下了')
+    const undo = cur.state === '已定'
+    const r = await postJson('stories/confirm', { file: cur.file, version: cur.version, undo })
+    if (r.ok) toast(undo ? '撤销了，回到没定下' : '定下了')
     load()
   }
   document.getElementById('prev').onclick = () => go(at - 1)
@@ -126,8 +127,7 @@ function layout(d) {
 function mark() {
   const d = cur.data, st = d.steps[at]
   document.querySelectorAll('.sc').forEach((n) => n.classList.toggle('cur', n.dataset.id === st.id))
-  const ph = d.phases.find((p) => p.id === st.phase)
-  document.getElementById('where').textContent = `第 ${at + 1} / ${d.steps.length} 步${ph ? ' · ' + ph.title : ''} · ${st.title}`
+  document.getElementById('where').textContent = `第 ${at + 1} / ${d.steps.length} 步`
   document.getElementById('prev').disabled = at === 0
   document.getElementById('next').disabled = at === d.steps.length - 1
 }
@@ -178,7 +178,9 @@ function bindCanvas(d) {
   el.addEventListener('click', (e) => {
     const c = e.target.closest('.sc'); if (!c) return
     e.stopPropagation()
+    // 点一张卡就走到那一步，解释钉在旁边；再点一下收起解释
     pinned = pinned === c.dataset.id ? null : c.dataset.id
+    go(d.steps.findIndex((s) => s.id === c.dataset.id))
     if (pinned) show(pinned); else hide()
   })
   scroller.addEventListener('scroll', () => { if (shown) place(shown) })

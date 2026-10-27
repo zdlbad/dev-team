@@ -65,7 +65,7 @@ function renderMain() {
   main.innerHTML = `<header>
       <h1>${esc(d.title)} <code>${esc(d.aggregate)}</code> <span class="badge ${esc(cur.state)}">${esc(cur.state)}</span></h1>
       <div class="sub">${esc(d.summary)}</div>
-      <div class="gate"><button class="act" id="confirm" ${cur.state === '已定' ? 'disabled' : ''}>定下</button><span>${gateText}</span></div>
+      <div class="gate"><button class="act${cur.state === '已定' ? ' undo' : ''}" id="confirm">${cur.state === '已定' ? '撤销定下' : '定下'}</button><span>${gateText}</span></div>
     </header>
     <nav class="tabs" id="tabs"><button data-t="attr">属性</button><button data-t="life">生命周期</button></nav>
     <section class="pane card" id="pane-attr"></section>
@@ -78,8 +78,9 @@ function renderMain() {
 }
 
 async function confirmIt() {
-  const r = await postJson('agg/confirm', { file: cur.file, version: cur.version })
-  if (r.ok) toast('定下了')
+  const undo = cur.state === '已定'
+  const r = await postJson('agg/confirm', { file: cur.file, version: cur.version, undo })
+  if (r.ok) toast(undo ? '撤销了，回到没定下' : '定下了')
   load()
 }
 

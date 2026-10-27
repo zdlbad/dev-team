@@ -21,7 +21,7 @@ header .gate{display:flex;gap:10px;align-items:center;font-size:12px;color:var(-
 .nav{display:flex;align-items:center;gap:12px;margin:0 0 10px;font-size:13px;flex-wrap:wrap}
 .nav button{font:inherit;font-size:13px;padding:5px 14px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
 .nav button[disabled]{opacity:.4;cursor:default}
-.nav #where{min-width:220px;text-align:center;color:var(--ink-2)}
+.nav #where{color:var(--ink-2)}
 /* 画布：没有横向滚动条，靠上一步、下一步或拖动挪 */
 .diagram{overflow:hidden;cursor:grab;user-select:none;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .diagram.dragging{cursor:grabbing}
