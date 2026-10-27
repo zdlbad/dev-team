@@ -95,6 +95,7 @@ function renderAttr(d) {
     else flow += `<div></div>`
     flow += `<div class="src" data-i="${i}"><div class="t"><i>事件</i>${esc(f.event)}</div><div class="f"><i>事实</i>${esc(f.fact)}</div></div>`
   })
+  if (!src.facts.length) flow += `<div></div><div></div><div class="note">来源还没整理：什么事发生了、带来哪份事实、落在哪几个属性上</div>`
 
   const groups = [...(d.attributes ?? [])].sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group))
   const partNames = (d.parts ?? []).map((p) => p.name)
@@ -186,8 +187,10 @@ function renderLife(d) {
       <div class="legend"><span><i></i>往下走</span><span><i class="cond"></i>红字：过得去要满足的</span><span><i class="back"></i>退回去</span></div>
     </div>`
   document.getElementById('subtabs').onclick = (e) => { const b = e.target.closest('button'); if (b) showView(b.dataset.v) }
-  drawStates(d)
-  renderLanes(d)
+  if (!(d.lifecycle?.states ?? []).length) document.querySelector('#view-sd .sdwrap').outerHTML = '<p class="note">状态图还没整理：业务分析写生命周期，模型师整理成图。</p>'
+  else drawStates(d)
+  if (!(d.sequence?.steps ?? []).length) document.querySelector('#view-ln .diagram').outerHTML = '<p class="note">时序图还没整理。</p>'
+  else renderLanes(d)
   showView(view)
 }
 
