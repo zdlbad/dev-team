@@ -4,7 +4,7 @@
  *
  *   node tools/workbench.js <项目> [--code <代码库>] [--port 4870] [--no-open]
  *
- * 页签：谁在干什么（scene，群聊的样子；等他答的问题、等他拍板的关卡列成待办；日志从这一页进）· 业务 · 切片 · 计划（PM 写的 plan/plan.json：上半是各项目的大块，下半是 sprint 进度）· 模型图（model-page）· 草稿原型（proto）。
+ * 页签：谁在干什么（scene，群聊的样子；等他答的问题、等他拍板的关卡列成待办；日志从这一页进）· 业务 · 聚合设计与模块（ui/，跟人交流的页面）· 切片 · 计划（PM 写的 plan/plan.json：上半是各项目的大块，下半是 sprint 进度）· 模型图（model-page）· 草稿原型（proto）。
  * 子服务各挑一个空闲口、只听本机、不自己弹浏览器，全从这一个口代理出去（/p/<页面>/…，websocket 也转）。退出时一并关掉。
  * 草稿原型不套进页签：点「原型LOCAL」在新标签页打开（/proto-open 转过去）。project.json 写了 liveUrl（上线的前端网址）时，
  * 再多一个「原型LIVE」，点了在新标签页打开那个网址。有前端工程时 proto.js 起后端与前端开发服务，
@@ -18,6 +18,7 @@ const net = require('node:net')
 const { spawn, spawnSync } = require('node:child_process')
 const clock = require('./lib/time')
 const business = require('./business-page')
+const ui = require('../ui/server')
 const { frontendOf } = require('./lib/frontend')
 
 const args = process.argv.slice(2)
@@ -415,7 +416,7 @@ ${byRole.size ? `<table class="jsum"><tr><th>角色</th><th>派了几趟</th><th
   return back + sum + nav + `<div class="journal">${html}</div>`
 }
 
-const TABS = [['scene', '谁在干什么', '/p/scene/'], ['business', '业务', '/business'], ['slices', '切片', '/slices'], ['plan', '计划', '/plan'], ['model', '模型图', '/p/model/'], ['proto', '原型LOCAL ↗', '/proto-open'], ...(project.liveUrl ? [['live', '原型LIVE ↗', project.liveUrl]] : [])]
+const TABS = [['scene', '谁在干什么', '/p/scene/'], ['business', '业务', '/business'], ['agg', '聚合设计', '/agg'], ['modules', '模块', '/modules'], ['slices', '切片', '/slices'], ['plan', '计划', '/plan'], ['model', '模型图', '/p/model/'], ['proto', '原型LOCAL ↗', '/proto-open'], ...(project.liveUrl ? [['live', '原型LIVE ↗', project.liveUrl]] : [])]
 /** 这几个页签不套进来，点了在新标签页打开 */
 const OUTSIDE = ['proto', 'live']
 const shell = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>${esc(project.name ?? '工作台')}</title><style>
@@ -516,6 +517,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url === '/slice/scene-ok') return runSlice(res, ['advance', root, q.slice, 'scene', 'done', '他在页面上按的'])
   if (req.method === 'POST' && url === '/slice/enough') return runSlice(res, ['enough', root, q.slice, '他在页面上按的'])
   if (req.method === 'POST' && url === '/slice/accept') return runSlice(res, ['advance', root, q.slice, 'accept', 'done', '他在页面上按的'])
+  if (ui.handle(root, req, res, url)) return
   res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('没有这一页')
 })
 

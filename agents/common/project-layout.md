@@ -17,6 +17,7 @@
   glossary.json               词汇表
   导读/                       给人读的原文选读
   aggregate-design/<聚合>.json  聚合设计：属性与生命周期，先于模块（形状见 model/shapes.md）
+  aggregate-design/modules.json 模块页上划的模块：哪些聚合圈进哪个模块
   model/                      模型（形状见 model/shapes.md）
   model/概念/<nn>-<概念>.md      概念卡的细节（模型师）；工具读模型只认 .json，这里的 .md 不进校验
   model-decoded/<版本>/       从代码解码出来的模型；永不手改、随时可删

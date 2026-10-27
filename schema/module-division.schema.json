@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:module-division",
+  "title": "aggregate-design/modules.json — 模块页上划的模块：哪些聚合圈进哪个模块",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["modules", "unassigned"],
+  "properties": {
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "responsibility", "aggregates"],
+        "properties": {
+          "name": { "$ref": "urn:dev-team:common#/$defs/modelName" },
+          "responsibility": { "type": "string" },
+          "aggregates": { "type": "array", "items": { "$ref": "urn:dev-team:common#/$defs/modelName" }, "uniqueItems": true }
+        }
+      }
+    },
+    "unassigned": { "type": "array", "description": "还没划进模块的聚合", "items": { "$ref": "urn:dev-team:common#/$defs/modelName" }, "uniqueItems": true },
+    "confirmed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "stamp"],
+      "properties": {
+        "at": { "type": "string", "minLength": 1 },
+        "stamp": { "type": "string", "pattern": "^[0-9a-f]{12,}$" }
+      }
+    }
+  }
+}

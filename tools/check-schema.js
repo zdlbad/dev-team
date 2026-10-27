@@ -30,6 +30,7 @@ function schemaFor(file, rel) {
   if (base === 'modules.json' && rel.startsWith('model')) return 'urn:dev-team:modules'
   if (base === 'module.json' && rel.startsWith('model')) return 'urn:dev-team:module'
   if (rel.startsWith('slices')) return 'urn:dev-team:slice'
+  if (rel === 'aggregate-design/modules.json') return 'urn:dev-team:module-division'
   if (rel.startsWith('aggregate-design/')) return 'urn:dev-team:aggregate-design'
   const m = base.match(/^(aggregate-root|entity|value-object|event|error|repository|service|command-handler|query-handler|event-handler|port)\.[A-Za-z0-9]+\.json$/)
   return m ? `urn:dev-team:${m[1]}` : null
