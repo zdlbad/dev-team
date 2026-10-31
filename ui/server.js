@@ -1,12 +1,12 @@
 /**
- * 聚合设计页与模块页的服务端：工作台 require 进来，认得的地址交给 handle。
+ * 故事、概念、聚合设计、模块四页的服务端：工作台 require 进来，认得的地址交给 handle。
  *
  *   /stories          故事页：业务里真实发生的一段事，跨聚合、不分聚合（business/故事/*.json）
  *   /stories/data     全部故事
  *   POST /stories/confirm {file, version}        人按「定下」
- *   /relations        关系页：一份事实怎么推出另一份，没有先后（business/关系/*.json）
- *   /relations/data   全部关系
- *   POST /relations/confirm {file, version}      人按「定下」
+ *   /concepts         概念页：业务里的一个概念一张——定义、大白话的解释、它跟别的东西什么关系（business/概念/*.json）
+ *   /concepts/data    全部概念，加上故事步骤的去处（线的补充里指着故事的那一步）
+ *   POST /concepts/confirm {file, version}       人按「定下」
  *   /agg              聚合设计页（每个聚合两个页签：属性、生命周期）
  *   /agg/data         全部聚合设计 + 它们挂的业务语句原话
  *   POST /agg/confirm {file, version}            人按「定下」；四处 confirm 都可带 undo: true 撤销（手误按了）
@@ -14,7 +14,7 @@
  *   /modules/data     聚合、它们引用谁、眼下的模块划分
  *   POST /modules/save {version, division}       拖动、改名后存
  *   POST /modules/confirm {version}              人按「定下」
- *   /agg/stamp、/modules/stamp、/stories/stamp、/relations/stamp                    页面轮询：文件变了就重取
+ *   /agg/stamp、/modules/stamp、/stories/stamp、/concepts/stamp                    页面轮询：文件变了就重取
  *
  * 写回都带 version（读到时那份文件的指纹）：文件在这期间被别人改过就回 409、不写，页面重取后再按。
  * 整份覆盖会把模型师刚写的盖掉。
@@ -27,7 +27,7 @@ const { date, hm } = require('../tools/lib/time')
 
 const DIR = 'aggregate-design'
 const STORY_DIR = path.join('business', '故事')
-const RELATION_DIR = path.join('business', '关系')
+const CONCEPT_DIR = path.join('business', '概念')
 const DIVISION = 'modules.json'
 
 const sha = (s) => crypto.createHash('sha1').update(s).digest('hex').slice(0, 16)
@@ -60,14 +60,75 @@ function readJsonDir(root, rel, skip = []) {
   })
 }
 const readStories = (root) => readJsonDir(root, STORY_DIR)
-const readRelations = (root) => readJsonDir(root, RELATION_DIR)
-/** 出处编号 → 它指的那一步或那一条线：「从入册到退出 #5」「每个账户能买什么 #12」。聚合设计页上摆出标题，点得过去 */
-function refTargets(root) {
+const readConcepts = (root) => readJsonDir(root, CONCEPT_DIR)
+/** 故事的步骤编号 → 那一步：「从入册到退出 #5」。概念的线、聚合设计都指着它，页面上摆出标题，点得过去 */
+function storyTargets(root) {
   const out = {}
   for (const st of readStories(root)) for (const step of st.data?.steps ?? []) out[`${st.data.title} #${step.id}`] = { page: 'stories', file: st.file, id: step.id, title: step.title }
-  for (const rl of readRelations(root)) for (const e of rl.data?.edges ?? []) {
-    const name = (id) => rl.data.nodes.find((n) => n.id === id)?.title ?? id
-    out[`${rl.data.title} #${e.id}`] = { page: 'relations', file: rl.file, id: e.id, title: `${name(e.from)} → ${name(e.to)}${e.label ? '（' + e.label + '）' : ''}` }
+  return out
+}
+const MAP_FILE = path.join('business', '全局图.json')
+const TOPIC_STEP_X = 580, TOPIC_STEP_Y = 420   // 主题块的格子：块宽 360 隔 220，块高 190 隔 230
+/**
+ * 全局图的数据：上一层照 business/全局图.json（业务分析写：分几块、各块主要做什么、块与块之间主要交流什么），
+ * 下一层从 business/概念/*.json 合并——概念里 kind=data 的节点是数据（同名并成一个），
+ * 两头都是数据的线是主题里的线（同一对只取先出现的那条，线上的角色 by、树 tree 照概念里写的），
+ * 角色 → 数据的线把角色贴到那个数据框上（谁出的、谁管的）；数据 → 角色、角色 → 角色的线不进全局图，去概念页看。
+ */
+function mapData(root) {
+  const p = path.join(root, MAP_FILE)
+  if (!fs.existsSync(p)) return { missing: `业务分析还没写 ${MAP_FILE}（业务分几块、各块主要做什么、块与块之间主要交流什么，形状见 dev-team agents/business/concepts.md「全局图」）`, topics: [], topEdges: [], nodes: [], edges: [], unassigned: [] }
+  let cfg
+  try { cfg = JSON.parse(fs.readFileSync(p, 'utf8')) } catch (e) { return { missing: `${MAP_FILE} 读不了：${e.message}`, topics: [], topEdges: [], nodes: [], edges: [], unassigned: [] } }
+  const topics = (cfg.topics ?? []).map((t, i) => ({ id: t.id, title: t.title, does: t.does ?? [], c: (i % 8) + 1, tx: 40 + (t.x ?? 0) * TOPIC_STEP_X, ty: 40 + (t.y ?? 0) * TOPIC_STEP_Y, nodes: t.nodes ?? [] }))
+  const topicOf = {}, orderIn = {}
+  for (const t of topics) t.nodes.forEach((title, i) => { topicOf[title] ??= t.id; orderIn[title] ??= i })
+  const nodes = {}, edges = {}
+  const concepts = readConcepts(root).filter((c) => c.data)
+  const pageOf = Object.fromEntries(concepts.map((c) => [c.data.title, c.file]))
+  const node = (title, sub) => {
+    nodes[title] ??= { id: title, title, sub: null, by: [], page: pageOf[title] ?? null, g: topicOf[title] ?? null, y: (orderIn[title] ?? 99) * 10, x: 0 }
+    if (sub && !nodes[title].sub) nodes[title].sub = sub
+    return nodes[title]
+  }
+  for (const c of concepts) {
+    const byIdC = Object.fromEntries((c.data.nodes ?? []).map((n) => [n.id, n]))
+    for (const n of c.data.nodes ?? []) if (n.kind === 'data') node(n.title, n.side === 'center' ? null : n.sub)
+    for (const e of c.data.edges ?? []) {
+      const a = byIdC[e.from], b = byIdC[e.to]
+      if (!a || !b) continue
+      if (a.kind === 'data' && b.kind === 'data') {
+        const k = a.title + '>' + b.title
+        edges[k] ??= { id: k, from: a.title, to: b.title, label: e.label, text: e.text ?? null, by: e.by ?? [], tree: !!e.tree, ref: `${c.data.title} #${e.id}`, file: c.file, edge: e.id }
+      } else if (a.kind === 'role' && b.kind === 'data') {
+        const n = node(b.title, b.sub)
+        if (!n.by.includes(a.title)) n.by.push(a.title)
+      }
+    }
+  }
+  for (const n of Object.values(nodes)) if (cfg.nudge?.[n.title]) n.nudge = cfg.nudge[n.title]
+  const unassigned = Object.values(nodes).filter((n) => !n.g).map((n) => n.title)
+  // 主题里点了名、概念里还没有的数据：图上画不出来，提醒业务分析去写那张概念
+  const unknown = topics.flatMap((t) => t.nodes.filter((title) => !nodes[title]).map((title) => `${title}（${t.title}）`))
+  const placed = Object.values(nodes).filter((n) => n.g)
+  const has = new Set(placed.map((n) => n.id))
+  return {
+    topics, topEdges: cfg.edges ?? [], nodes: placed,
+    edges: Object.values(edges).filter((e) => has.has(e.from) && has.has(e.to)),
+    unassigned, unknown, missing: null,
+  }
+}
+function mapStamp(root) {
+  let t = ''
+  try { t = sha(fs.readFileSync(path.join(root, MAP_FILE), 'utf8')) } catch { /* 还没有 */ }
+  return sha(t + readConcepts(root).map((d) => d.file + d.version).join())
+}
+/** 出处编号 → 它指的那一步或那一条线：故事的步骤，或概念的线「参与者 #4」。聚合设计页上摆出标题，点得过去 */
+function refTargets(root) {
+  const out = storyTargets(root)
+  for (const c of readConcepts(root)) for (const e of c.data?.edges ?? []) {
+    const name = (id) => c.data.nodes.find((n) => n.id === id)?.title ?? id
+    out[`${c.data.title} #${e.id}`] = { page: 'concepts', file: c.file, id: e.id, title: `${name(e.from)} → ${name(e.to)}${e.label ? '（' + e.label + '）' : ''}` }
   }
   return out
 }
@@ -158,8 +219,9 @@ function guard(p, version) {
 }
 
 const PAGES = {
+  '/map': { title: '全局图', dir: 'map' },
   '/stories': { title: '故事', dir: 'stories' },
-  '/relations': { title: '关系', dir: 'relations' },
+  '/concepts': { title: '概念', dir: 'concepts' },
   '/agg': { title: '聚合设计', dir: 'aggregate-design' },
   '/modules': { title: '模块', dir: 'modules' },
 }
@@ -191,8 +253,10 @@ function handle(root, req, res, url) {
     send(res, 200, { designs, statements, groups, refTargets: refTargets(root) })
     return true
   }
-  if (url === '/relations/data') { send(res, 200, { relations: readRelations(root) }); return true }
-  if (url === '/relations/stamp') { send(res, 200, { t: sha(readRelations(root).map((d) => d.file + d.version).join()) }); return true }
+  if (url === '/map/data') { send(res, 200, mapData(root)); return true }
+  if (url === '/map/stamp') { send(res, 200, { t: mapStamp(root) }); return true }
+  if (url === '/concepts/data') { send(res, 200, { concepts: readConcepts(root), storyTargets: storyTargets(root) }); return true }
+  if (url === '/concepts/stamp') { send(res, 200, { t: sha(readConcepts(root).map((d) => d.file + d.version).join()) }); return true }
   if (url === '/stories/data') { send(res, 200, { stories: readStories(root) }); return true }
   if (url === '/stories/stamp') { send(res, 200, { t: sha(readStories(root).map((d) => d.file + d.version).join()) }); return true }
   if (url === '/agg/stamp') { send(res, 200, { t: sha(readDesigns(root).map((d) => d.file + d.version).join()) }); return true }
@@ -203,10 +267,10 @@ function handle(root, req, res, url) {
   }
   if (url === '/modules/data') { send(res, 200, modulesData(root)); return true }
 
-  if (req.method === 'POST' && ['/agg/confirm', '/stories/confirm', '/relations/confirm'].includes(url)) {
+  if (req.method === 'POST' && ['/agg/confirm', '/stories/confirm', '/concepts/confirm'].includes(url)) {
     readBody(req).then((b) => {
       const file = path.basename(String(b.file ?? ''))
-      const p = path.join(root, { '/agg/confirm': DIR, '/stories/confirm': STORY_DIR, '/relations/confirm': RELATION_DIR }[url], file)
+      const p = path.join(root, { '/agg/confirm': DIR, '/stories/confirm': STORY_DIR, '/concepts/confirm': CONCEPT_DIR }[url], file)
       if (!file.endsWith('.json') || file === DIVISION || !fs.existsSync(p)) return send(res, 404, { error: `没有这一份：${file}` })
       const bad = guard(p, b.version)
       if (bad) return send(res, 409, bad)
@@ -247,4 +311,4 @@ function handle(root, req, res, url) {
   return false
 }
 
-module.exports = { handle, readDesigns, readStories, readRelations, refTargets, contentStamp, stateOf, refsOfDesign, UNASSIGNED, DIR, DIVISION, folderOf }
+module.exports = { handle, readDesigns, readStories, readConcepts, refTargets, contentStamp, stateOf, refsOfDesign, UNASSIGNED, DIR, DIVISION, folderOf }

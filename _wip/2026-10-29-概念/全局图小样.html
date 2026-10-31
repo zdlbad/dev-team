@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>全局图 · 小样</title>
+<style>
+:root{
+  --bg:#f7f6f3; --panel:#ffffff; --ink:#1d1d1b; --ink-2:#55534e; --ink-3:#8a877f; --line:#dedbd3; --accent:#2563eb; --accent-bg:#e8efff;
+  --role:#e3edff; --role-line:#2f5fc4; --data:#e7f5ec; --data-line:#2f855a; --area:#f4f4f1; --area-line:#b8b5ad; --topic:#faf9f6; --topic-line:#8a877f;
+  --c1:#fdf1e3; --c1l:#c2410c; --c2:#e8efff; --c2l:#2563eb; --c3:#f1ebfd; --c3l:#7c3aed; --c4:#fbf3d5; --c4l:#b45309; --c5:#e3f6f8; --c5l:#0891b2;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#18181a; --panel:#222225; --ink:#ecebe7; --ink-2:#b5b2ab; --ink-3:#85827b; --line:#3a3a3e; --accent:#7aa2ff; --accent-bg:#26314d;
+    --role:#243352; --role-line:#7aa2ff; --data:#1f3327; --data-line:#4ade80; --area:#1d1d20; --area-line:#4a4a50; --topic:#26262a; --topic-line:#85827b;
+    --c1:#3a2a1c; --c1l:#fb923c; --c2:#1f2a44; --c2l:#7aa2ff; --c3:#2d2342; --c3l:#c4b5fd; --c4:#3a3220; --c4l:#fbbf24; --c5:#1b3337; --c5l:#67e8f9;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+.topbar{display:flex;align-items:center;gap:6px;padding:6px 12px;background:#24292f;color:#fff;font-size:13px}
+.topbar b{margin-right:12px}.topbar span{padding:4px 10px;color:#d0d7de}.topbar span.on{color:#fff;border:1px solid #57606a;border-radius:6px}
+.wrap{display:flex;min-height:calc(100vh - 36px)}
+nav{width:240px;flex:none;border-right:1px solid var(--line);background:var(--panel);padding:12px 0 24px;font-size:13px}
+nav .gn{font-size:12px;color:var(--ink-3);padding:10px 16px 4px}
+nav a{display:block;padding:4px 16px;color:var(--ink-2);text-decoration:none}
+nav a.on{background:var(--accent-bg);color:var(--ink);font-weight:600}
+nav a.sub{padding-left:30px;font-size:12px}
+main{flex:1;padding:18px 28px;min-width:0}
+h1{font-size:22px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+h1 a{color:var(--accent);text-decoration:none;font-size:14px;font-weight:400}
+h1 .sep{color:var(--ink-3);font-weight:400;font-size:16px}
+.sub{color:var(--ink-2);margin:0 0 12px;max-width:960px}
+.diagram{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px;overflow:auto}
+svg{display:block;margin:0 auto}
+svg text{font:12px system-ui,"PingFang SC","Microsoft YaHei",sans-serif;fill:var(--ink);pointer-events:none}
+svg text.sub{font-size:11px;fill:var(--ink-3)}
+.tp rect{stroke-width:1.4}
+.tp text.t{fill:var(--ink)}
+.lb rect{fill:var(--panel);stroke:var(--line);stroke-width:1;rx:6}
+.lb text{font-size:11.5px;fill:var(--ink-2)}
+.lb path{fill:none;stroke:var(--ink-3);stroke-width:1;stroke-dasharray:2 3}
+.tp text.t{font-size:15px;font-weight:600}
+.tp text.c{font-size:11px;fill:var(--ink-3)}
+.tp text.d{font-size:12px;fill:var(--ink-2)}
+.tp{cursor:pointer}
+.grp rect{stroke-dasharray:6 5;stroke-width:1}
+.grp text{font-size:13px;fill:var(--ink-3);letter-spacing:1px}
+.nd rect{fill:var(--data);stroke:var(--data-line);stroke-width:1.2}
+.nd.has rect{stroke-width:2}
+.nd{cursor:pointer}
+.stub rect{stroke-dasharray:4 3;stroke-width:1}
+.stub text{fill:var(--ink-2)}
+.stub text.sub{fill:var(--ink-3)}
+.stub{cursor:pointer}
+.rl rect{fill:var(--role);stroke:var(--role-line);stroke-width:1}
+.rl text{font-size:10.5px;fill:var(--role-line)}
+.rl{cursor:pointer}
+.ed path.vis{fill:none;stroke:var(--ink-2);stroke-width:1.3}
+.ed path.hit{fill:none;stroke:transparent;stroke-width:14}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--ink-2);margin:10px 0 0}
+.legend .sw{display:inline-block;width:18px;height:12px;border:1px solid;border-radius:2px;vertical-align:middle;margin-right:5px}
+.legend .sw.round{border-radius:7px;width:14px;height:10px}
+.legend .sw.dash{border-style:dashed}
+.detail{position:fixed;z-index:20;max-width:380px;box-shadow:0 6px 24px rgba(0,0,0,.2);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:13px}
+.detail[hidden]{display:none}
+.detail h4{margin:0 0 4px;font-size:13px;color:var(--ink-3);font-weight:400}
+.detail div{padding:2px 0}
+.toast{position:fixed;right:16px;bottom:16px;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;z-index:50}
+</style>
+</head>
+<body>
+<div class="topbar"><b>AgedCareProvider</b><span>谁在干什么</span><span class="on">业务</span><span>故事</span><span>概念</span><span>聚合设计</span><span>模块</span><span>切片</span><span>计划</span><span>模型图</span><span>原型LOCAL ↗</span><span>原型LIVE ↗</span></div>
+<div class="wrap">
+  <nav>
+    <div class="gn">业务分析写的</div>
+    <a class="on" href="#" data-g="">全局图</a>
+    <div id="navsub"></div>
+    <a href="#">业务框架</a><a href="#">全景</a>
+    <div class="gn">聚焦</div><a href="#">基金</a><a href="#">服务记录</a><a href="#">服务价格</a>
+    <div class="gn">答问</div><a href="#">三方服务从凭据到回款</a>
+    <div class="gn">词汇</div><a href="#">词汇表</a>
+  </nav>
+  <main id="main"></main>
+</div>
+<div class="detail" id="detail" hidden></div>
+
+<script>
+// 小样数据：从参与者、服务类型、服务三张概念并出来的；真做时由工具从 business/概念/*.json 合并，主题怎么分、位置怎么摆照人在页上定的存
+// 业务主题：上一层的图只画它们；每个主题里的数据和角色在下一层
+const GROUPS = [
+  { id: 'g1', title: '评估与分资金', c: 1, tx: 40, ty: 40,
+    does: ['评估代表上门评估，寄来决定通知书、支持计划', '老人排队，卫生部来信说分到资金'] },
+  { id: 'g2', title: '参与者档案与她名下的钱', c: 2, tx: 620, ty: 40,
+    does: ['注册服务方从第一次联系起替她留档案', 'Services Australia 把钱开在她名下、替她保管'] },
+  { id: 'g5', title: '服务发生与申报', c: 5, tx: 1200, ty: 40,
+    does: ['做一次服务记一条，附凭据', '服务方开票、注册服务方申报，一次一行'] },
+  { id: 'g3', title: '服务方与协议', c: 3, tx: 40, ty: 460,
+    does: ['老人跟注册服务方签服务协议、报入场', '照护伙伴替她写照护计划、排预算；服务方定价'] },
+  { id: 'g4', title: '服务清单', c: 4, tx: 620, ty: 460,
+    does: ['政府定死的三层：服务组、服务类型、服务', '评估批到类型，排预算、记服务选到项'] },
+]
+// 主题之间的线：写主要的业务交流（人写的，不从细线数出来）；指着时浮出细线
+const TOP_EDGES = [
+  { from: 'g1', to: 'g2', label: '批了什么、什么时候分到钱，记进她的档案' },
+  { from: 'g1', to: 'g4', label: '支持计划批到服务类型这一层' },
+  { from: 'g3', to: 'g2', label: '签协议、入场记进档案；照护伙伴替她排照护计划与预算' },
+  { from: 'g4', to: 'g3', label: '协议上每项服务照清单写组和类型；服务方照清单定价、排预算' },
+  { from: 'g4', to: 'g5', label: '做一次服务记一条，按项按物品报' },
+  { from: 'g5', to: 'g2', label: '申报行写她的编号，按它从她名下扣' },
+]
+const TW = 360, TH = 190
+// 数据是框，g 是它属于哪个主题；by 是贴在框上的角色（谁出的、谁管的）；x、y 是它在主题里的位置
+const NODES = [
+  { id: 'notice', g: 'g1', title: '决定通知书', sub: '批了哪一级、哪条路径', by: ['评估代表'], x: 0, y: 0 },
+  { id: 'plan', g: 'g1', title: '支持计划', sub: '批了哪些服务类型', by: ['评估代表'], x: 0, y: 120 },
+  { id: 'letter', g: 'g1', title: '分资金的信', sub: '六成还是全额、哪天', by: ['卫生部'], x: 260, y: 120 },
+  { id: 'file', g: 'g2', title: '参与者档案', sub: '编号、分级与路径、允许的服务类型、共付比例、在哪一段', by: ['参与者', '照护伙伴'], page: true, x: 0, y: 0 },
+  { id: 'fund', g: 'g2', title: '她名下的基金', sub: '一笔一个账户', by: ['Services Australia'], x: 280, y: 0, nudge: 90 },
+  { id: 'agr', g: 'g3', title: '服务协议', sub: '一项一项服务各有价', by: ['参与者', '注册服务方'], x: 0, y: 0 },
+  { id: 'cp', g: 'g3', title: '照护计划与预算', sub: '一行一项服务', by: ['照护伙伴'], x: 260, y: 0 },
+  { id: 'price', g: 'g3', title: '价目表', sub: '只做注册类别里的', by: ['服务方'], x: 260, y: 120 },
+  { id: 'grp', g: 'g4', title: '服务组', sub: '清单第二层，三个', by: ['Services Australia'], x: 0, y: 0 },
+  { id: 'type', g: 'g4', title: '服务类型', sub: '清单第三层', page: true, x: 270, y: 0 },
+  { id: 'svc', g: 'g4', title: '服务', sub: '清单第四层', page: true, x: 540, y: 0 },
+  { id: 'cl', g: 'g5', title: '发票行、申报行、月结单行', sub: '一次一行', by: ['服务方', '注册服务方'], x: 0, y: 0 },
+  { id: 'sr', g: 'g5', title: '服务记录', sub: '一次一条', by: ['服务方'], x: 0, y: 120 },
+  { id: 'it', g: 'g5', title: '物品', sub: '按物品申报的服务才有', x: 260, y: 120 },
+]
+// 线是关系；by 是做这件事的角色，贴在线上
+const EDGES = [
+  { from: 'notice', to: 'file', label: '写着她批了哪一级、哪条路径', by: ['照护伙伴'] },
+  { from: 'plan', to: 'file', label: '批了她能用的服务类型' },
+  { from: 'plan', to: 'type', label: '批到这一层' },
+  { from: 'letter', to: 'file', label: '记下分到资金那天', by: ['照护伙伴'] },
+  { from: 'agr', to: 'file', label: '签协议那天、入场日记下', by: ['注册服务方'] },
+  { from: 'file', to: 'fund', label: '名下有几笔，通知书定的', by: ['Services Australia'] },
+  { from: 'file', to: 'cp', label: '替她排', by: ['照护伙伴'] },
+  { from: 'file', to: 'cl', label: '每一行写她的编号' },
+  { from: 'grp', to: 'type', label: '底下分成几类', tree: true },
+  { from: 'type', to: 'svc', label: '底下分成几项', tree: true },
+  { from: 'type', to: 'agr', label: '协议上每项写它属于哪个组、哪个类型' },
+  { from: 'svc', to: 'price', label: '一项一个价', by: ['服务方'] },
+  { from: 'svc', to: 'cp', label: '排预算一行一项' },
+  { from: 'svc', to: 'sr', label: '做一次记一条', by: ['服务方'] },
+  { from: 'svc', to: 'it', label: '按物品申报的，再写是哪一件' },
+  { from: 'sr', to: 'cl', label: '一次一行', by: ['服务方', '注册服务方'] },
+  { from: 'cl', to: 'fund', label: '按它从她名下扣', by: ['Services Australia'] },
+]
+const W = 180, H = 50
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const byId = Object.fromEntries(NODES.map((n) => [n.id, n]))
+const grpOf = Object.fromEntries(GROUPS.map((g) => [g.id, g]))
+EDGES.forEach((e, i) => { e.id = String(i + 1) })
+let view = ''      // '' 是上一层；主题 id 是下一层
+let focus = null
+let pinnedEdge = null
+
+/** 两个框之间的线：目标在右边就从右边出、左边进；往回的从左边出、右边进；上下的从底边出、顶边进 */
+function path(a, b) {
+  const ax2 = a.x + a.w, bx1 = b.x
+  if (bx1 - ax2 >= 40) { const y1 = a.y + a.h / 2, y2 = b.y + b.h / 2, dx = (bx1 - ax2) * 0.5; return { d: `M ${ax2} ${y1} C ${ax2 + dx} ${y1}, ${bx1 - dx} ${y2}, ${bx1 - 2} ${y2}`, lx: (ax2 + bx1) / 2, ly: (y1 + y2) / 2 } }
+  if (a.x - (b.x + b.w) >= 40) { const y1 = a.y + a.h / 2, y2 = b.y + b.h / 2, dx = (a.x - b.x - b.w) * 0.5; return { d: `M ${a.x} ${y1} C ${a.x - dx} ${y1}, ${b.x + b.w + dx} ${y2}, ${b.x + b.w + 2} ${y2}`, lx: (a.x + b.x + b.w) / 2, ly: (y1 + y2) / 2 } }
+  const down = b.y > a.y
+  const x1 = a.x + a.w / 2, x2 = b.x + b.w / 2, y1 = down ? a.y + a.h : a.y, y2 = down ? b.y - 2 : b.y + b.h + 2, dy = (y2 - y1) * 0.5
+  return { d: `M ${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}`, lx: (x1 + x2) / 2, ly: (y1 + y2) / 2 }
+}
+const MARK = `<defs><marker id="la" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink-3)"/></marker>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink-2)"/></marker>
+  <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/></marker></defs>`
+
+const tint = (g) => `fill:var(--c${g.c});stroke:var(--c${g.c}l)`
+/** 三次贝塞尔上 t 处的点 */
+const bez = (p0, p1, p2, p3, t) => { const m = 1 - t; return { x: m ** 3 * p0.x + 3 * m * m * t * p1.x + 3 * m * t * t * p2.x + t ** 3 * p3.x, y: m ** 3 * p0.y + 3 * m * m * t * p1.y + 3 * m * t * t * p2.y + t ** 3 * p3.y } }
+/** 线的几何：路径字符串加上四个控制点 */
+function curve(a, b) {
+  const ax2 = a.x + a.w, bx1 = b.x
+  let p0, p1, p2, p3
+  if (bx1 - ax2 >= 40) { const y1 = a.y + a.h / 2, y2 = b.y + b.h / 2, dx = (bx1 - ax2) * 0.5; p0 = { x: ax2, y: y1 }; p1 = { x: ax2 + dx, y: y1 }; p2 = { x: bx1 - dx, y: y2 }; p3 = { x: bx1 - 2, y: y2 } }
+  else if (a.x - (b.x + b.w) >= 40) { const y1 = a.y + a.h / 2, y2 = b.y + b.h / 2, dx = (a.x - b.x - b.w) * 0.5; p0 = { x: a.x, y: y1 }; p1 = { x: a.x - dx, y: y1 }; p2 = { x: b.x + b.w + dx, y: y2 }; p3 = { x: b.x + b.w + 2, y: y2 } }
+  else { const down = b.y > a.y; const x1 = a.x + a.w / 2, x2 = b.x + b.w / 2, y1 = down ? a.y + a.h : a.y, y2 = down ? b.y - 2 : b.y + b.h + 2, dy = (y2 - y1) * 0.5; p0 = { x: x1, y: y1 }; p1 = { x: x1, y: y1 + dy }; p2 = { x: x2, y: y2 - dy }; p3 = { x: x2, y: y2 } }
+  return { d: `M ${p0.x} ${p0.y} C ${p1.x} ${p1.y}, ${p2.x} ${p2.y}, ${p3.x} ${p3.y}`, at: (t) => bez(p0, p1, p2, p3, t) }
+}
+const textW = (s) => s.replace(/[^\x00-\xff]/g, 'xx').length * 6
+/** 文字框：中心在 (cx, cy)，几行字；给了 anchor 就画一条短虚线指过去。返回 svg 和它占的矩形 */
+function wrap(lines, max = 10) {
+  const out = []
+  for (const l of lines) {
+    let s = l
+    while (s.length > max) {
+      // 在逗号、顿号后面断，断不了就硬断
+      let cut = -1
+      for (let i = Math.min(max, s.length - 1); i >= 6; i--) if ('，、；：'.includes(s[i - 1])) { cut = i; break }
+      if (cut < 0) cut = max
+      out.push(s.slice(0, cut)); s = s.slice(cut)
+    }
+    if (s) out.push(s)
+  }
+  return out
+}
+function labelBox(cx, cy, lines0, anchor) {
+  const lines = wrap(lines0)
+  const w = Math.max(...lines.map(textW)) + 18, hh = lines.length * 16 + 8
+  const x = cx - w / 2, y = cy - hh / 2
+  let s = '', lead = null
+  if (anchor) {
+    // 从框边上离锚点最近的那一点连过去
+    const ex = Math.max(x, Math.min(anchor.x, x + w)), ey = Math.max(y, Math.min(anchor.y, y + hh))
+    lead = { x: ex, y: ey }
+    s += `<path d="M ${ex} ${ey} L ${anchor.x} ${anchor.y}" marker-end="url(#la)"/>`
+  }
+  s += `<rect x="${x}" y="${y}" width="${w}" height="${hh}" rx="6"/>` + lines.map((l, i) => `<text x="${cx}" y="${y + 16 + i * 16}" text-anchor="middle">${esc(l)}</text>`).join('')
+  return { svg: `<g class="lb">${s}</g>`, box: { x, y, w, h: hh }, lead, anchor }
+}
+const overlaps = (a, b) => !(a.x + a.w < b.x - 8 || b.x + b.w < a.x - 8 || a.y + a.h < b.y - 8 || b.y + b.h < a.y - 8)
+/** 给一条线挑文字框的位置：先试线的中点，挡住了往两头挪、往上下挪，直到不跟已经摆好的框和主题框碰 */
+const TRIES_ON = [[0.5, 0, -44], [0.5, 0, 44], [0.35, 0, -44], [0.65, 0, -44], [0.35, 0, 44], [0.65, 0, 44], [0.5, 0, -80], [0.5, 0, 80]]
+// 下一层：字不压在线上，有虚线指着，上下左右哪儿空放哪儿
+const TRIES_AROUND = [[0.5, -90, -44], [0.5, 90, -44], [0.5, -90, 44], [0.5, 90, 44], [0.35, -90, -44], [0.65, 90, -44], [0.35, -90, 44], [0.65, 90, 44], [0.5, -140, -60], [0.5, 140, -60], [0.5, -140, 60], [0.5, 140, 60], [0.2, -90, -44], [0.8, 90, -44], [0.2, -90, 44], [0.8, 90, 44], [0.5, 0, -80], [0.5, 0, 80]]
+/** 这一点是不是贴着别的线（交叉处附近）：别的线每隔一小段取点比距离 */
+function nearOther(p, others, dist = 26) {
+  for (const o of others ?? []) for (let t = 0.05; t < 1; t += 0.05) { const q = o.at(t); if (Math.hypot(q.x - p.x, q.y - p.y) < dist) return true }
+  return false
+}
+/** 线上中间附近、不挨着别的线的那一点；都挨着就取正中 */
+function anchorT(cv, others, prefer = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74]) {
+  return prefer.find((t) => !nearOther(cv.at(t), others)) ?? 0.5
+}
+/** 框有没有被哪条线穿过：每条线每隔一小段取点，落进框（外扩 6）就算穿过 */
+function lineHits(box, curves) {
+  const b = { x: box.x - 6, y: box.y - 6, w: box.w + 12, h: box.h + 12 }
+  for (const c of curves ?? []) for (let t = 0.02; t < 1; t += 0.03) { const q = c.at(t); if (q.x >= b.x && q.x <= b.x + b.w && q.y >= b.y && q.y <= b.y + b.h) return true }
+  return false
+}
+const RINGS = [[-90, -50], [90, -50], [-90, 50], [90, 50], [0, -60], [0, 60], [-140, 0], [140, 0], [-150, -80], [150, -80], [-150, 80], [150, 80], [0, -110], [0, 110], [-220, 0], [220, 0], [-220, -100], [220, -100], [-220, 100], [220, 100], [0, -170], [0, 170], [-300, 0], [300, 0], [-300, -140], [300, -140], [-300, 140], [300, 140], [0, -230], [0, 230], [-150, -200], [150, -200], [-150, 200], [150, 200]]
+const TS = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8]
+/** 线上离这个框最近、又不挨着别的线的那一点：虚线就连到这儿 */
+function nearestAnchor(cv, box, others) {
+  const cx = box.x + box.w / 2, cy = box.y + box.h / 2
+  let best = null
+  for (let t = 0.12; t <= 0.88; t += 0.04) {
+    const p = cv.at(t)
+    if (nearOther(p, others)) continue
+    const d = Math.hypot(p.x - cx, p.y - cy)
+    if (!best || d < best.d) best = { p, d }
+  }
+  return best?.p ?? cv.at(0.5)
+}
+/** 虚线这一段有没有穿过别的线：别的线取点，看离线段多近 */
+function leaderCrosses(a, b, others) {
+  const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy || 1
+  for (const c of others ?? []) for (let t = 0.02; t < 1; t += 0.03) {
+    const q = c.at(t), u = Math.max(0, Math.min(1, ((q.x - a.x) * dx + (q.y - a.y) * dy) / len2))
+    if (Math.hypot(q.x - (a.x + u * dx), q.y - (a.y + u * dy)) < 9) return true
+  }
+  return false
+}
+function placeLabel(cv, lines, taken, tries = TRIES_ON, reserveAbove = 0, others = []) {
+  let best = null
+  const all = [cv, ...others]
+  const cands = [...tries]
+  for (const [dx, dy] of RINGS) for (const t of TS) cands.push([t, dx, dy])
+  for (const [t, dx, dy] of cands) {
+    const p = cv.at(t)
+    const probe = labelBox(p.x + dx, p.y + dy, lines, null)
+    const lb = labelBox(p.x + dx, p.y + dy, lines, nearestAnchor(cv, probe.box, others))
+    const need = reserveAbove ? { x: lb.box.x, y: lb.box.y - reserveAbove, w: lb.box.w, h: lb.box.h + reserveAbove } : lb.box
+    const boxes = taken.filter((b) => overlaps(b, need)).length
+    const hits = lineHits(need, all) ? 1 : 0
+    const cross = lb.lead && leaderCrosses(lb.lead, lb.anchor, others) ? 1 : 0
+    if (!boxes && !hits && !cross) { taken.push(need); return lb }
+    const score = boxes * 10 + hits * 4 + cross * 3 + Math.hypot(dx, dy) / 100
+    if (!best || score < best.score) best = { lb, need, score }
+  }
+  taken.push(best.need)
+  return best.lb
+}
+
+// ---------- 页面 ----------
+function render() {
+  const g = grpOf[view]
+  document.getElementById('navsub').innerHTML = GROUPS.map((x) => `<a href="#" class="sub${x.id === view ? ' on' : ''}" data-g="${x.id}">${esc(x.title)}</a>`).join('')
+  document.querySelector('nav a[data-g=""]').classList.toggle('on', !view)
+  document.getElementById('main').innerHTML = g
+    ? `<h1><a href="#" data-g="">全局图</a><span class="sep">›</span>${esc(g.title)}</h1>
+       <p class="sub">${esc(g.does.join('；'))}。这一块里的数据和角色，线上写的是关系；虚框是别的主题里跟它连着的数据，点了过去。</p>
+       <div class="diagram"><svg id="svg"></svg></div>
+       <div class="legend"><span><span class="sw round" style="background:var(--role);border-color:var(--role-line)"></span>角色</span><span><span class="sw" style="background:var(--data);border-color:var(--data-line)"></span>数据</span><span><span class="sw dash" style="border-color:var(--topic-line)"></span>别的主题里的数据</span></div>`
+    : `<h1>全局图</h1>
+       <p class="sub">业务分成几个主题，一个主题一块；块与块之间的线是它们里面的数据怎么连着，指着看是哪几条。点一块进去看这一块里的数据和角色。</p>
+       <div class="diagram"><svg id="svg"></svg></div>`
+  document.getElementById('detail').hidden = true
+  focus = null; pinnedEdge = null
+  if (g) drawLocal(g); else drawTop()
+  bind()
+}
+document.addEventListener('click', (ev) => {
+  const a = ev.target.closest('a[data-g]')
+  if (a) { ev.preventDefault(); view = a.dataset.g; render() }
+})
+
+// ---------- 上一层：主题之间 ----------
+function topEdges() {
+  const map = {}
+  for (const e of EDGES) {
+    const a = byId[e.from].g, b = byId[e.to].g
+    if (a === b) continue
+    const k = a + '>' + b
+    ;(map[k] ??= { from: a, to: b, items: [] }).items.push(e)
+  }
+  return Object.values(map)
+}
+function drawTop() {
+  const rect = (g) => ({ x: g.tx, y: g.ty, w: TW, h: TH })
+  const tes = TOP_EDGES
+  let s = MARK
+  const taken = GROUPS.map(rect)
+  let labels = ''
+  const geo = tes.map((t) => curve(rect(grpOf[t.from]), rect(grpOf[t.to])))
+  tes.forEach((t, i) => {
+    const cv = geo[i], k = t.from + '>' + t.to, others = geo.filter((_, j) => j !== i)
+    s += `<g class="ed" data-t="${k}"><path class="vis" d="${cv.d}" marker-end="url(#a)"/><path class="hit" d="${cv.d}"/></g>`
+    const A = rect(grpOf[t.from]), B = rect(grpOf[t.to])
+    const horizontal = Math.abs(A.y - B.y) < 100, vertical = Math.abs(A.x - B.x) < 100
+    const tries = horizontal ? [[0.5, 0, -50], [0.5, 0, 50], [0.3, 0, -50], [0.7, 0, -50], [0.3, 0, 50], [0.7, 0, 50], [0.5, 0, -100], [0.5, 0, 100], [0.3, 0, 100], [0.7, 0, 100], [0.3, 0, -100], [0.7, 0, -100]]
+      : vertical ? [[0.5, -130, 0], [0.5, 130, 0], [0.3, -130, 0], [0.7, -130, 0], [0.3, 130, 0], [0.7, 130, 0], [0.5, -220, 0], [0.5, 220, 0]]
+      : [[0.25, -150, 0], [0.25, 150, 0], [0.75, -150, 0], [0.75, 150, 0], [0.2, 0, -70], [0.8, 0, 70], [0.25, -220, 0], [0.25, 220, 0], [0.75, -220, 0], [0.75, 220, 0], [0.5, -260, 0], [0.5, 260, 0]]
+    labels += placeLabel(cv, t.label.split('；'), taken, tries, 0, others).svg
+  })
+  for (const g of GROUPS) {
+    const n = NODES.filter((x) => x.g === g.id).length
+    s += `<g class="tp" data-g="${g.id}"><rect x="${g.tx}" y="${g.ty}" width="${TW}" height="${TH}" rx="10" style="${tint(g)}"/>
+      <text class="t" x="${g.tx + 18}" y="${g.ty + 34}">${esc(g.title)}</text>
+      ${g.does.map((d, i) => `<text class="d" x="${g.tx + 18}" y="${g.ty + 66 + i * 24}">· ${esc(d)}</text>`).join('')}
+      <text class="c" x="${g.tx + 18}" y="${g.ty + TH - 16}">${n} 样数据 · 点进去看</text></g>`
+  }
+  s += labels
+  const svg = document.getElementById('svg')
+  svg.setAttribute('width', Math.max(...GROUPS.map((g) => g.tx)) + TW + 40); svg.setAttribute('height', Math.max(...GROUPS.map((g) => g.ty)) + TH + 40)
+  svg.innerHTML = s
+}
+
+// ---------- 下一层：一个主题里面 ----------
+function pill(role, x, y, on) {
+  const w = role.replace(/[^\x00-\xff]/g, 'xx').length * 5.6 + 14
+  return { w, svg: `<g class="rl${on ? ' lit' : ''}" data-r="${esc(role)}"><rect x="${x}" y="${y}" width="${w}" height="20" rx="10"/><text x="${x + w / 2}" y="${y + 14}" text-anchor="middle">${esc(role)}</text></g>` }
+}
+function pills(roles, x, y, isLit) {
+  let out = '', cx = x
+  for (const r of roles ?? []) { const p = pill(r, cx, y, isLit(r)); out += p.svg; cx += p.w + 4 }
+  return out
+}
+/** 做这件事的角色骑在线的中点上；占的地方记进 taken，文字框绕开它 */
+function rolesOnLine(e, cv, taken, others = []) {
+  if (!e.by?.length) return ''
+  const total = e.by.reduce((t, r) => t + pill(r, 0, 0).w + 4, -4)
+  let box = null
+  for (const t of [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82]) {
+    const p = cv.at(t)
+    const b = { x: p.x - total / 2, y: p.y - 10, w: total, h: 20 }
+    box ??= b
+    if (nearOther(p, others)) continue
+    if (!taken.some((o) => overlaps(o, b))) { box = b; break }
+  }
+  taken.push(box)
+  return pills(e.by, box.x, box.y, () => false)
+}
+function drawLocal(g) {
+  const mine = NODES.filter((n) => n.g === g.id)
+  const edges = EDGES.filter((e) => byId[e.from].g === g.id || byId[e.to].g === g.id)
+  const inG = (id) => byId[id].g === g.id
+  const ROW = 130, COLW = 380, TROW = 140, STUB_ROW = 105, Y0 = 110, GAP = 240, PAD = 70
+  const pos = {}
+  const place = (id, x, y, k, stub) => { pos[id] = { x, y, w: W, h: stub ? 40 : H, stub, k } }
+
+  // 一、主题里上下层级的（tree 线连着的）画成树：上一层在上、下一层在下，同一层横着排
+  const treeEdges = edges.filter((e) => e.tree && inG(e.from) && inG(e.to))
+  const treeIds = new Set(treeEdges.flatMap((e) => [e.from, e.to]))
+  const level = {}
+  const roots = [...treeIds].filter((id) => !treeEdges.some((e) => e.to === id))
+  const walk = (id, l) => { level[id] = Math.max(level[id] ?? 0, l); treeEdges.filter((e) => e.from === id).forEach((e) => walk(e.to, l + 1)) }
+  roots.forEach((r) => walk(r, 0))
+  const rows = []
+  for (const id of treeIds) (rows[level[id]] ??= []).push(id)
+  const treeW = rows.length ? Math.max(...rows.map((r) => r.length)) * (W + 40) - 40 : 0
+
+  // 二、别的数据按先后分列，摆在树的右边
+  const rest = mine.filter((n) => !treeIds.has(n.id))
+  const depth = {}
+  const dep = (id, seen = new Set()) => {
+    if (depth[id] !== undefined) return depth[id]
+    if (seen.has(id)) return 0
+    seen.add(id)
+    const preds = edges.filter((e) => e.to === id && inG(e.from) && !treeIds.has(e.from)).map((e) => e.from)
+    return (depth[id] = preds.length ? Math.max(...preds.map((p) => dep(p, seen) + 1)) : 0)
+  }
+  rest.forEach((n) => dep(n.id))
+  const cols = []
+  for (const n of rest) (cols[depth[n.id]] ??= []).push(n.id)
+  cols.forEach((c) => c.sort((a, b) => byId[a].y - byId[b].y))
+
+  // 三、别的主题里连着的：只连进来的在左，其余在右
+  const outside = [...new Set(edges.flatMap((e) => [e.from, e.to]).filter((id) => !inG(id)))]
+  const leftIds = outside.filter((id) => edges.some((e) => e.from === id) && !edges.some((e) => e.to === id))
+  const rightIds = outside.filter((id) => !leftIds.includes(id))
+
+  // 摆：左虚框 | 树 | 几列 | 右虚框。主题框只包住自己的数据，不跟着虚框撑高
+  const X_IN = leftIds.length ? 40 + W + GAP : rightIds.length ? 40 + (W + GAP) / 2 : 60
+  const extraRight = !rightIds.length && leftIds.length ? (W + GAP) / 2 : 0
+  const treeH = rows.length ? rows.length * TROW - (TROW - H) : 0
+  const colsH = cols.length ? Math.max(...cols.map((c) => c.length)) * ROW - (ROW - H) : 0
+  const innerH = Math.max(treeH, colsH, H)
+  let x = X_IN, k = 1
+  if (rows.length) {
+    rows.forEach((r, l) => {
+      const rw = r.length * (W + 40) - 40, x0 = x + (treeW - rw) / 2
+      r.forEach((id, i) => place(id, x0 + i * (W + 40), Y0 + (innerH - treeH) / 2 + l * TROW, k, false))
+    })
+    x += treeW + 200; k++
+  }
+  cols.forEach((c, ci) => {
+    const ch = c.length * ROW - (ROW - H)
+    const dy = cols.length > 1 ? (ci % 2 ? 1 : -1) * 70 : 0
+    const y0 = Y0 + (innerH - ch) / 2 + dy
+    // nudge：人手指定的上下挪动，让开压在它身上的线；只动上下，先后（左右）不动
+    c.forEach((id, i) => place(id, x + (cols.length === 1 && c.length > 1 ? (i % 2) * 140 : 0), y0 + i * ROW + (byId[id].nudge || 0), k, false))
+    x += COLW; k++
+  })
+  const innerIds = mine.map((n) => n.id)
+  const bx1 = Math.min(...innerIds.map((id) => pos[id].x)), by1 = Math.min(...innerIds.map((id) => pos[id].y)), bx2 = Math.max(...innerIds.map((id) => pos[id].x + W)), by2 = Math.max(...innerIds.map((id) => pos[id].y + H))
+  // 左右留 44，顶上留出写主题名的地方，底下 40
+  const frame = { x: bx1 - 44, y: by1 - 58, w: bx2 - bx1 + 88, h: by2 - by1 + 98 }
+  const column = (ids, cx, kk) => {
+    if (!ids.length) return
+    const anchor = (id) => { const ns = edges.filter((e) => e.from === id || e.to === id).map((e) => (e.from === id ? e.to : e.from)).filter(inG); return ns.length ? ns.reduce((s, n) => s + pos[n].y, 0) / ns.length : 0 }
+    ids.sort((a, b) => anchor(a) - anchor(b))
+    const hgt = ids.length * STUB_ROW - (STUB_ROW - 40), y0 = frame.y + (frame.h - hgt) / 2
+    ids.forEach((id, i) => place(id, cx, Math.max(16, y0) + i * STUB_ROW, kk, true))
+  }
+  column(leftIds, 40, 0)
+  column(rightIds, frame.x + frame.w + GAP - 40, k)
+  const minY = Math.min(frame.y, ...Object.values(pos).map((p) => p.y - 14))
+  if (minY < 24) { const dy = 24 - minY; frame.y += dy; for (const p of Object.values(pos)) p.y += dy }
+
+  // 几条线汇到同一个框、或从同一个框分出去，端点在框的边上错开
+  const inTo = {}, outFrom = {}
+  for (const e of edges) { (inTo[e.to] ??= []).push(e); (outFrom[e.from] ??= []).push(e) }
+  for (const list of Object.values(outFrom)) list.sort((a, b) => pos[a.to].y - pos[b.to].y)
+  for (const list of Object.values(inTo)) list.sort((a, b) => pos[a.from].y - pos[b.from].y)
+  // 同一个框同一边上的线（进来的、出去的一起算）串着排：按对面那头的高低，从上到下占这条边上的位置
+  const sideOf = (e, id) => (e.from === id ? (pos[e.to].x > pos[e.from].x ? 'r' : 'l') : (pos[e.to].x > pos[e.from].x ? 'l' : 'r'))
+  const farY = (e, id) => pos[e.from === id ? e.to : e.from].y
+  const onSide = {}
+  for (const e of edges) if (!e.tree) for (const id of [e.from, e.to]) (onSide[id + sideOf(e, id)] ??= []).push(e)
+  for (const [key, list] of Object.entries(onSide)) list.sort((a, b) => farY(a, key.slice(0, -1)) - farY(b, key.slice(0, -1)))
+  const slot = (e, id, p) => { const list = onSide[id + sideOf(e, id)]; return list.length > 1 ? p.y + p.h * (list.indexOf(e) + 1) / (list.length + 1) : p.y + p.h / 2 }
+  let s = MARK
+  s += `<g class="grp"><rect x="${frame.x}" y="${frame.y}" width="${frame.w}" height="${frame.h}" rx="12" style="${tint(g)};fill-opacity:.45"/><text x="${frame.x + 14}" y="${frame.y + 20}">${esc(g.title)}</text></g>`
+  const taken = mine.map((n) => pos[n.id]).concat(outside.map((id) => pos[id]))
+  for (const n of mine) if (n.by?.length) taken.push({ x: pos[n.id].x, y: pos[n.id].y - 12, w: W, h: 14 })
+  let labels = ''
+  const geo = []
+  for (const e of edges) {
+    const a = pos[e.from], b = pos[e.to]
+    let d, cv
+    if (e.tree) {
+      // 树的连线：从上一层底边中间下来，拐到下一层顶边中间
+      const x1 = a.x + a.w / 2, y1 = a.y + a.h, x2 = b.x + b.w / 2, y2 = b.y - 2, ym = (y1 + y2) / 2
+      d = `M ${x1} ${y1} L ${x1} ${ym} L ${x2} ${ym} L ${x2} ${y2}`
+      cv = { at: () => ({ x: x2, y: ym }) }
+    } else {
+      const y1 = slot(e, e.from, a)
+      const y2 = slot(e, e.to, b)
+      if (b.x > a.x) {
+        const x1 = a.x + a.w, x2 = b.x - 2, dx = (x2 - x1) * 0.5
+        const skip = b.k - a.k > 1
+        const off = skip ? (y2 >= y1 ? 1 : -1) * (ROW * 0.75 + (inTo[e.to].length > 1 ? inTo[e.to].indexOf(e) * 18 : 0)) : 0
+        const p0 = { x: x1, y: y1 }, p1 = { x: x1 + dx * (skip ? 0.7 : 1), y: y1 + off }, p2 = { x: x2 - dx * (skip ? 0.7 : 1), y: y2 + off * 0.6 }, p3 = { x: x2, y: y2 }
+        d = `M ${p0.x} ${p0.y} C ${p1.x} ${p1.y}, ${p2.x} ${p2.y}, ${p3.x} ${p3.y}`
+        cv = { at: (t) => bez(p0, p1, p2, p3, t) }
+      } else {
+        const x1 = a.x, x2 = b.x + b.w + 2, dx = (x1 - x2) * 0.5
+        const bulge = -60
+        const p0 = { x: x1, y: y1 }, p1 = { x: x1 - dx, y: y1 + bulge }, p2 = { x: x2 + dx, y: y2 + bulge }, p3 = { x: x2, y: y2 }
+        d = `M ${p0.x} ${p0.y} C ${p1.x} ${p1.y}, ${p2.x} ${p2.y}, ${p3.x} ${p3.y}`
+        cv = { at: (t) => bez(p0, p1, p2, p3, t) }
+      }
+    }
+    s += `<g class="ed"><path class="vis" d="${d}" marker-end="url(#a)"/><path class="hit" d="${d}"/></g>`
+    geo.push({ e, cv })
+  }
+  for (const { e, cv } of geo) {
+    const others = geo.filter((x) => x.e !== e).map((x) => x.cv)
+    labels += rolesOnLine(e, cv, taken, others)
+    labels += placeLabel(cv, [e.label], taken, e.tree ? [[0.5, 110, 0], [0.5, -110, 0], [0.5, 130, 0]] : TRIES_AROUND, 0, others).svg
+  }
+  for (const n of mine) {
+    const p = pos[n.id]
+    s += `<g class="nd${n.page ? ' has' : ''}" data-n="${n.id}"><rect x="${p.x}" y="${p.y}" width="${W}" height="${H}" rx="3"/>
+      <text x="${p.x + W / 2}" y="${p.y + (n.sub ? 21 : 30)}" text-anchor="middle" style="${n.page ? 'font-weight:600' : ''}">${esc(n.title)}</text>${n.sub ? `<text class="sub" x="${p.x + W / 2}" y="${p.y + 38}" text-anchor="middle">${esc(n.sub.length > 22 ? n.sub.slice(0, 21) + '…' : n.sub)}</text>` : ''}</g>`
+    if (n.by?.length) s += pills(n.by, p.x + 6, p.y - 10, () => false)
+  }
+  for (const id of outside) {
+    const p = pos[id], n = byId[id]
+    s += `<g class="stub" data-g="${n.g}" data-n="${id}"><rect x="${p.x}" y="${p.y}" width="${W}" height="${p.h}" rx="3" style="${tint(grpOf[n.g])};fill-opacity:.5"/>
+      <text x="${p.x + W / 2}" y="${p.y + 17}" text-anchor="middle">${esc(n.title)}</text><text class="sub" x="${p.x + W / 2}" y="${p.y + 32}" text-anchor="middle">${esc(grpOf[n.g].title)} ›</text></g>`
+  }
+  s += labels
+  const svg = document.getElementById('svg')
+  svg.setAttribute('width', Math.max(frame.x + frame.w, ...Object.values(pos).map((p) => p.x + p.w)) + 30 + extraRight)
+  svg.setAttribute('height', Math.max(frame.y + frame.h, ...Object.values(pos).map((p) => p.y + p.h)) + 30)
+  svg.innerHTML = s
+}
+
+// ---------- 指着、点 ----------
+function bind() {
+  const svg = document.getElementById('svg'), pop = document.getElementById('detail')
+  svg.addEventListener('mousemove', (ev) => {
+    const ed = ev.target.closest('.ed[data-t]')
+    if (ed && !view) {
+      const [a, b] = ed.dataset.t.split('>')
+      const items = EDGES.filter((e) => (byId[e.from].g === a && byId[e.to].g === b) || (byId[e.from].g === b && byId[e.to].g === a))
+      pop.innerHTML = `<h4>${esc(grpOf[a].title)} ↔ ${esc(grpOf[b].title)}</h4>` + items.map((e) => `<div>${esc(byId[e.from].title)} → ${esc(byId[e.to].title)}：${esc(e.label)}</div>`).join('')
+      pop.hidden = false
+      let x = ev.clientX + 16; if (x + pop.offsetWidth > innerWidth - 8) x = ev.clientX - pop.offsetWidth - 16
+      pop.style.left = Math.max(8, x) + 'px'; pop.style.top = Math.max(8, Math.min(ev.clientY - 20, innerHeight - pop.offsetHeight - 8)) + 'px'
+    } else pop.hidden = true
+  })
+  svg.addEventListener('mouseleave', () => { pop.hidden = true })
+  svg.addEventListener('click', (ev) => {
+    const tp = ev.target.closest('.tp'), stub = ev.target.closest('.stub'), nd = ev.target.closest('.nd')
+    if (tp) { view = tp.dataset.g; render(); return }
+    if (stub) { view = stub.dataset.g; render(); return }
+    if (nd) { const n = byId[nd.dataset.n]; toast(n.page ? `真页面上会跳到概念页的「${n.title}」` : `「${n.title}」还没有自己的一张概念`) }
+  })
+}
+function toast(t) { const el = document.createElement('div'); el.className = 'toast'; el.textContent = t; document.body.appendChild(el); setTimeout(() => el.remove(), 1800) }
+render()
+</script>
+</body>
+</html>

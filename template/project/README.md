@@ -4,7 +4,7 @@
 
 ```
 raw/                原料，人放进来；raw/rulings.md 记人拍板的事
-business/           业务描述：00-overview.md；故事/、关系/；<主题>/abstraction.md（业务抽象）、<主题>/practice.md（业务落地）
+business/           业务描述：全局图.json、故事/、概念/（给人看的三样）；<主题>/abstraction.md（业务抽象）、<主题>/practice.md（业务落地）
 glossary.json       词汇表
 aggregate-design/   聚合设计：属性与生命周期（模型师写，人定下）；modules.json 是模块页上划的模块
 model/              模型（模型师写）；模块没划之前都在 model/Unassigned/

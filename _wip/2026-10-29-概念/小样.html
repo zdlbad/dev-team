@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>概念 · 小样</title>
+<style>
+:root{
+  --bg:#f7f6f3; --panel:#ffffff; --ink:#1d1d1b; --ink-2:#55534e; --ink-3:#8a877f;
+  --line:#dedbd3; --box:#ffffff; --box-line:#6b6860; --wire:#b9c3d6;
+  --event:#0f766e; --ext:#c2410c; --accent:#2563eb; --accent-bg:#e8efff; --hl:#fff4c2;
+  --green:#15803d; --cond:#c81e1e; --ok:#15803d; --warn:#b45309; --warn-bg:#fdf3e3;
+  --role:#e3edff; --role-line:#2f5fc4; --data:#e7f5ec; --data-line:#2f855a;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#18181a; --panel:#222225; --ink:#ecebe7; --ink-2:#b5b2ab; --ink-3:#85827b;
+    --line:#3a3a3e; --box:#2a2a2e; --box-line:#9a978f; --wire:#4b5670;
+    --event:#2dd4bf; --ext:#fb923c; --accent:#7aa2ff; --accent-bg:#26314d; --hl:#4a4220;
+    --green:#22a356; --cond:#f87171; --ok:#4ade80; --warn:#fbbf24; --warn-bg:#3a3020;
+    --role:#243352; --role-line:#7aa2ff; --data:#1f3327; --data-line:#4ade80;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+.topbar{display:flex;align-items:center;gap:6px;padding:6px 12px;background:#24292f;color:#fff;font-size:13px}
+.topbar b{margin-right:12px}.topbar span{padding:4px 10px;color:#d0d7de}.topbar span.on{color:#fff;border:1px solid #57606a;border-radius:6px}
+.wrap{display:flex;min-height:calc(100vh - 36px)}
+aside{width:220px;flex:none;border-right:1px solid var(--line);padding:16px 12px;background:var(--panel)}
+aside h3{margin:0 0 4px;font-size:14px}
+aside .muted{font-size:12px;color:var(--ink-3);margin-bottom:12px}
+aside ul{list-style:none;margin:0;padding:0}
+aside li{display:flex;justify-content:space-between;align-items:center;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px}
+aside li.on{background:var(--accent-bg);font-weight:600}
+aside li.none{opacity:.45;cursor:default}
+main{flex:1;padding:18px 28px;max-width:1180px}
+header h1{font-size:22px;margin:0 0 2px;display:flex;align-items:center;gap:10px}
+header .def{font-size:15px;color:var(--ink);margin:6px 0 4px;max-width:900px}
+header .exp{font-size:14px;color:var(--ink-2);margin:6px 0 10px;max-width:900px;line-height:1.7}
+header .k{display:inline-block;font-size:11px;color:var(--ink-3);border:1px solid var(--line);border-radius:4px;padding:0 6px;margin-right:8px;vertical-align:2px;line-height:18px}
+header .src{display:block;font-size:12px;color:var(--ink-3);margin-left:46px}
+.gate{font-size:13px;color:var(--ink-3);font-weight:400}
+button.act{font:inherit;font-size:12px;padding:3px 12px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;margin-left:4px}
+.badge{display:inline-block;font-size:11px;padding:0 7px;border-radius:9px;border:1px solid currentColor;line-height:18px;font-weight:400}
+.badge.未定{color:var(--ink-3)}
+.diagram{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px;overflow-x:auto}
+svg text{font:12px system-ui,"PingFang SC","Microsoft YaHei",sans-serif;fill:var(--ink);pointer-events:none}
+svg text.sub{font-size:11px;fill:var(--ink-3)}
+svg text.fact{font-size:11px;fill:var(--ink-2)}
+svg text.lab{font-size:11.5px;fill:var(--ink-2);paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round}
+svg text.col{font-size:12px;fill:var(--ink-3);letter-spacing:2px}
+.nd rect{stroke-width:1.2}
+.nd.party rect,.nd.role rect{fill:var(--role);stroke:var(--role-line)}
+.nd.paper rect,.nd.derived rect,.nd.fixed rect,.nd.data rect{fill:var(--data);stroke:var(--data-line)}
+.nd.self rect{stroke-width:2.4}
+.ed path.vis{fill:none;stroke:var(--ink-2);stroke-width:1.4}
+.ed path.hit{fill:none;stroke:transparent;stroke-width:16;cursor:pointer}
+.nd{cursor:pointer}
+.on-sel rect{filter:drop-shadow(0 0 4px var(--accent))}
+.on-sel path.vis{stroke-width:3.2!important}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--ink-2);margin:10px 0 0}
+.legend .sw{display:inline-block;width:18px;height:12px;border:1px solid;border-radius:2px;vertical-align:middle;margin-right:5px}
+.legend .sw.round{border-radius:7px}
+.detail{position:fixed;z-index:40;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;max-width:360px;box-shadow:0 8px 24px rgba(0,0,0,.14);font-size:13px}
+.detail h4{margin:0 0 2px;font-size:14px}.detail .w{font-size:12px;color:var(--ink-3);margin-bottom:6px}
+.detail dl{margin:0;display:grid;grid-template-columns:52px 1fr;gap:3px 8px}.detail dt{color:var(--ink-3);font-size:12px}.detail dd{margin:0}
+.detail .sid{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:var(--bg);padding:0 6px;border-radius:4px}
+.pending{color:var(--warn);font-size:12px}
+</style>
+</head>
+<body>
+<div class="topbar"><b>AgedCareProvider</b><span>谁在干什么</span><span>业务</span><span>故事</span><span class="on">概念</span><span>聚合设计</span><span>模块</span><span>切片</span><span>计划</span><span>模型图</span><span>原型LOCAL ↗</span><span>原型LIVE ↗</span></div>
+<div class="wrap">
+  <aside>
+    <h3>概念</h3>
+    <div class="muted">业务里的一个概念一张：它的定义、用大白话说它是什么、它跟别的东西什么关系。静态的。怎么一步步发生的在「故事」。</div>
+    <ul id="list"></ul>
+  </aside>
+  <main id="main"></main>
+</div>
+<div class="detail" id="detail" hidden></div>
+
+<script>
+// ---------- 小样数据：参与者。真做时是 business/概念/01-参与者.json，业务分析写 ----------
+const CARDS = {}
+CARDS['参与者'] = {
+  title: '参与者',
+  definition: '评估批准了居家支持计划、跟一家注册服务方签了服务协议、正在接受服务的老人。',
+  definitionSource: '手册 v4.4 §3 Participant；申报格式叫 care recipient，注册服务方平台叫 Participant，协议里是 you，说的都是这一个人',
+  explain: '就是领政府居家养老的钱、由一家服务方照顾着的那位老人。钱不发到她手里：政府把钱开在她名下、替她保管，服务方做一次服务就从她名下扣一次，她自己只出一份共付。评估批了什么、她跟哪家签了协议、她的共付比例是多少，这几件事定下来，后面每一笔钱怎么花、怎么报都照着来。',
+  nodes: [
+    { id: 'notice', title: '决定通知书', sub: '评估代表寄来', kind: 'paper', side: 'left', source: '§6.6 行 562–568' },
+    { id: 'plan', title: '支持计划', sub: '评估代表给的', kind: 'paper', side: 'left', source: '§6.5 行 549–556' },
+    { id: 'sa', title: 'Services Australia', kind: 'party', side: 'left' },
+    { id: 'rp', title: '注册服务方', sub: '派照护伙伴', kind: 'party', side: 'left' },
+    { id: 'doh', title: '卫生部', kind: 'party', side: 'left' },
+    { id: 'pt', title: '参与者', kind: 'self', role: true,
+      facts: [
+        { name: 'My Aged Care 编号', text: '政府那边认她的号；每一行申报都填它' },
+        { name: '分级与路径', text: '定她有哪几种基金、每种多大' },
+        { name: '允许的服务类型', text: '她名下所有基金只能买这些' },
+        { name: '共付比例', text: '每一行服务她出多少、政府补多少' },
+        { name: '在哪一段', text: '待评估 → 未签约 → 已签约 / 待签约 → 已到位 → 在册 → 已退出' },
+      ] },
+    { id: 'fund', title: '她名下的基金', sub: '一笔一个账户', kind: 'derived', side: 'right' },
+    { id: 'cp', title: '照护计划与预算', sub: '照护伙伴替她排', kind: 'derived', side: 'right' },
+    { id: 'claim', title: '申报行、月结单', sub: '一人一份', kind: 'derived', side: 'right' },
+  ],
+  edges: [
+    { id: '1', from: 'notice', to: 'pt', kind: 'rel', label: '写着她批了哪一级、哪条路径',
+      text: '通知书写她批了哪一级持续服务、有没有辅助技术与家居改造的档位、有没有复健或临终路径；级别一定，她每年能用多少钱就定了。',
+      source: '§6.6 行 563–568', traces: ['R-522', 'R-524'] },
+    { id: '2', from: 'plan', to: 'pt', kind: 'rel', label: '批了她能用的服务类型',
+      text: '支持计划写她批了哪些服务类型，是她能用什么的上限；从居家护理包转来、没重评的，清单上任何服务都能用。',
+      source: '§6.5 行 549–556；§10.2.1 行 1943–1944；裁定第四批第 2 条', traces: ['R-048'] },
+    { id: '3', from: 'sa', to: 'pt', kind: 'rel', label: '评她的共付比例，替她保管钱',
+      text: '按她的收入资产评定，按服务类别分三档，没报收入的按最高；钱开在她名下、由 Services Australia 保管，她自己不拿钱。',
+      source: '§9.4 行 1447–1454；§9.2 行 1290' },
+    { id: '4', from: 'rp', to: 'pt', kind: 'rel', label: '跟她签协议、报入场、派照护伙伴',
+      text: '签了协议、报了入场通知，服务和申报才能开始，这一季的钱从入场那天起算；照护伙伴替她做照护计划、预算、护理管理。',
+      story: '02-签协议与分到资金 #2', source: '§7.1 行 676；§8.5 行 992', traces: ['R-525', 'R-521'] },
+    { id: '5', from: 'doh', to: 'pt', kind: 'rel', label: '分资金给她',
+      text: '排队排到了，卫生部来信说她分到了资金，六成的过渡期资金或全额；分到之后 56 天内要开始服务，申请了延期的 84 天。',
+      story: '02-签协议与分到资金 #4', source: '§6.8.1 行 597–624；§6.9 行 625–626', traces: ['R-516', 'R-517'] },
+    { id: '6', from: 'pt', to: 'fund', kind: 'rel', label: '名下有几笔，通知书定的',
+      text: '持续服务按分级每季一笔；批了辅助技术、家居改造、复健、临终的各多一笔；每笔一个账户，只能买她批了的服务类型。',
+      source: '§9.2 行 1290；聚焦《基金》第一步' },
+    { id: '7', from: 'pt', to: 'cp', kind: 'rel', label: '照护伙伴替她排',
+      text: '照护计划写她要什么服务、多久一次；预算把她这一季的钱一项一项排到服务上。',
+      source: '§8.5 行 992', traces: ['R-436'] },
+    { id: '8', from: 'pt', to: 'claim', kind: 'rel', label: '每一行写她的编号',
+      text: '注册服务方每一行申报都填她的 My Aged Care 编号、从她名下扣；月结单一人一份。',
+      source: '申报格式 v1.14 第 4 节第 9 项（行 725–726）；§17.2 行 3686' },
+  ],
+}
+CARDS['服务'] = {
+  title: '服务',
+  definition: '服务清单第四层的一行：政府的钱能买的一件具体的活或东西，每项有编号（SERV-xxxx）、名字、属于哪个服务类型。',
+  definitionSource: '手册 v4.4 §10.2 行 1814–1816；eKit 叫 Service / Business Service ID，发票上叫 Item ID，申报格式叫 Service Identifier',
+  explain: '就是清洁、园艺、送餐、个人照护、注册护士上门这些能用政府的钱买的一件件事。排预算一行一项、做一次记一条、开票和申报一行一项、月结单一行一项，写的都是它的编号，政府按这一行从老人的基金里扣。每一项身上带三样管后面的事：共付类别（老人出多少、政府补多少）、单位类型（按小时还是按趟、按餐数）、按不按物品申报（报的时候要不要再写是哪一件东西）。价不写在清单上，服务方自己定。',
+  nodes: [
+    { id: 'sa', title: 'Services Australia', sub: 'eKit 参考数据', kind: 'party', side: 'left' },
+    { id: 'type', title: '服务类型', sub: '清单第三层，评估批到这一层', kind: 'fixed', side: 'left', source: '§6.5 行 549–556；§10.2 行 1816' },
+    { id: 'pv', title: '服务方', sub: '自己定价', kind: 'party', side: 'left' },
+    { id: 's', title: '服务', kind: 'self',
+      facts: [
+        { name: '编号与名字', text: 'SERV-0020 Assistance with self-care and activities of daily living；服务记录、预算行、发票 Item ID、申报行都写它' },
+        { name: '所属服务类型', text: 'SERT-0008 Personal care；老人允许的服务类型里有没有它的类型' },
+        { name: '共付类别', text: '临床支持、独立、日常生活三种之一；定老人出多少、政府补多少。2026-10-01 起个人照护三项从独立挪进临床支持' },
+        { name: '单位类型', text: '小时、趟、餐、件、账单、券；小时按 15 分钟一档写成小数' },
+        { name: '按不按物品申报', text: '五项居家支持（家居维修开支、个人事务开支、间接交通、护理耗材、营养品）和辅助技术、家居改造那几项，报的时候要再写是哪一件物品' },
+        { name: '生效起止、来自哪一版', text: '我们的做法：政府改了，旧行标截止日、加一行新的，永不删；拿服务日期查那天有效的那一行（裁定第六批第 3 条）' },
+      ] },
+    { id: 'bg', title: '预算的一行', kind: 'derived', side: 'right' },
+    { id: 'sr', title: '服务记录', sub: '一次一条', kind: 'derived', side: 'right' },
+    { id: 'cl', title: '发票行、申报行、月结单行', sub: '一次一行', kind: 'derived', side: 'right' },
+    { id: 'it', title: '物品', sub: 'HSITM、辅助技术与家居改造物品', kind: 'fixed', side: 'right' },
+  ],
+  edges: [
+    { id: '1', from: 'sa', to: 's', kind: 'rel', label: '清单上一项一行、带编号',
+      text: 'Services Australia 发的 eKit 参考数据里有整张服务清单，一项服务占几行：名字、编号、共付类别，底下几行是它的属性。清单会变，位置不动。',
+      source: 'eKit v1.3 表头行 129；§10.1 行 1813、脚注行 1941' },
+    { id: '2', from: 'type', to: 's', kind: 'rel', label: '它底下分成几项',
+      text: '一个服务类型底下分成几项服务（个人照护底下有 SERV-0020 起居与日常活动协助等三项）。评估批的是类型不是具体的服务，所以类型底下选哪一项、做多少，是老人和照护伙伴定的。',
+      source: '§6.5 行 549–556；§10.2 行 1816', traces: ['R-048'] },
+    { id: '3', from: 'pv', to: 's', kind: 'rel', label: '给每一项定价',
+      text: '价不在清单上，服务方自己定、写进价目表；协议上一项一项服务各有价。',
+      source: '聚焦《服务价格》；§7.2.1.1 行 701' },
+    { id: '4', from: 's', to: 'bg', kind: 'rel', label: '排预算一行一项',
+      text: '照护伙伴替老人排这一季的预算，一行一个服务：多久一次、一次几个单位、合起来多少钱。',
+      source: '聚焦《照护计划与预算》', traces: ['R-303'] },
+    { id: '5', from: 's', to: 'sr', kind: 'rel', label: '做一次记一条，写它的编号',
+      text: '一次服务发生记一条服务记录：哪位老人、哪一天、哪项服务、几个单位。拿服务日期查那天有效的那一行，它带来共付类别、单位类型、按不按物品申报。',
+      source: '聚焦《服务记录》第一步；§16.3 行 3330' },
+    { id: '6', from: 's', to: 'cl', kind: 'rel', label: '一次一行，按它扣基金',
+      text: '服务方开票一行、注册服务方申报一行、月结单明细一行，写的都是它；Services Australia 照这一行从老人的基金里扣全价、把补贴付给注册服务方。',
+      source: '§16.5 行 3542–3544；§17.2 行 3686；申报格式 v1.14 行 206' },
+    { id: '7', from: 's', to: 'it', kind: 'rel', label: '按物品申报的，再写是哪一件',
+      text: '标了「claimed at per item level」的服务，录服务记录、申报时要再选物品，单位在物品上：老人辛每月一张 $100 的 Cabcharge 记 SERV-0017 间接交通，物品是 HSITM-011 的士券。',
+      source: 'eKit 行 168、239、482' },
+  ],
+}
+CARDS['服务类型'] = {
+  title: '服务类型',
+  definition: '服务清单第三层的一行：一个服务组底下分成的几类活，每个有编号（SERT-xxxx）、名字、属于哪个服务组；评估批到的就是这一层。',
+  definitionSource: '手册 v4.4 §6.5 行 549–556；§10.2 行 1814–1818；eKit 叫 Service Type / Business Service Type ID',
+  explain: '就是家务协助、餐食、交通、个人照护、护理这样的一类活。老人能不能用某一类服务，看支持计划上批没批它：批的是类型，不是具体哪一项，类型底下选哪一项、做多少，是老人和照护伙伴定的；从居家护理包转来、没重评的，哪一类都能用。服务方那边也卡在这一层，只能做自己注册类别里的那几类。',
+  nodes: [
+    { id: 'sa', title: 'Services Australia', sub: 'eKit 参考数据', kind: 'party', side: 'left' },
+    { id: 'grp', title: '服务组', sub: '清单第二层，三个', kind: 'fixed', side: 'left', source: 'eKit 行 130–133' },
+    { id: 'as', title: '评估代表', sub: '写支持计划', kind: 'party', side: 'left' },
+    { id: 't', title: '服务类型', kind: 'self',
+      facts: [
+        { name: '编号与名字', text: 'SERT-0008 Personal care；发票 Description 头一段写它' },
+        { name: '所属服务组', text: 'SERG-0001 居家支持组十三个，辅助技术组一个（设备与产品），家居改造组一个（家居调整）' },
+        { name: '底下有哪几项服务', text: '个人照护底下三项，SERV-0020 起居与日常活动协助是其中一项' },
+        { name: '生效起止、来自哪一版', text: '我们的做法：只加不改、永不删（裁定第六批第 2、3 条）' },
+      ] },
+    { id: 'svc', title: '服务', sub: '清单第四层', kind: 'fixed', side: 'right' },
+    { id: 'pt', title: '参与者', sub: '允许的服务类型', kind: 'party', side: 'right' },
+    { id: 'pv', title: '服务方', sub: '注册类别', kind: 'party', side: 'right' },
+    { id: 'agr', title: '服务协议', kind: 'paper', side: 'right' },
+  ],
+  edges: [
+    { id: '1', from: 'sa', to: 't', kind: 'rel', label: '清单上一行、带编号',
+      text: 'eKit 参考数据里服务清单的第三层；手册 §10.2 那张表第一列就叫 service type，名字跟 eKit 大体对得上（手册写 Respite，eKit 写 Home or community general respite，SERT-0014）。',
+      source: 'eKit v1.3；§10.2 脚注 8 行 1937' },
+    { id: '2', from: 'grp', to: 't', kind: 'rel', label: '它底下分成几类',
+      text: '三个服务组各自底下分几类：居家支持十三个、辅助技术一个、家居改造一个。',
+      source: 'eKit 行 130–133、448–468' },
+    { id: '3', from: 'as', to: 't', kind: 'rel', label: '支持计划上批给老人的是这一层',
+      text: '评估代表做完评估，支持计划上写的「批了的服务」就是服务类型；批的是类型不是具体的服务。',
+      source: '§6.5 行 549–556', traces: ['R-048'] },
+    { id: '4', from: 't', to: 'svc', kind: 'rel', label: '底下分成几项',
+      text: '一个类型底下几项具体的服务，照护伙伴录服务、排预算时选的是那一层。',
+      source: '§10.2 行 1814–1816' },
+    { id: '5', from: 't', to: 'pt', kind: 'rel', label: '批了的挂在她身上，她的基金只能买这些',
+      text: '批了的服务类型挂在老人身上，她名下所有基金都受它限制，不挂在某一笔基金上；转来没重评的是全部。',
+      source: '§10.2 行 1816；§10.2.1 行 1944；裁定第四批第 2 条' },
+    { id: '6', from: 't', to: 'pv', kind: 'rel', label: '服务方只能做自己注册类别里的',
+      text: '服务方注册时登记了能做哪几类，清单上不在它注册类别里的类型做不了。',
+      source: '§10.2 行 1818' },
+    { id: '7', from: 't', to: 'agr', kind: 'rel', label: '协议上每项服务写它属于哪个组、哪个类型',
+      text: '服务协议列每一项服务，要写它的名字、所属的服务组和类型、是不是第三方做。',
+      source: '§7.2.1.1 行 701' },
+  ],
+}
+const LIST = ['参与者', '照护伙伴', '服务组', '服务类型', '服务', '文件', '物品', '价目表', '谈定价', '基金', '基金账户类型', '基金账户', '服务记录', '证据', '预算', '照护记录', '付款对账单', '月结单', '共付比例', '照护计划']
+
+// ---------- 画 ----------
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const W = 170, H = 48, SELF_W = 270, GAPY = 26, PADX = 24, PADY = 36, COLGAP = 190
+let pinned = null, cur = '参与者'
+
+function renderList() {
+  document.getElementById('list').innerHTML = LIST.map((t, i) => `<li data-t="${esc(t)}" class="${t === cur ? 'on' : ''}${CARDS[t] ? '' : ' none'}"><span>${String(i + 1).padStart(2, '0')} ${esc(t)}</span><span class="badge 未定">${CARDS[t] ? '未定' : '小样没写'}</span></li>`).join('')
+  document.getElementById('list').onclick = (e) => {
+    const li = e.target.closest('li'); if (!li || !CARDS[li.dataset.t]) return
+    cur = li.dataset.t; pinned = null; document.getElementById('detail').hidden = true
+    renderList(); renderMain()
+  }
+}
+
+function renderMain() {
+  const d = CARDS[cur]
+  document.getElementById('main').innerHTML = `<header>
+      <h1>${esc(d.title)} <span class="badge 未定">未定</span><button class="act">定下</button><span class="gate">还没定下 · 业务分析 10-29 写</span></h1>
+      <div class="def"><span class="k">定义</span>${esc(d.definition)}<span class="src">${esc(d.definitionSource)}</span></div>
+      <div class="exp">${esc(d.explain)}</div>
+    </header>
+    <div style="height:12px"></div>
+    <div class="diagram"><svg id="svg"></svg></div>
+    <div class="legend">
+      <span><span class="sw round" style="background:var(--role);border-color:var(--role-line)"></span>角色（圆角）</span>
+      <span><span class="sw" style="background:var(--data);border-color:var(--data-line)"></span>数据（偏直角）</span>
+    </div>`
+  bindSvg()
+  draw()
+}
+
+function layout(d) {
+  const left = d.nodes.filter((x) => x.side === 'left'), right = d.nodes.filter((x) => x.side === 'right'), self = d.nodes.find((x) => x.kind === 'self')
+  const selfH = 40 + 18 * (self.facts?.length ?? 0) + 10
+  const tall = Math.max(left.length * (H + GAPY) - GAPY, right.length * (H + GAPY) - GAPY, selfH)
+  const pos = {}
+  const stack = (list, x) => { const h = list.length * (H + GAPY) - GAPY, y0 = PADY + (tall - h) / 2; list.forEach((n, r) => { pos[n.id] = { x, y: y0 + r * (H + GAPY), w: W, h: H } }) }
+  stack(left, PADX)
+  pos[self.id] = { x: PADX + W + COLGAP, y: PADY + (tall - selfH) / 2, w: SELF_W, h: selfH }
+  stack(right, PADX + W + COLGAP + SELF_W + COLGAP)
+  return { pos, width: PADX * 2 + W * 2 + COLGAP * 2 + SELF_W, height: PADY * 2 + tall }
+}
+
+
+function draw() {
+  const d = CARDS[cur], { pos, width, height } = layout(d)
+  let g = `<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink-2)"/></marker>
+</defs>`
+  // 同一个来路分出几条线、或几条线汇到它身上时，终点在它身上错开，字各在各的线上
+  const inTo = {}, outFrom = {}
+  for (const e of d.edges) { (inTo[e.to] ??= []).push(e); (outFrom[e.from] ??= []).push(e) }
+  const slot = (list, e, p) => { const i = list.indexOf(e), n = list.length; return p.y + p.h * (i + 1) / (n + 1) }
+  for (const e of d.edges) {
+    const a = pos[e.from], b = pos[e.to]
+    const y1 = outFrom[e.from].length > 1 ? slot(outFrom[e.from], e, a) : a.y + a.h / 2
+    const y2 = inTo[e.to].length > 1 ? slot(inTo[e.to], e, b) : b.y + b.h / 2
+    const x1 = a.x + a.w, x2 = b.x - 2, dx = (x2 - x1) * 0.45
+    const path = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`
+    const t = 0.5, mt = 0.5
+    const lx = mt ** 3 * x1 + 3 * mt * mt * t * (x1 + dx) + 3 * mt * t * t * (x2 - dx) + t ** 3 * x2
+    const ly = mt ** 3 * y1 + 3 * mt * mt * t * y1 + 3 * mt * t * t * y2 + t ** 3 * y2
+    g += `<g class="ed ${esc(e.kind)}" data-e="${esc(e.id)}"><path class="vis" d="${path}" marker-end="url(#a)"/><path class="hit" d="${path}"/>
+      <text class="lab" x="${lx}" y="${ly - 5}" text-anchor="middle">${esc(e.label)}</text></g>`
+  }
+  for (const n of d.nodes) {
+    const p = pos[n.id]
+    let inner
+    if (n.kind === 'self') {
+      inner = `<text x="${p.x + p.w / 2}" y="${p.y + 24}" text-anchor="middle" style="font-size:15px;font-weight:600">${esc(n.title)}</text>`
+        + n.facts.map((f, i) => `<text class="fact" x="${p.x + 14}" y="${p.y + 46 + i * 18}">· ${esc(f.name)}</text>`).join('')
+    } else {
+      inner = `<text x="${p.x + p.w / 2}" y="${p.y + (n.sub ? 20 : 29)}" text-anchor="middle">${esc(n.title)}</text>${n.sub ? `<text class="sub" x="${p.x + p.w / 2}" y="${p.y + 37}" text-anchor="middle">${esc(n.sub)}</text>` : ''}`
+    }
+    g += `<g class="nd ${esc(n.kind)}${n.kind === 'self' ? (n.role ? ' role' : ' data') : ''}" data-n="${esc(n.id)}"><rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="${n.kind === 'party' || (n.kind === 'self' && n.role) ? 20 : 3}"/>${inner}</g>`
+  }
+  const svg = document.getElementById('svg')
+  svg.setAttribute('width', width); svg.setAttribute('height', height); svg.innerHTML = g
+}
+
+// ---------- 解释浮在旁边 ----------
+const KIND = { paper: '原料里的纸', party: '业务里的一方', self: '这样东西', derived: '它牵出的', fixed: '政府定死的清单' }
+const EKIND = { rel: '关系' }
+function fill(key) {
+  const d = CARDS[cur], pop = document.getElementById('detail')
+  const row = (k, v) => v ? `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>` : ''
+  if (key.n) {
+    const n = d.nodes.find((x) => x.id === key.n)
+    pop.innerHTML = `<h4>${esc(n.title)}</h4><div class="w">${KIND[n.kind]}${n.sub ? ' · ' + esc(n.sub) : ''}</div><dl>${(n.facts ?? []).map((f) => row(f.name, f.text)).join('')}${row('出处', n.source)}</dl>`
+  } else {
+    const e = d.edges.find((x) => x.id === key.e), name = (id) => d.nodes.find((x) => x.id === id)?.title ?? id
+    pop.innerHTML = `<h4>${esc(name(e.from))} → ${esc(name(e.to))}</h4><div class="w">${EKIND[e.kind]} · ${esc(e.label)}</div>
+      <dl>${row('说的是', e.text)}${row('故事', e.story)}${row('出处', e.source)}${row('业务', (e.traces ?? []).join('、'))}<dt>编号</dt><dd><span class="sid">${esc(d.title)} #${esc(e.id)}</span></dd></dl>`
+  }
+}
+function place(ev) {
+  const pop = document.getElementById('detail'); pop.hidden = false
+  const w = pop.offsetWidth, ht = pop.offsetHeight
+  let x = ev.clientX + 16; if (x + w > innerWidth - 8) x = ev.clientX - w - 16
+  pop.style.left = Math.max(8, x) + 'px'; pop.style.top = Math.max(8, Math.min(ev.clientY - 20, innerHeight - ht - 8)) + 'px'
+}
+const keyOf = (t) => { const n = t.closest('.nd'), e = t.closest('.ed'); return n ? { n: n.dataset.n } : e ? { e: e.dataset.e } : null }
+function select(k, ev) {
+  const id = JSON.stringify(k), pop = document.getElementById('detail')
+  document.querySelectorAll('.on-sel').forEach((n) => n.classList.remove('on-sel'))
+  if (pinned === id) { pinned = null; pop.hidden = true; return }
+  pinned = id; fill(k); place(ev)
+  document.querySelector(k.e ? `.ed[data-e="${k.e}"]` : `.nd[data-n="${k.n}"]`)?.classList.add('on-sel')
+}
+function bindSvg() {
+  const svg = document.getElementById('svg'), pop = () => document.getElementById('detail')
+  svg.addEventListener('mousemove', (ev) => { if (pinned) return; const k = keyOf(ev.target); if (!k) { pop().hidden = true; return } fill(k); place(ev) })
+  svg.addEventListener('mouseleave', () => { if (!pinned) pop().hidden = true })
+  svg.addEventListener('click', (ev) => { const k = keyOf(ev.target); if (!k) return; ev.stopPropagation(); select(k, ev) })
+}
+document.addEventListener('click', (ev) => {
+  if (pinned && !ev.target.closest('.detail')) { pinned = null; document.getElementById('detail').hidden = true; document.querySelectorAll('.on-sel').forEach((n) => n.classList.remove('on-sel')) }
+})
+renderList(); renderMain()
+</script>
+</body>
+</html>

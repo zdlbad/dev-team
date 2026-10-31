@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:concept",
+  "title": "business/概念/<nn>-<概念>.json — 概念：业务里的一个概念，它的定义、大白话的解释、它跟别的东西什么关系",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "definition", "explain", "nodes", "edges", "questions"],
+  "properties": {
+    "title": { "type": "string", "minLength": 1, "description": "概念名；线的编号写成「<概念名> #<线>」" },
+    "definition": { "type": "string", "minLength": 1, "description": "照手册、法规的说法，一句" },
+    "definitionSource": { "type": "string", "minLength": 1, "description": "§ 与行号；别的文件上叫什么也写这儿" },
+    "explain": { "type": "string", "minLength": 1, "description": "大白话把定义讲明白，两三句" },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "contains": { "type": "object", "properties": { "side": { "const": "center" } }, "required": ["side"] },
+      "minContains": 1,
+      "maxContains": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "kind", "side"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "sub": { "type": "string", "minLength": 1, "description": "框里标题底下的一行小字" },
+          "kind": { "enum": ["role", "data"], "description": "role 角色，画圆角淡蓝 / data 数据，画偏直角淡绿；这次解释的概念也照它自己是哪种" },
+          "side": { "enum": ["left", "center", "right"], "description": "center 只有一个，就是这张讲的概念" },
+          "facts": {
+            "type": "array",
+            "description": "中间那个框里列的几条要紧的事实，指着时浮出解释",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "text"],
+              "properties": { "name": { "type": "string", "minLength": 1 }, "text": { "type": "string", "minLength": 1 } }
+            }
+          },
+          "source": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "from", "to", "label"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[0-9]+[a-z]?$" },
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "label": { "type": "string", "minLength": 1, "description": "线上写的就是关系：「批了她能用的服务类型」" },
+          "by": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "做这件事的角色，全局图上贴在这条线上（两头都是数据的线才用得上）" },
+          "tree": { "type": "boolean", "description": "上下层级的关系（服务组 → 服务类型 → 服务），全局图上画成树" },
+          "text": { "type": "string", "minLength": 1, "description": "指着时浮出来的一两句补充" },
+          "story": { "type": "string", "pattern": "^.+ #[0-9]+[a-z]?$", "description": "怎么一步步发生的在故事里：「<故事名> #<步骤>」" },
+          "source": { "type": "string", "minLength": 1 },
+          "traces": { "$ref": "urn:dev-team:common#/$defs/traces" }
+        }
+      }
+    },
+    "confirmed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "stamp"],
+      "properties": { "at": { "type": "string", "minLength": 1 }, "stamp": { "type": "string", "pattern": "^[0-9a-f]{12,}$" } }
+    },
+    "questions": { "$ref": "urn:dev-team:common#/$defs/questions" }
+  }
+}

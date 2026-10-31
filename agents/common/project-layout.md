@@ -7,25 +7,20 @@
   project.json                有它的目录才算项目目录；codebase 记着代码库在哪，frontend 记着前端工程在哪（可省）
   raw/                        原料，人放进来；只读
   raw/rulings.md              人拍板的事，按批累积（开发指挥写）
-  business/00-framework.md    业务框架：为什么存在、各方各自要什么、核心流程（给人看全貌）
-  business/00-overview.md     全景：这门生意、谁跟谁打交道、钱怎么走（细一层的参考）
-  business/聚焦/<n>-<概念>.md     聚焦：一个业务概念一篇，框架的三节下到它身上（业务分析）
-  business/概念/<nn>-<概念>.md   概念卡的前半张：本质、类比、例子、样子、它的一生（业务分析）
-  business/故事/<nn>-<故事名>.json  故事：一段跨着好几方的事怎么走（形状见 business/stories.md）
-  business/关系/<nn>-<关系名>.json  关系：一份事实怎么推出另一份（形状见 business/stories.md）
+  business/全局图.json          全局图上一层：业务分几块、各块主要做什么、块与块之间主要交流什么（形状见 business/concepts.md「全局图」）
+  business/概念/<nn>-<概念>.json  概念：定义、解释、它跟别的东西什么关系（形状见 business/concepts.md「概念」）
+  business/故事/<nn>-<故事名>.json  主线故事：最主要的几段事怎么走（形状见 business/stories.md）
   business/<主题>/abstraction.md    业务抽象；主题是业务里叫得出名字的东西，不跟模块
   business/<主题>/practice.md       业务落地
   business/<主题>/behavior.md       应用行为
   glossary.json               词汇表
-  导读/                       给人读的原文选读
   aggregate-design/<聚合>.json  聚合设计：属性与生命周期，先于模块（形状见 model/shapes.md）
   aggregate-design/modules.json 模块页上划的模块：哪些聚合圈进哪个模块
   model/                      模型（形状见 model/shapes.md）；模块没划之前都在 model/Unassigned/
-  model/概念/<nn>-<概念>.md      概念卡的细节（模型师）；工具读模型只认 .json，这里的 .md 不进校验
   model-decoded/<版本>/       从代码解码出来的模型；永不手改、随时可删
   slices/<id>.json            切片记录：s-xxx 场景、f-xxx 正式化
   plan/plan.json              计划与进度：几个项目、各分哪几大块、先后；一轮一轮的 sprint 与验收（PM）
-  reports/                    校验与审查报告、现场看板（_scene.json）、模型图上的意见（_model-notes.json）、业务页上的留言（_business-comments.json）
+  reports/                    校验与审查报告、现场看板（_scene.json）、模型图上的意见（_model-notes.json）
   journal/<日期>.jsonl        派工与交回的流水，只追加
 ```
 
@@ -40,7 +35,7 @@
 
 | 角色 | 只写 | 不得写 |
 |---|---|---|
-| 业务分析 | `business/`（含故事、关系；它们的 `confirmed` 除外，那是人在页面上按的）、`glossary.json`、`导读/`；`reports/_business-comments.json` 里的答复（经 `tools/comments.js`） | 聚合设计、模型、代码 |
+| 业务分析 | `business/`（含故事、概念、全局图；故事与概念的 `confirmed` 除外，那是人在页面上按的）、`glossary.json` | 聚合设计、模型、代码 |
 | 模型师 | `aggregate-design/`（`confirmed` 除外，那是人在页面上按的）、`model/`；`reports/_model-notes.json` 里的 `handled` | 业务描述、词汇表、代码 |
 | 编码 | 代码库（`src/`、`tests/`、`contracts/`）、前端工程 | 模型、业务描述、词汇表 |
 | 审查 | 校验报告里判断的 `verdict`、`confidence`、`reason`；`reports/pre-pr-<切片>.md` | 一切工件 |

@@ -69,7 +69,7 @@ function pick(ref) {
   const text = parseFrontmatter(fs.readFileSync(file, 'utf8')).body.trimEnd()
   if (!anchor) return { rel, text }
   const lines = text.split('\n')
-  // 代码块里的「## 本质」是示例，不是小节标题
+  // 代码块里的「## …」是示例，不是小节标题
   let fence = false
   const heading = lines.map((l) => { if (/^\s*(```|~~~)/.test(l)) { fence = !fence; return 0 } return !fence && /^(#+)\s/.test(l) ? /^(#+)/.exec(l)[1].length : 0 })
   const i = lines.findIndex((l, k) => heading[k] >= 2 && l.includes(anchor))

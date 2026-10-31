@@ -4,7 +4,7 @@
  *
  *   node tools/workbench.js <项目> [--code <代码库>] [--port 4870] [--no-open]
  *
- * 页签：谁在干什么（scene，群聊的样子；等他答的问题、等他拍板的关卡列成待办；日志从这一页进）· 业务 · 故事、关系、聚合设计与模块（ui/，跟人交流的页面）· 切片 · 计划（PM 写的 plan/plan.json：上半是各项目的大块，下半是 sprint 进度）· 模型图（model-page）· 草稿原型（proto）。
+ * 页签：谁在干什么（scene，群聊的样子；等他答的问题、等他拍板的关卡列成待办；日志从这一页进）· 业务 · 故事、概念、聚合设计与模块（ui/，跟人交流的页面）· 切片 · 计划（PM 写的 plan/plan.json：上半是各项目的大块，下半是 sprint 进度）· 模型图（model-page）· 草稿原型（proto）。
  * 子服务各挑一个空闲口、只听本机、不自己弹浏览器，全从这一个口代理出去（/p/<页面>/…，websocket 也转）。退出时一并关掉。
  * 草稿原型不套进页签：点「原型LOCAL」在新标签页打开（/proto-open 转过去）。project.json 写了 liveUrl（上线的前端网址）时，
  * 再多一个「原型LIVE」，点了在新标签页打开那个网址。有前端工程时 proto.js 起后端与前端开发服务，
@@ -125,9 +125,9 @@ function todo() {
   const qs = (sc.questions ?? []).filter((q) => !q.answeredAt)
   const gates = allSlices().map((s) => ({ s, g: gateOf(s) })).filter((x) => x.g)
     .map((x) => ({ slice: x.s.id, title: x.s.title ?? '', kind: x.g.kind, ask: x.g.ask, button: x.g.button }))
-  // 故事、关系、聚合设计没定下的，各算一件，在它们自己的页上按
+  // 故事、概念、聚合设计没定下的，各算一件，在它们自己的页上按
   const d = designState(root)
-  for (const [kind, names, page] of [['stories', d.stories, '故事'], ['relations', d.relations, '关系'], ['agg', d.designs, '聚合设计']]) {
+  for (const [kind, names, page] of [['stories', d.stories, '业务 › 主线故事'], ['concepts', d.concepts, '业务 › 概念'], ['agg', d.designs, '聚合设计']]) {
     if (names.length) gates.push({ slice: null, title: page, kind, ask: '在「' + page + '」页看 ' + nameList(names) + '，对了按「定下」', button: '定下' })
   }
   return { n: qs.length + gates.length, questions: qs.length, gates }
@@ -423,7 +423,7 @@ ${byRole.size ? `<table class="jsum"><tr><th>角色</th><th>派了几趟</th><th
   return back + sum + nav + `<div class="journal">${html}</div>`
 }
 
-const TABS = [['scene', '谁在干什么', '/p/scene/'], ['business', '业务', '/business'], ['stories', '故事', '/stories'], ['relations', '关系', '/relations'], ['agg', '聚合设计', '/agg'], ['modules', '模块', '/modules'], ['slices', '切片', '/slices'], ['plan', '计划', '/plan'], ['model', '模型图', '/p/model/'], ['proto', '原型LOCAL ↗', '/proto-open'], ...(project.liveUrl ? [['live', '原型LIVE ↗', project.liveUrl]] : [])]
+const TABS = [['scene', '谁在干什么', '/p/scene/'], ['business', '业务', '/business'], ['agg', '聚合设计', '/agg'], ['modules', '模块', '/modules'], ['slices', '切片', '/slices'], ['plan', '计划', '/plan'], ['model', '模型图', '/p/model/'], ['proto', '原型LOCAL ↗', '/proto-open'], ...(project.liveUrl ? [['live', '原型LIVE ↗', project.liveUrl]] : [])]
 /** 这几个页签不套进来，点了在新标签页打开 */
 const OUTSIDE = ['proto', 'live']
 const shell = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>${esc(project.name ?? '工作台')}</title><style>
@@ -517,8 +517,9 @@ const server = http.createServer((req, res) => {
   if (url === '/slices') return html(wrap(slicesPage()))
   if (url === '/plan') return html(wrap(planPage()))
   if (url === '/plan/stamp') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); return res.end(JSON.stringify({ t: planStamp() })) }
-  if (url === '/business') return html(business.page(root, q.doc))
-  if (url.startsWith('/business/comments') && business.handle(root, req, res, url)) return
+  // 业务页签：全局图、主线故事、概念、词汇四个子页；前三样是 ui/ 的页，词汇在 business-page 里画
+  if (url === '/business') return html(business.page(q.sub))
+  if (url === '/business/glossary') return html(business.glossary(root))
   if (url === '/business/stamp') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); return res.end(JSON.stringify({ t: business.stamp(root) })) }
   if (url === '/journal') return html(wrap(journalPage(q.date)))
   if (req.method === 'POST' && url === '/slice/scene-ok') return runSlice(res, ['advance', root, q.slice, 'scene', 'done', '他在页面上按的'])

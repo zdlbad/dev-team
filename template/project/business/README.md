@@ -2,8 +2,7 @@
 
 `raw/` 是原料；业务按场景里问到的逐条立成语句，分层与种类见 dev-team 的 `agents/business/layers.md`。
 
-- `00-overview.md`：粗读的产物，这门生意、谁跟谁打交道、钱的路径；给人读，不进解析
-- `故事/`、`关系/`：一段事怎么走、一份事实怎么推出另一份（`agents/business/stories.md`），人在工作台上定下
+- `全局图.json`、`故事/`、`概念/`：给人建立业务理解的三样——业务分几块（`agents/business/concepts.md`「全局图」）、最主要的几段事怎么走（`agents/business/stories.md`）、一个概念是什么和跟别的东西什么关系（`agents/business/concepts.md`「概念」），故事、概念人在工作台上定下；不写别的文章
 - `<主题>/abstraction.md`：第一层，手册层面的抽象业务（换一家公司照样成立）
 - `<主题>/practice.md`：第二层，这家公司的做法，含五问问出来的情形
 

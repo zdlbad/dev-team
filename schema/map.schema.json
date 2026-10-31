@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dev-team:map",
+  "title": "business/全局图.json — 全局图的上一层：业务分几块、各块主要做什么、块与块之间主要交流什么；下一层从 business/概念/*.json 合并",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["topics", "edges"],
+  "properties": {
+    "topics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "does", "x", "y", "nodes"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^g[0-9]+$" },
+          "title": { "type": "string", "minLength": 1 },
+          "does": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "type": "string", "minLength": 1 }, "description": "这一块主要发生的业务，一两条" },
+          "x": { "type": "integer", "minimum": 0, "description": "格子位置，从左到右是业务发生的先后" },
+          "y": { "type": "integer", "minimum": 0, "description": "格子位置，从上到下" },
+          "nodes": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "这一块里的数据，写概念里节点的 title；次序就是块里从上到下的次序" }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "label"],
+        "properties": {
+          "from": { "type": "string", "pattern": "^g[0-9]+$" },
+          "to": { "type": "string", "pattern": "^g[0-9]+$" },
+          "label": { "type": "string", "minLength": 1, "description": "两块之间主要的业务交流，人写的；几句用「；」隔开" }
+        }
+      }
+    },
+    "nudge": {
+      "type": "object",
+      "additionalProperties": { "type": "integer" },
+      "description": "某一样数据手挪上下一截让开压在它身上的线（正数往下），键是数据的 title"
+    }
+  }
+}

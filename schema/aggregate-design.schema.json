@@ -183,7 +183,7 @@
               "refs": {
                 "type": "array",
                 "uniqueItems": true,
-                "description": "出处：故事的步骤或关系的线，写成「<故事名或关系名> #<编号>」",
+                "description": "出处：故事的步骤或概念的线，写成「<故事名或概念名> #<编号>」",
                 "items": {
                   "type": "string",
                   "pattern": "^.+ #[0-9]+[a-z]?$"
@@ -301,7 +301,7 @@
               "refs": {
                 "type": "array",
                 "uniqueItems": true,
-                "description": "出处：故事的步骤或关系的线，写成「<故事名或关系名> #<编号>」",
+                "description": "出处：故事的步骤或概念的线，写成「<故事名或概念名> #<编号>」",
                 "items": {
                   "type": "string",
                   "pattern": "^.+ #[0-9]+[a-z]?$"

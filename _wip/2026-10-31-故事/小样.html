@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>故事小样</title>
+<style>
+:root{--bg:#f6f7f8;--card:#fff;--ink:#1f2328;--ink-2:#57606a;--ink-3:#8c959f;--line:#d0d7de;
+  --role-bg:#dbeafe;--role-bd:#60a5fa;--data-bg:#dcfce7;--data-bd:#4ade80;--accent:#1b5f8c;--warn:#b35c00}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+.topbar{display:flex;align-items:center;gap:6px;padding:6px 12px;background:#24292f;color:#fff;font-size:13px}
+.topbar span{opacity:.5;margin-left:8px}
+.wrap{display:flex;min-height:calc(100vh - 36px)}
+aside{width:220px;flex:none;border-right:1px solid var(--line);background:var(--card);padding:14px 0}
+aside h3{margin:0 16px 6px;font-size:13px;color:var(--ink-2)}
+aside .muted{margin:0 16px 10px;font-size:12px;color:var(--ink-3)}
+aside a{display:flex;justify-content:space-between;align-items:center;padding:6px 16px;color:var(--ink);text-decoration:none}
+aside a.on{background:#eef2f6;font-weight:600}
+main{flex:1;padding:20px 28px 40px;min-width:0}
+h1{font-size:22px;margin:0;display:flex;align-items:center;gap:10px}
+.badge{font-size:11px;padding:1px 7px;border-radius:9px;background:#fff3cd;color:#7a5200;border:1px solid #f0d58c;font-weight:400}
+.act{font-size:12px;padding:2px 10px;border:1px solid var(--accent);color:var(--accent);background:#fff;border-radius:4px;cursor:pointer}
+p.sum{margin:8px 0 14px;color:var(--ink-2);max-width:900px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px 14px;overflow:auto}
+svg{display:block}
+svg text{font-size:13px;fill:var(--ink)}
+.head rect{fill:var(--role-bg);stroke:var(--role-bd);stroke-width:1.2}
+.head text{font-weight:600;text-anchor:middle}
+.head text.sub{font-weight:400;font-size:11px;fill:var(--ink-2)}
+.life{stroke:var(--line);stroke-width:1;stroke-dasharray:4 4}
+.msg path{fill:none;stroke:var(--ink-2);stroke-width:1.4}
+.msg text{text-anchor:middle}
+.msg text.date{font-size:11px;fill:var(--ink-3)}
+.self rect{fill:#fff;stroke:var(--ink-3);stroke-width:1;rx:4}
+.data rect{fill:var(--data-bg);stroke:var(--data-bd);stroke-width:1;rx:2}
+.data text{font-size:11px;text-anchor:middle}
+.state rect{fill:none;stroke:var(--accent);stroke-width:1;stroke-dasharray:3 3;rx:6}
+.state text{fill:var(--accent);font-size:12px;font-weight:600;text-anchor:middle}
+.note rect{fill:#fffdf5;stroke:#e5d9a8;stroke-width:1;rx:3}
+.note text{font-size:12px;fill:var(--ink-2)}
+.note path{fill:none;stroke:var(--ink-3);stroke-width:1;stroke-dasharray:2 3}
+.due text{fill:var(--warn);font-size:11px}
+.legend{display:flex;flex-wrap:wrap;gap:18px;font-size:12px;color:var(--ink-2);margin:10px 0 0}
+.legend .sw{display:inline-block;width:18px;height:12px;border:1px solid;vertical-align:middle;margin-right:5px}
+.pop{position:fixed;background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:10px 12px;font-size:12px;max-width:320px;color:var(--ink-2)}
+.pop b{display:block;color:var(--ink);font-size:13px;margin-bottom:4px}
+.pop[hidden]{display:none}
+</style>
+</head>
+<body>
+<div class="topbar">工作台 <span>谁在干什么 · 业务 · 故事 · 概念 · 聚合设计 · 模块 · …</span></div>
+<div class="wrap">
+  <aside>
+    <h3>主线故事</h3>
+    <div class="muted">只讲这门业务里最主要的几段事，可以跨主题；时间从上往下。</div>
+    <div id="nav"></div>
+  </aside>
+  <main id="main"></main>
+</div>
+<div class="pop" id="pop" hidden></div>
+<script>
+// ---------- 数据（真做时 business/故事/<nn>-<故事名>.json，业务分析写） ----------
+const STORIES = [
+{ file: '01-老人注册', title: '老人注册：从通知书到签协议、建档案',
+  summary: '一位举例的老人从头一次联系到资金到位：她 12/01/2026 头一次联系注册服务方，照护伙伴替她申请评估；02/03 评估批了，她拿到决定通知书和支持计划，进了政府的排队；05/03 把通知书交来，照护伙伴建档；04/05 还在排队就签了服务协议；01/07 卫生部来信分到全额资金，照护伙伴记下，她最晚 26/08 要开始服务。日子都是举的例子。',
+  parties: [
+    { id: 'old', title: '老人', sub: '和她登记的支持人' },
+    { id: 'rp', title: '注册服务方', sub: '照护伙伴替她办' },
+    { id: 'gov', title: '政府', sub: '评估代表、卫生部' } ],
+  states: [
+    { id: 's1', title: '待评估', from: '1', to: '3' },
+    { id: 's2', title: '未签约', from: '4', to: '5' },
+    { id: 's3', title: '已签约', from: '6', to: '7' },
+    { id: 's4', title: '已到位', from: '8', to: '8' } ],
+  steps: [
+    { id: '1', from: 'old', to: 'rp', title: '考虑申请居家养老，头一次联系', date: '12/01/2026', source: '裁定第六十七批第 9 条' },
+    { id: '2', from: 'rp', to: 'gov', title: '替她在 My Aged Care 申请评估', date: '14/01/2026', source: '§6.1 行 506、§6.3 行 513–514' },
+    { id: '3', from: 'gov', to: 'old', title: '评估批了持续服务，发决定通知书和支持计划；她进政府的排队', date: '02/03/2026', data: ['决定通知书', '支持计划'], source: '§6.5 行 549–556、§6.6 行 562–568、§6.8 行 588',
+      note: '通知书写她批了哪一级、哪条路径；支持计划写她批了哪些服务类型。从这天起她在政府那边按四档之一排队等资金。' },
+    { id: '4', from: 'old', to: 'rp', title: '把决定通知书交给注册服务方', date: '05/03/2026', data: ['决定通知书'], source: '裁定第六十七批第 9 条' },
+    { id: '5', from: 'rp', to: 'rp', title: '照护伙伴建她的参与者档案，记下通知书上的分级与路径', date: '05/03/2026', data: ['参与者档案'], source: '裁定第六十七批第 1、4、9 条',
+      note: '档案是以后一切的底：分级、路径、允许的服务类型、共付比例都从通知书和支持计划抄进来。' },
+    { id: '6', from: 'old', to: 'rp', title: '还在排队就签了正式的服务协议', date: '04/05/2026', data: ['服务协议'], due: '签后 14 天内、开始服务之前她还能退出', source: '裁定第六十七批第 5 条；§7.2.1 行 710',
+      note: '这家的做法是排队时就把协议签了，资金一到就能开始；手册的正常路线是先分到资金再签，那条走「待签约」。' },
+    { id: '7', from: 'gov', to: 'old', title: '卫生部来信：她分到了全额资金', date: '01/07/2026', data: ['分资金的信'], source: '§6.8 行 592、§6.8.1.1 行 613–615' },
+    { id: '8', from: 'rp', to: 'rp', title: '照护伙伴记下分到资金那天、分到的是全额', date: '01/07/2026', due: '最晚 26/08/2026 开始服务（延期到 23/09）', source: '裁定第六十七批第 3、6 条；§6.9 行 625',
+      note: '从分到资金那天起 56 天内要开始服务，不然资金收回、重新排队；申请延期到 84 天。' } ] },
+{ file: '02-服务到申报', title: '接受服务到上报：从做一次服务到钱回来',
+  summary: '她在册以后每一次服务怎么变成钱：服务方按照护计划上门做一次、记一条服务记录；月底开发票给注册服务方，注册服务方按行向 Services Australia 申报，从她名下的基金扣，钱回到注册服务方再付给服务方；每月她收到月结单。（示意，细节等业务分析写）',
+  parties: [
+    { id: 'old', title: '老人', sub: '' },
+    { id: 'sp', title: '服务方', sub: 'Joyful Love' },
+    { id: 'rp', title: '注册服务方', sub: '' },
+    { id: 'sa', title: 'Services Australia', sub: '管她名下的基金' } ],
+  states: [
+    { id: 's1', title: '在册', from: '1', to: '6' } ],
+  steps: [
+    { id: '1', from: 'sp', to: 'old', title: '按照护计划上门做一次服务', date: '03/09/2026', source: '§8.5' },
+    { id: '2', from: 'sp', to: 'sp', title: '记一条服务记录：哪一项、做了多久、谁做的', date: '03/09/2026', data: ['服务记录'] },
+    { id: '3', from: 'sp', to: 'rp', title: '月底开发票，一次服务一行', date: '30/09/2026', data: ['发票行'],
+      note: '发票上的每一行对着一条服务记录和价目表上的一个价；注册服务方照行核。' },
+    { id: '4', from: 'rp', to: 'sa', title: '按行申报，每一行写她的编号', date: '05/10/2026', data: ['申报行'] },
+    { id: '5', from: 'sa', to: 'rp', title: '从她名下的基金扣，钱付给注册服务方', date: '12/10/2026', data: ['她名下的基金'],
+      note: '哪一笔基金扣多少照服务类型和她的共付比例定；申报被退回的行不扣。' },
+    { id: '6', from: 'rp', to: 'old', title: '每月给她月结单：这个月做了什么、扣了多少、还剩多少', date: '15/10/2026', data: ['月结单行'], source: '§16、§17' } ] } ]
+
+// ---------- 画 ----------
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const wrap = (s, n) => { const out = []; let cur = ''; for (const ch of String(s)) { cur += ch; if (cur.length >= n && /[，、；。：]/.test(ch)) { out.push(cur); cur = '' } else if (cur.length >= n + 4) { out.push(cur); cur = '' } } if (cur) out.push(cur); return out }
+let view = STORIES[0].file
+
+function draw(st) {
+  const STATE_W = 92, X0 = STATE_W + 40, LANE = 300, HEAD_H = 46, TOP = 70, ROW = 68, NOTE_W = 230, NOTE_GAP = 36
+  const nLanes = st.parties.length
+  const lx = (i) => X0 + i * LANE
+  const idx = (id) => st.parties.findIndex((p) => p.id === id)
+  const noteX = lx(nLanes - 1) + 70 + NOTE_GAP
+  const width = noteX + NOTE_W + 20
+  const height = TOP + st.steps.length * ROW + 30
+  let s = `<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#57606a"/></marker>
+    <marker id="la" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#8c959f"/></marker></defs>`
+  // 生命线与各方
+  st.parties.forEach((p, i) => {
+    const x = lx(i)
+    s += `<line class="life" x1="${x}" y1="${HEAD_H}" x2="${x}" y2="${height - 10}"/>`
+    s += `<g class="head"><rect x="${x - 70}" y="4" width="140" height="${HEAD_H - 6}" rx="14"/><text x="${x}" y="${p.sub ? 21 : 27}">${esc(p.title)}</text>${p.sub ? `<text class="sub" x="${x}" y="${35}">${esc(p.sub)}</text>` : ''}</g>`
+  })
+  // 状态：左边一道道虚框，括住它经过的那几步
+  const rowY = (id) => TOP + st.steps.findIndex((x) => x.id === id) * ROW
+  st.states.forEach((t) => {
+    const y1 = rowY(t.from) - 30, y2 = rowY(t.to) + 26
+    s += `<g class="state"><rect x="12" y="${y1}" width="${STATE_W}" height="${y2 - y1}"/><text x="${12 + STATE_W / 2}" y="${(y1 + y2) / 2 + 4}">${esc(t.title)}</text></g>`
+  })
+  // 一步一行：横着的箭头，字在线上方，日子在线下方；自己对自己的画成生命线上的小框
+  st.steps.forEach((p, i) => {
+    const y = TOP + i * ROW, a = idx(p.from), b = idx(p.to)
+    const dataTags = (cx, yy, right) => {
+      if (!p.data) return ''
+      let out = '', x = cx
+      for (const d of p.data) { const w = d.length * 12 + 12; out += `<g class="data"><rect x="${right ? x : x - w}" y="${yy - 9}" width="${w}" height="18"/><text x="${right ? x + w / 2 : x - w / 2}" y="${yy + 4}">${esc(d)}</text></g>`; x += right ? w + 6 : -(w + 6) }
+      return out
+    }
+    if (a === b) {
+      const x = lx(a), lines = wrap(p.title, 14), w = Math.max(...lines.map((l) => l.length)) * 13 + 24, h = lines.length * 18 + 12
+      s += `<g class="self" data-id="${p.id}"><rect x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}"/>${lines.map((l, k) => `<text x="${x}" y="${y - h / 2 + 20 + k * 18}" text-anchor="middle">${esc(l)}</text>`).join('')}
+        <text class="date" x="${x + w / 2 + 8}" y="${y + 4}" style="font-size:11px;fill:#8c959f">${esc(p.date)}</text></g>`
+      s += dataTags(x - w / 2 - 8, y, false)
+    } else {
+      const x1 = lx(a), x2 = lx(b), dir = x2 > x1 ? 1 : -1, mx = (x1 + x2) / 2
+      s += `<g class="msg" data-id="${p.id}"><path d="M ${x1} ${y} L ${x2 - dir * 3} ${y}" marker-end="url(#a)"/>
+        <text x="${mx}" y="${y - 8}">${esc(p.title)}</text><text class="date" x="${mx}" y="${y + 16}">${esc(p.date)}</text></g>`
+      s += dataTags(x2 - dir * 10 - (dir > 0 ? 0 : 0), y + 30, dir < 0)
+    }
+    if (p.due) s += `<g class="due"><text x="${lx(nLanes - 1) + 80}" y="${y + 4}" style="fill:#b35c00;font-size:11px">⏱ ${esc(p.due)}</text></g>`
+    // 关键的一步：右边一个文字框，虚线带箭头指回这一行
+    if (p.note) {
+      const lines = wrap(p.note, 16), h = lines.length * 17 + 12
+      s += `<g class="note"><rect x="${noteX}" y="${y - h / 2}" width="${NOTE_W}" height="${h}"/>${lines.map((l, k) => `<text x="${noteX + 10}" y="${y - h / 2 + 18 + k * 17}">${esc(l)}</text>`).join('')}
+        <path d="M ${noteX} ${y} L ${Math.max(lx(a), lx(b)) + (a === b ? 60 : 8)} ${y}" marker-end="url(#la)"/></g>`
+    }
+  })
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${s}</svg>`
+}
+
+function render() {
+  const st = STORIES.find((x) => x.file === view)
+  document.getElementById('nav').innerHTML = STORIES.map((x) => `<a href="#${x.file}" class="${x.file === view ? 'on' : ''}">${esc(x.title.split('：')[0])}<span class="badge">未定</span></a>`).join('')
+  document.getElementById('main').innerHTML = `<h1>${esc(st.title)} <span class="badge">未定</span><button class="act">定下</button></h1>
+    <p class="sum">${esc(st.summary)}</p>
+    <div class="card">${draw(st)}</div>
+    <div class="legend"><span><span class="sw" style="background:#dbeafe;border-color:#60a5fa;border-radius:6px"></span>角色，一方一条线，时间从上往下</span><span><span class="sw" style="background:#dcfce7;border-color:#4ade80"></span>这一步交出、记下的数据</span><span><span class="sw" style="border:1px dashed #1b5f8c;border-radius:4px"></span>她这时在哪一段</span><span><span class="sw" style="background:#fffdf5;border-color:#e5d9a8"></span>关键一步的说明</span></div>`
+}
+function bind() {
+  const pop = document.getElementById('pop')
+  document.getElementById('main').addEventListener('mouseover', (e) => {
+    const g = e.target.closest('.msg,.self'); if (!g) return
+    const st = STORIES.find((x) => x.file === view), p = st.steps.find((x) => x.id === g.dataset.id)
+    const who = (id) => st.parties.find((x) => x.id === id).title
+    pop.innerHTML = `<b>${esc(p.id)}. ${esc(p.title)}</b>${esc(who(p.from))}${p.from !== p.to ? ' → ' + esc(who(p.to)) : ''}<br>${p.date ? '例子 ' + esc(p.date) + '<br>' : ''}${p.due ? '期限 ' + esc(p.due) + '<br>' : ''}${p.source ? '出处 ' + esc(p.source) + '<br>' : ''}编号 ${esc(st.title.split('：')[0])} #${esc(p.id)}`
+    pop.hidden = false
+    const r = g.getBoundingClientRect(); pop.style.left = Math.min(innerWidth - 340, r.left + 20) + 'px'; pop.style.top = (r.bottom + 8) + 'px'
+  })
+  document.getElementById('main').addEventListener('mouseout', (e) => { if (e.target.closest('.msg,.self') && !e.relatedTarget?.closest?.('.msg,.self')) pop.hidden = true })
+  window.addEventListener('hashchange', () => { view = decodeURIComponent(location.hash.slice(1)) || STORIES[0].file; render() })
+}
+view = decodeURIComponent(location.hash.slice(1)) || STORIES[0].file
+render(); bind()
+</script>
+</body>
+</html>
